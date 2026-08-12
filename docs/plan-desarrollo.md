@@ -28,10 +28,24 @@ Este es un proyecto 100% greenfield. Rafael opera KONEKTU como FDE solo/equipo r
 
 Reglas de negocio del SOP §3 (unicidad de documento, generación de llave interna, cierre automático nocturno) → Cloud Functions.
 
+## Identidad de marca
+
+Logo oficial: `Logo Final Iglesia Infantil.pdf` (Rafael). Paleta (ver `app/lib/theme/app_colors.dart`):
+
+| Color | Hex |
+|---|---|
+| Azul marino | `#003399` |
+| Azul claro (variante fondo oscuro) | `#2C5BB8` |
+| Amarillo | `#FFCC00` |
+| Rojo | `#E50000` |
+| Púrpura | `#990099` |
+
+Tipografía del logo: VAG Rounded BT (de pago, no usable en la app). Sustituto libre usado en la UI: **Fredoka** (Google Fonts). El logo se usa como imagen (`app/assets/images/logo_rocakids.png`) en momentos de marca (login, splash), no se recrea con texto.
+
 ## Módulos de desarrollo
 
-0. **Entorno y esqueleto del proyecto** — herramientas, proyecto Flutter, proyecto Firebase, repo GitHub, CI básico.
-1. **Modelo de datos y autenticación** — esquemas Firestore, reglas de seguridad, roles (`admin`/`servidor`), login.
+0. **Entorno y esqueleto del proyecto** ✅ — herramientas, proyecto Flutter, proyecto Firebase, repo GitHub, CI básico.
+1. **Modelo de datos y autenticación** ✅ — Firestore (Auth + colección `usuarios`), reglas de seguridad, login por correo/contraseña, rol leído del servidor (no del cliente). Hoy solo existe el rol `administrador`; los demás roles del ministerio (Líder Ministerio, Columna, Líder Escuela de Siervos, Maestro Principal/Auxiliar, Usuario externo/portal de padres) quedan documentados para diseñarse más adelante, cuando haya más pantallas construidas sobre las cuales decidir permisos concretos.
 2. **Migración de datos existentes** — script de import AppSheet/Sheets → Firestore (staging primero).
 3. **CRUD de Niños y Acudientes** — validación de duplicados, vínculos, autorizaciones.
 4. **Check-in / Check-out con QR** — escaneo, modo offline con cola de sincronización.
