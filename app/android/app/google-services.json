@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "480177772801",
+    "project_id": "rocakidsarmenia-7935b",
+    "storage_bucket": "rocakidsarmenia-7935b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:480177772801:android:75670423899004e8d96300",
+        "android_client_info": {
+          "package_name": "com.konektu.rocakids"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyR2qu4AjqusqV8e-NIuyYZqEudGP1Rg0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
