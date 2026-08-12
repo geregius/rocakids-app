@@ -3,13 +3,41 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Cada usuario solo puede leer su propio perfil/rol.
-    // Nadie puede crear ni editar su propio rol desde el cliente
-    // (eso lo hace un administrador, directo en la consola o,
-    // más adelante, desde el panel admin con permisos de servidor).
+    function esAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol.lower() == 'administrador';
+    }
+
     match /usuarios/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow write: if false;
+      // Cualquiera autenticado puede leer su propio perfil. Un admin
+      // puede leer (y listar) el perfil de cualquiera.
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow get, list: if esAdmin();
+
+      // Auto-registro: un usuario nuevo puede crear SU PROPIO documento,
+      // pero solo con uno de los dos roles "de entrada" sin privilegios:
+      // "usuario_externo" (acudiente) o "pendiente" (servidor esperando
+      // que un admin le asigne su rol real). Nunca puede autoasignarse
+      // un rol con más permisos.
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.rol in ['usuario_externo', 'pendiente'];
+
+      // Un admin puede editar cualquier cosa. El propio dueño del
+      // perfil puede completarlo/editarlo (documento, teléfono, EPS,
+      // grupo sanguíneo, contacto de emergencia, foto), pero NUNCA
+      // puede cambiar su propio rol, estado activo o correo por esta vía.
+      allow update: if esAdmin() || (
+        request.auth != null && request.auth.uid == uid &&
+        request.resource.data.rol == resource.data.rol &&
+        request.resource.data.activo == resource.data.activo &&
+        request.resource.data.correo == resource.data.correo &&
+        request.resource.data.get('fechaVerificacionAntecedentes', null) ==
+          resource.data.get('fechaVerificacionAntecedentes', null)
+      );
+
+      allow delete: if esAdmin();
     }
 
     // Todo lo demás queda cerrado por defecto hasta que se definan

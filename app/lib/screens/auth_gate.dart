@@ -3,11 +3,16 @@ import 'package:flutter/material.dart';
 
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
+import 'complete_profile_screen.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
+import 'modulo_en_construccion_screen.dart';
+import 'pending_approval_screen.dart';
 
-/// Decide qué pantalla mostrar según el estado de autenticación:
-/// sin sesión -> Login; con sesión -> busca su rol y muestra Home.
+/// Decide qué pantalla mostrar según el estado de autenticación y el
+/// perfil del usuario. Reacciona en tiempo real: si un admin aprueba a
+/// alguien, o si el usuario completa su perfil, la pantalla cambia sola
+/// sin necesitar cerrar sesión ni refrescar.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -29,8 +34,8 @@ class AuthGate extends StatelessWidget {
           return const LoginScreen();
         }
 
-        return FutureBuilder<UsuarioApp>(
-          future: authService.obtenerUsuarioActual(),
+        return StreamBuilder<UsuarioApp>(
+          stream: authService.usuarioActualStream(),
           builder: (context, usuarioSnapshot) {
             if (usuarioSnapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
@@ -59,7 +64,25 @@ class AuthGate extends StatelessWidget {
               );
             }
 
-            return HomeScreen(usuario: usuarioSnapshot.data!);
+            final usuario = usuarioSnapshot.data!;
+
+            if (!usuario.rol.esRolDeServidor) {
+              // pendiente / usuario_externo / desconocido: todavía no
+              // tienen módulos propios en la app.
+              return PendingApprovalScreen(usuario: usuario);
+            }
+
+            if (!usuario.perfilCompleto) {
+              // Bloqueo obligatorio: no puede hacer nada más hasta
+              // completar todos los datos de su perfil de servidor.
+              return CompleteProfileScreen(usuario: usuario);
+            }
+
+            if (usuario.rol == RolUsuario.administrador) {
+              return HomeScreen(usuario: usuario);
+            }
+
+            return ModuloEnConstruccionScreen(usuario: usuario);
           },
         );
       },

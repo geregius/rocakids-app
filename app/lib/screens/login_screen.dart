@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import 'acudiente_proximamente_screen.dart';
+import 'sign_up_servidor_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -130,6 +132,38 @@ class _LoginScreenState extends State<LoginScreen> {
                               )
                             : const Text('Ingresar'),
                       ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text('¿No tienes cuenta?'),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _cargando
+                                ? null
+                                : () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const AcudienteProximamenteScreen(),
+                                    ),
+                                  ),
+                            child: const Text('Soy Acudiente'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _cargando
+                                ? null
+                                : () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const SignUpServidorScreen(),
+                                    ),
+                                  ),
+                            child: const Text('Soy Servidor'),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

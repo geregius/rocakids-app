@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
+import 'admin/admin_users_list_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   final UsuarioApp usuario;
@@ -30,7 +31,16 @@ class HomeScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
-            Text('Rol: ${usuario.rol.name}'),
+            Text('Rol: ${usuario.rol.etiqueta}'),
+            const SizedBox(height: 32),
+            if (usuario.rol == RolUsuario.administrador)
+              ElevatedButton.icon(
+                icon: const Icon(Icons.people),
+                label: const Text('Gestión de Servidores'),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AdminUsersListScreen()),
+                ),
+              ),
           ],
         ),
       ),
