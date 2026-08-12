@@ -1,0 +1,35 @@
+# Flutter/Dart
+/app/.dart_tool/
+/app/.flutter-plugins
+/app/.flutter-plugins-dependencies
+/app/.packages
+/app/.pub-cache/
+/app/.pub/
+/app/build/
+/app/ios/Pods/
+/app/ios/Flutter/Flutter.framework
+/app/ios/Flutter/Flutter.podspec
+**/doc/api/
+*.g.dart
+*.freezed.dart
+
+# Firebase / Node (Cloud Functions)
+/functions/node_modules/
+/functions/lib/
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Secrets — NUNCA se suben al repo
+# (google-services.json / GoogleService-Info.plist / firebase_options.dart SÍ se versionan:
+#  son config de cliente, no secretos; la seguridad real la dan las reglas de Firestore)
+.env
+*.env.local
+serviceAccountKey*.json
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
