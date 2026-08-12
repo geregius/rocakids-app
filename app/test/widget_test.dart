@@ -1,30 +1,42 @@
-// This is a basic Flutter widget test.
+// Pruebas del modelo de rol de usuario.
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Nota: las pantallas (LoginScreen, AuthGate, etc.) dependen de Firebase,
+// que no está inicializado en el entorno de test. Probarlas requiere mocks
+// de Firebase (ej. firebase_auth_mocks / fake_cloud_firestore) — se agregan
+// cuando el módulo de autenticación tenga más lógica que valga la pena cubrir.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:rocakids/main.dart';
+import 'package:rocakids/models/usuario_app.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('RolUsuario.fromString', () {
+    test('reconoce "administrador"', () {
+      expect(RolUsuario.fromString('administrador'), RolUsuario.administrador);
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    test('es insensible a mayúsculas/minúsculas y espacios', () {
+      expect(RolUsuario.fromString('Administrador'), RolUsuario.administrador);
+      expect(RolUsuario.fromString('  ADMINISTRADOR '), RolUsuario.administrador);
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    test('valores nulos o desconocidos caen en RolUsuario.desconocido', () {
+      expect(RolUsuario.fromString(null), RolUsuario.desconocido);
+      expect(RolUsuario.fromString('lo-que-sea'), RolUsuario.desconocido);
+    });
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  group('UsuarioApp.fromFirestore', () {
+    test('mapea los campos del documento', () {
+      final usuario = UsuarioApp.fromFirestore('uid123', {
+        'correo': 'admin@rocakids.org',
+        'nombre': 'Admin Prueba',
+        'rol': 'administrador',
+      });
+
+      expect(usuario.uid, 'uid123');
+      expect(usuario.correo, 'admin@rocakids.org');
+      expect(usuario.nombre, 'Admin Prueba');
+      expect(usuario.rol, RolUsuario.administrador);
+    });
   });
 }

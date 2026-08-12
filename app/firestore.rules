@@ -1,0 +1,21 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Cada usuario solo puede leer su propio perfil/rol.
+    // Nadie puede crear ni editar su propio rol desde el cliente
+    // (eso lo hace un administrador, directo en la consola o,
+    // más adelante, desde el panel admin con permisos de servidor).
+    match /usuarios/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Todo lo demás queda cerrado por defecto hasta que se definan
+    // las reglas de cada módulo (niños, acudientes, registros, etc).
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
