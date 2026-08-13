@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
+import '../models/acudiente.dart';
+import '../models/nino.dart';
 import '../models/usuario_app.dart';
 
 class AuthException implements Exception {
@@ -68,6 +70,101 @@ class AuthService {
     } on FirebaseAuthException catch (e) {
       throw AuthException(_mensajeDeErrorRegistro(e.code));
     }
+  }
+
+  /// Auto-registro de un ACUDIENTE junto con su primer niño y la relación
+  /// entre ambos. A diferencia del servidor, el acudiente obtiene acceso
+  /// inmediato (rol "usuario_externo", sin aprobación de un admin).
+  ///
+  /// Los tres documentos se crean en un solo batch atómico. El ID del
+  /// niño es su "llave interna" (documento, o fecha+nombre+apellido si
+  /// no tiene) — así las reglas de seguridad rechazan automáticamente
+  /// un documento duplicado (ver firestore.rules).
+  Future<void> registrarAcudienteConNino({
+    required String correo,
+    required String password,
+    required Acudiente acudiente,
+    required Nino nino,
+    required String parentescoTipo,
+  }) async {
+    UserCredential? credential;
+    try {
+      credential = await _auth.createUserWithEmailAndPassword(
+        email: correo.trim(),
+        password: password,
+      );
+      final uid = credential.user!.uid;
+
+      final batch = _firestore.batch();
+      batch.set(_firestore.collection('usuarios').doc(uid), {
+        'correo': correo.trim(),
+        'nombre': acudiente.nombres,
+        'apellido': acudiente.apellidos,
+        'rol': RolUsuario.usuarioExterno.valorFirestore,
+        'activo': true,
+        'creadoEn': FieldValue.serverTimestamp(),
+      });
+      batch.set(_firestore.collection('acudientes').doc(uid), acudiente.toFirestore());
+      batch.set(
+        _firestore.collection('ninos').doc(nino.documentoIdentificacion),
+        nino.toFirestore(),
+      );
+      batch.set(
+        _firestore.collection('nino_acudiente').doc(),
+        NinoAcudiente(
+          id: '',
+          fkIdNino: nino.documentoIdentificacion,
+          fkIdAcudiente: uid,
+          parentescoTipo: parentescoTipo,
+          autorizacionFormulario: 'Sí',
+          autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
+          esRepresentanteLegalFlag: true,
+        ).toFirestore(),
+      );
+      await batch.commit();
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_mensajeDeErrorRegistro(e.code));
+    } catch (e) {
+      // Si el batch falla (ej. documento del niño duplicado), no dejamos
+      // una cuenta de acceso huérfana sin perfil: la eliminamos para que
+      // la persona pueda corregir el dato e intentar de nuevo.
+      if (credential?.user != null) {
+        try {
+          await credential!.user!.delete();
+        } catch (_) {
+          await _auth.signOut();
+        }
+      }
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException(
+          'Este número de documento ya se encuentra registrado en el sistema.',
+        );
+      }
+      throw AuthException('No se pudo completar el registro: $e');
+    }
+  }
+
+  /// Los niños vinculados al acudiente logueado.
+  Future<List<Nino>> obtenerMisHijos() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+    final relaciones = await _firestore
+        .collection('nino_acudiente')
+        .where('fk_idAcudiente', isEqualTo: user.uid)
+        .get();
+
+    final ninos = <Nino>[];
+    for (final rel in relaciones.docs) {
+      final ninoId = rel.data()['fk_idNino'] as String?;
+      if (ninoId == null) continue;
+      final ninoDoc = await _firestore.collection('ninos').doc(ninoId).get();
+      if (ninoDoc.exists) {
+        ninos.add(Nino.fromFirestore(ninoDoc.id, ninoDoc.data()!));
+      }
+    }
+    return ninos;
   }
 
   Future<void> signOut() => _auth.signOut();

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
-import 'acudiente_proximamente_screen.dart';
+import 'sign_up_acudiente_screen.dart';
 import 'sign_up_servidor_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -153,7 +153,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ? null
                                 : () => Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) => const AcudienteProximamenteScreen(),
+                                      builder: (_) => const SignUpAcudienteScreen(),
                                     ),
                                   ),
                             child: const Text('Soy Acudiente'),

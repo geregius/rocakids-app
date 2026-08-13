@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
+import 'acudiente_portal_screen.dart';
 import 'complete_profile_screen.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
@@ -66,9 +67,13 @@ class AuthGate extends StatelessWidget {
 
             final usuario = usuarioSnapshot.data!;
 
+            if (usuario.rol == RolUsuario.usuarioExterno) {
+              // Acudiente: acceso inmediato, sin aprobación de admin.
+              return AcudientePortalScreen(usuario: usuario);
+            }
+
             if (!usuario.rol.esRolDeServidor) {
-              // pendiente / usuario_externo / desconocido: todavía no
-              // tienen módulos propios en la app.
+              // pendiente / desconocido: todavía no tienen módulos propios.
               return PendingApprovalScreen(usuario: usuario);
             }
 

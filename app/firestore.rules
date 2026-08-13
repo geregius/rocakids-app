@@ -40,8 +40,57 @@ service cloud.firestore {
       allow delete: if esAdmin();
     }
 
+    match /acudientes/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow get, list: if esAdmin();
+
+      // Auto-registro: solo su propio documento.
+      allow create: if request.auth != null && request.auth.uid == uid;
+
+      // El propio acudiente puede corregir sus datos de contacto, pero
+      // no puede tocar su estado de autorización ni las observaciones
+      // de restricción — eso lo controla solo un admin (seguridad).
+      allow update: if esAdmin() || (
+        request.auth != null && request.auth.uid == uid &&
+        request.resource.data.estadoAutorizacion == resource.data.estadoAutorizacion &&
+        request.resource.data.observacionesRestriccion == resource.data.observacionesRestriccion
+      );
+
+      allow delete: if esAdmin();
+    }
+
+    match /ninos/{ninoId} {
+      // El ID del documento es la "llave interna" del SOP (documento del
+      // menor, o fecha+nombre+apellido si no tiene). Como Firestore
+      // clasifica la operación como "create" solo si el documento AÚN NO
+      // existe, esto previene duplicados: un segundo intento con el mismo
+      // ID cae en "update", que aquí no está permitido para el cliente.
+      allow create: if request.auth != null;
+
+      allow get: if request.auth != null;
+      allow list: if esAdmin();
+
+      allow update, delete: if esAdmin();
+    }
+
+    match /nino_acudiente/{relId} {
+      allow create: if request.auth != null
+        && request.resource.data.fk_idAcudiente == request.auth.uid;
+
+      allow get: if esAdmin() || (
+        request.auth != null && resource.data.fk_idAcudiente == request.auth.uid
+      );
+      // El cliente debe consultar con .where('fk_idAcudiente', isEqualTo: uid);
+      // Firestore exige que cada doc del resultado cumpla esta condición.
+      allow list: if esAdmin() || (
+        request.auth != null && resource.data.fk_idAcudiente == request.auth.uid
+      );
+
+      allow update, delete: if esAdmin();
+    }
+
     // Todo lo demás queda cerrado por defecto hasta que se definan
-    // las reglas de cada módulo (niños, acudientes, registros, etc).
+    // las reglas de cada módulo (registros, campañas, etc).
     match /{document=**} {
       allow read, write: if false;
     }
