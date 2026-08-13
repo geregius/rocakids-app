@@ -17,6 +17,15 @@ class HomeScreen extends StatelessWidget {
         title: const Text('RocaKids'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.person),
+            tooltip: 'Mi perfil',
+            onPressed: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => UserEditSheet(usuario: usuario, esAdmin: true),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Cerrar sesión',
             onPressed: () => AuthService().signOut(),
@@ -34,16 +43,6 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 8),
             Text('Rol: ${usuario.rol.etiqueta}'),
             const SizedBox(height: 32),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.person),
-              label: const Text('Mi perfil'),
-              onPressed: () => showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => UserEditSheet(usuario: usuario, esAdmin: true),
-              ),
-            ),
-            const SizedBox(height: 12),
             if (usuario.rol == RolUsuario.administrador)
               ElevatedButton.icon(
                 icon: const Icon(Icons.people),

@@ -18,6 +18,15 @@ class ModuloEnConstruccionScreen extends StatelessWidget {
         title: const Text('RocaKids'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.person),
+            tooltip: 'Mi perfil',
+            onPressed: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => UserEditSheet(usuario: usuario, esAdmin: false),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Cerrar sesión',
             onPressed: () => AuthService().signOut(),
@@ -43,16 +52,6 @@ class ModuloEnConstruccionScreen extends StatelessWidget {
                 'Tu perfil está completo. Las herramientas para tu rol se '
                 'están construyendo y estarán disponibles pronto.',
                 textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.person),
-                label: const Text('Mi perfil'),
-                onPressed: () => showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  builder: (_) => UserEditSheet(usuario: usuario, esAdmin: false),
-                ),
               ),
             ],
           ),
