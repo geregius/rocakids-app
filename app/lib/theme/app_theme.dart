@@ -110,6 +110,8 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
+        prefixIconColor: AppColors.azulMarino,
+        suffixIconColor: AppColors.azulMarino,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 14,
