@@ -230,6 +230,47 @@ class AuthService {
     }
   }
 
+  /// Crea el perfil de acudiente del usuario logueado reutilizando los
+  /// datos que ya tiene como servidor (documento, nombre, teléfono, foto)
+  /// — para no pedirle de nuevo información que ya dio, y sobre todo para
+  /// no volver a subir la foto: se reutiliza la misma URL de Storage en
+  /// vez de duplicar el archivo.
+  Future<void> crearPerfilAcudienteDesdeServidor(UsuarioApp usuario) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+
+    final acudiente = Acudiente(
+      uid: user.uid,
+      tipoDocumento: usuario.tipoDocumento,
+      numeroDocumento: usuario.numeroDocumento,
+      nombres: usuario.nombre,
+      apellidos: usuario.apellido,
+      telefonoCelular: usuario.telefono,
+      correoElectronico: usuario.correo,
+      fotoSeguridadUrl: usuario.fotoUrl,
+    );
+
+    final batch = _firestore.batch();
+    batch.set(_firestore.collection('acudientes').doc(user.uid), acudiente.toFirestore());
+    batch.set(
+      _firestore.collection('acudientes_documentos').doc(acudiente.numeroDocumento),
+      {'uid': user.uid},
+    );
+
+    try {
+      await batch.commit();
+    } catch (e) {
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException(
+          'Este número de documento ya se encuentra registrado en el sistema.',
+        );
+      }
+      throw AuthException('No se pudo guardar tu perfil de acudiente: $e');
+    }
+  }
+
   /// Los niños vinculados al acudiente logueado.
   Future<List<Nino>> obtenerMisHijos() async {
     final user = _auth.currentUser;

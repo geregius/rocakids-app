@@ -59,7 +59,7 @@ class _AcudientePortalScreenState extends State<AcudientePortalScreen> {
             return Center(child: Text('Error: ${snapshot.error}'));
           }
           if (snapshot.data == null) {
-            return _RegistroAcudienteForm(usuario: widget.usuario, onListo: _recargar);
+            return _SinPerfilAcudiente(usuario: widget.usuario, onListo: _recargar);
           }
           return _ListaDeHijos(usuario: widget.usuario);
         },
@@ -164,6 +164,156 @@ class _ListaDeHijosState extends State<_ListaDeHijos> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Se muestra cuando el usuario logueado (sin importar su rol) todavía
+/// no tiene un perfil de acudiente. Si ya tiene un perfil de servidor
+/// completo, ofrece reutilizar esos datos (documento, teléfono, foto) en
+/// vez de pedírselos de nuevo; si no los tiene, o prefiere otros datos,
+/// cae al formulario completo.
+class _SinPerfilAcudiente extends StatefulWidget {
+  final UsuarioApp usuario;
+  final VoidCallback onListo;
+
+  const _SinPerfilAcudiente({required this.usuario, required this.onListo});
+
+  @override
+  State<_SinPerfilAcudiente> createState() => _SinPerfilAcudienteState();
+}
+
+class _SinPerfilAcudienteState extends State<_SinPerfilAcudiente> {
+  bool _usarFormularioManual = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final puedeReutilizarDatos =
+        widget.usuario.rol.esRolDeServidor && widget.usuario.perfilCompleto;
+
+    if (puedeReutilizarDatos && !_usarFormularioManual) {
+      return _ReutilizarDatosServidor(
+        usuario: widget.usuario,
+        onListo: widget.onListo,
+        onPrefiereOtrosDatos: () => setState(() => _usarFormularioManual = true),
+      );
+    }
+    return _RegistroAcudienteForm(usuario: widget.usuario, onListo: widget.onListo);
+  }
+}
+
+/// Resumen de los datos que el usuario ya tiene como servidor, con la
+/// opción de reutilizarlos como perfil de acudiente en un solo toque —
+/// sin volver a escribir nada ni volver a subir la foto (se reutiliza la
+/// misma URL de Storage).
+class _ReutilizarDatosServidor extends StatefulWidget {
+  final UsuarioApp usuario;
+  final VoidCallback onListo;
+  final VoidCallback onPrefiereOtrosDatos;
+
+  const _ReutilizarDatosServidor({
+    required this.usuario,
+    required this.onListo,
+    required this.onPrefiereOtrosDatos,
+  });
+
+  @override
+  State<_ReutilizarDatosServidor> createState() => _ReutilizarDatosServidorState();
+}
+
+class _ReutilizarDatosServidorState extends State<_ReutilizarDatosServidor> {
+  bool _cargando = false;
+  String? _error;
+
+  Future<void> _usarEstosDatos() async {
+    setState(() {
+      _cargando = true;
+      _error = null;
+    });
+    try {
+      await AuthService().crearPerfilAcudienteDesdeServidor(widget.usuario);
+      widget.onListo();
+    } on AuthException catch (e) {
+      setState(() => _error = e.mensaje);
+    } finally {
+      if (mounted) setState(() => _cargando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final usuario = widget.usuario;
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Regístrate como acudiente', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 8),
+                const Text(
+                  'Ya tenemos tus datos como servidor. Podemos usarlos también '
+                  'como acudiente, sin pedírtelos de nuevo ni repetir la foto.',
+                ),
+                const SizedBox(height: 20),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 32,
+                          backgroundColor: AppColors.azulClaro.withValues(alpha: 0.2),
+                          backgroundImage:
+                              usuario.fotoUrl.isNotEmpty ? NetworkImage(usuario.fotoUrl) : null,
+                          child: usuario.fotoUrl.isEmpty ? const Icon(Icons.person) : null,
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                usuario.nombreCompleto,
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              Text('${usuario.tipoDocumento}: ${usuario.numeroDocumento}'),
+                              Text(usuario.telefono),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 16),
+                  Text(_error!, style: const TextStyle(color: AppColors.rojo), textAlign: TextAlign.center),
+                ],
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _cargando ? null : _usarEstosDatos,
+                  child: _cargando
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Usar estos datos y continuar'),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: _cargando ? null : widget.onPrefiereOtrosDatos,
+                  child: const Text('Prefiero ingresar otros datos'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
