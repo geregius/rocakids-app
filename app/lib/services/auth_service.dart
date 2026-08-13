@@ -86,6 +86,10 @@ class AuthService {
     required Acudiente acudiente,
     required Nino nino,
     required String parentescoTipo,
+    Uint8List? fotoAcudienteBytes,
+    String? fotoAcudienteExt,
+    Uint8List? fotoNinoBytes,
+    String? fotoNinoExt,
   }) async {
     UserCredential? credential;
     try {
@@ -94,6 +98,21 @@ class AuthService {
         password: password,
       );
       final uid = credential.user!.uid;
+
+      // Las fotos se suben aquí (no antes) porque hasta ahora no existía
+      // sesión con la que Storage pudiera autorizar la subida.
+      String fotoAcudienteUrl = '';
+      if (fotoAcudienteBytes != null && fotoAcudienteExt != null) {
+        fotoAcudienteUrl = await subirFotoAcudiente(fotoAcudienteBytes, fotoAcudienteExt);
+      }
+      String fotoNinoUrl = '';
+      if (fotoNinoBytes != null && fotoNinoExt != null) {
+        fotoNinoUrl = await subirFotoNino(
+          nino.documentoIdentificacion,
+          fotoNinoBytes,
+          fotoNinoExt,
+        );
+      }
 
       final batch = _firestore.batch();
       batch.set(_firestore.collection('usuarios').doc(uid), {
@@ -104,15 +123,18 @@ class AuthService {
         'activo': true,
         'creadoEn': FieldValue.serverTimestamp(),
       });
-      batch.set(_firestore.collection('acudientes').doc(uid), acudiente.toFirestore());
+      batch.set(_firestore.collection('acudientes').doc(uid), {
+        ...acudiente.toFirestore(),
+        if (fotoAcudienteUrl.isNotEmpty) 'fotoSeguridadUrl': fotoAcudienteUrl,
+      });
       batch.set(
         _firestore.collection('acudientes_documentos').doc(acudiente.numeroDocumento),
         {'uid': uid},
       );
-      batch.set(
-        _firestore.collection('ninos').doc(nino.documentoIdentificacion),
-        nino.toFirestore(),
-      );
+      batch.set(_firestore.collection('ninos').doc(nino.documentoIdentificacion), {
+        ...nino.toFirestore(),
+        if (fotoNinoUrl.isNotEmpty) 'fotoUrl': fotoNinoUrl,
+      });
       batch.set(
         _firestore.collection('nino_acudiente').doc(),
         NinoAcudiente(
@@ -221,17 +243,24 @@ class AuthService {
   Future<void> registrarNinoAdicional({
     required Nino nino,
     required String parentescoTipo,
+    Uint8List? fotoNinoBytes,
+    String? fotoNinoExt,
   }) async {
     final user = _auth.currentUser;
     if (user == null) {
       throw const AuthException('No hay sesión activa.');
     }
 
+    String fotoNinoUrl = '';
+    if (fotoNinoBytes != null && fotoNinoExt != null) {
+      fotoNinoUrl = await subirFotoNino(nino.documentoIdentificacion, fotoNinoBytes, fotoNinoExt);
+    }
+
     final batch = _firestore.batch();
-    batch.set(
-      _firestore.collection('ninos').doc(nino.documentoIdentificacion),
-      nino.toFirestore(),
-    );
+    batch.set(_firestore.collection('ninos').doc(nino.documentoIdentificacion), {
+      ...nino.toFirestore(),
+      if (fotoNinoUrl.isNotEmpty) 'fotoUrl': fotoNinoUrl,
+    });
     batch.set(
       _firestore.collection('nino_acudiente').doc(),
       NinoAcudiente(
@@ -343,6 +372,29 @@ class AuthService {
       throw const AuthException('No hay sesión activa.');
     }
     final ref = _storage.ref('servidores_fotos/${user.uid}/foto.$extension');
+    await ref.putData(bytes);
+    return ref.getDownloadURL();
+  }
+
+  /// Sube/reemplaza la foto de seguridad del acudiente logueado (se usa
+  /// para validar quién retira a un niño) y devuelve la URL.
+  Future<String> subirFotoAcudiente(Uint8List bytes, String extension) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+    final ref = _storage.ref('acudientes_fotos/${user.uid}/foto.$extension');
+    await ref.putData(bytes);
+    return ref.getDownloadURL();
+  }
+
+  /// Sube la foto de un niño (solo la primera vez — ver storage.rules) y
+  /// devuelve la URL.
+  Future<String> subirFotoNino(String ninoDocId, Uint8List bytes, String extension) async {
+    if (_auth.currentUser == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+    final ref = _storage.ref('ninos_fotos/$ninoDocId/foto.$extension');
     await ref.putData(bytes);
     return ref.getDownloadURL();
   }

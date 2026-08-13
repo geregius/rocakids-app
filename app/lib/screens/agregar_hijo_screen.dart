@@ -1,8 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../models/nino.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/foto_picker.dart';
 
 enum _Modo { elegir, vincular, nuevo }
 
@@ -193,6 +196,8 @@ class _NuevoNinoFormState extends State<_NuevoNinoForm> {
   bool _tieneCondicionMedica = false;
   bool _cargando = false;
   String? _error;
+  Uint8List? _fotoBytes;
+  String? _fotoExt;
 
   @override
   void dispose() {
@@ -201,6 +206,16 @@ class _NuevoNinoFormState extends State<_NuevoNinoForm> {
     _apellidosController.dispose();
     _condicionMedicaController.dispose();
     super.dispose();
+  }
+
+  Future<void> _elegirFoto() async {
+    final archivo = await elegirFotoConCamaraOGaleria(context);
+    if (archivo == null) return;
+    final bytes = await archivo.readAsBytes();
+    setState(() {
+      _fotoBytes = bytes;
+      _fotoExt = archivo.name.contains('.') ? archivo.name.split('.').last : 'jpg';
+    });
   }
 
   Future<void> _elegirFecha() async {
@@ -250,7 +265,12 @@ class _NuevoNinoFormState extends State<_NuevoNinoForm> {
     );
 
     try {
-      await AuthService().registrarNinoAdicional(nino: nino, parentescoTipo: _parentesco!);
+      await AuthService().registrarNinoAdicional(
+        nino: nino,
+        parentescoTipo: _parentesco!,
+        fotoNinoBytes: _fotoBytes,
+        fotoNinoExt: _fotoExt,
+      );
       if (mounted) Navigator.of(context).pop();
     } on AuthException catch (e) {
       setState(() => _error = e.mensaje);
@@ -269,6 +289,27 @@ class _NuevoNinoFormState extends State<_NuevoNinoForm> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('Registrar niño nuevo', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 12),
+          Center(
+            child: Column(
+              children: [
+                GestureDetector(
+                  onTap: _elegirFoto,
+                  child: CircleAvatar(
+                    radius: 40,
+                    backgroundColor: AppColors.amarillo.withValues(alpha: 0.3),
+                    backgroundImage: _fotoBytes != null ? MemoryImage(_fotoBytes!) : null,
+                    child: _fotoBytes == null ? const Icon(Icons.add_a_photo, size: 28) : null,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _fotoBytes == null ? 'Foto del niño (opcional)' : 'Toca para cambiarla',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             initialValue: _tipoIdentificacion,

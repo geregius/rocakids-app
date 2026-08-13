@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../models/usuario_app.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/foto_picker.dart';
 
 /// Formulario para editar los datos de perfil de un servidor (documento,
 /// EPS, contacto de emergencia, etc). Lo usan dos casos:
@@ -68,7 +68,7 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
 
   Future<void> _elegirFoto() async {
     try {
-      final archivo = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
+      final archivo = await elegirFotoConCamaraOGaleria(context);
       if (archivo == null) return;
 
       setState(() => _subiendoFoto = true);

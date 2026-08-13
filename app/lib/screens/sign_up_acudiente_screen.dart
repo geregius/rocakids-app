@@ -1,9 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../models/acudiente.dart';
 import '../models/nino.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/foto_picker.dart';
 
 /// Registro de un Acudiente junto con su primer niño. A diferencia del
 /// registro de servidor, aquí el acceso es inmediato — no requiere
@@ -44,6 +47,13 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
   bool _cargando = false;
   String? _error;
 
+  // Fotos: se guardan en memoria y se suben recién al final, cuando ya
+  // exista una sesión con la que Storage pueda autorizar la subida.
+  Uint8List? _fotoAcudienteBytes;
+  String? _fotoAcudienteExt;
+  Uint8List? _fotoNinoBytes;
+  String? _fotoNinoExt;
+
   @override
   void dispose() {
     _numeroDocumentoController.dispose();
@@ -57,6 +67,26 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
     _apellidosNinoController.dispose();
     _condicionMedicaController.dispose();
     super.dispose();
+  }
+
+  Future<void> _elegirFotoAcudiente() async {
+    final archivo = await elegirFotoConCamaraOGaleria(context);
+    if (archivo == null) return;
+    final bytes = await archivo.readAsBytes();
+    setState(() {
+      _fotoAcudienteBytes = bytes;
+      _fotoAcudienteExt = archivo.name.contains('.') ? archivo.name.split('.').last : 'jpg';
+    });
+  }
+
+  Future<void> _elegirFotoNino() async {
+    final archivo = await elegirFotoConCamaraOGaleria(context);
+    if (archivo == null) return;
+    final bytes = await archivo.readAsBytes();
+    setState(() {
+      _fotoNinoBytes = bytes;
+      _fotoNinoExt = archivo.name.contains('.') ? archivo.name.split('.').last : 'jpg';
+    });
   }
 
   Future<void> _elegirFechaNacimiento() async {
@@ -124,6 +154,10 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
         acudiente: acudiente,
         nino: nino,
         parentescoTipo: _parentesco!,
+        fotoAcudienteBytes: _fotoAcudienteBytes,
+        fotoAcudienteExt: _fotoAcudienteExt,
+        fotoNinoBytes: _fotoNinoBytes,
+        fotoNinoExt: _fotoNinoExt,
       );
       // El AuthGate reacciona solo: rol usuario_externo -> portal del acudiente.
     } on AuthException catch (e) {
@@ -152,6 +186,33 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
                   children: [
                     Text('Tus datos', style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 12),
+                    Center(
+                      child: Column(
+                        children: [
+                          GestureDetector(
+                            onTap: _elegirFotoAcudiente,
+                            child: CircleAvatar(
+                              radius: 40,
+                              backgroundColor: AppColors.azulClaro.withValues(alpha: 0.2),
+                              backgroundImage: _fotoAcudienteBytes != null
+                                  ? MemoryImage(_fotoAcudienteBytes!)
+                                  : null,
+                              child: _fotoAcudienteBytes == null
+                                  ? const Icon(Icons.add_a_photo, size: 28)
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _fotoAcudienteBytes == null
+                                ? 'Foto de seguridad (opcional)'
+                                : 'Toca para cambiarla',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       initialValue: _tipoDocumento,
                       decoration: const InputDecoration(labelText: 'Tipo de documento'),
@@ -222,6 +283,30 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
                     const SizedBox(height: 28),
                     Text('Datos del niño', style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 12),
+                    Center(
+                      child: Column(
+                        children: [
+                          GestureDetector(
+                            onTap: _elegirFotoNino,
+                            child: CircleAvatar(
+                              radius: 40,
+                              backgroundColor: AppColors.amarillo.withValues(alpha: 0.3),
+                              backgroundImage:
+                                  _fotoNinoBytes != null ? MemoryImage(_fotoNinoBytes!) : null,
+                              child: _fotoNinoBytes == null
+                                  ? const Icon(Icons.add_a_photo, size: 28)
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _fotoNinoBytes == null ? 'Foto del niño (opcional)' : 'Toca para cambiarla',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       initialValue: _tipoIdentificacionMenor,
                       decoration: const InputDecoration(labelText: 'Tipo de documento del niño'),

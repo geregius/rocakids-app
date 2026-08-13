@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/foto_picker.dart';
 
 /// Formulario obligatorio y bloqueante: un servidor con rol ya asignado
 /// no puede usar ninguna otra parte de la app hasta llenar todos estos
@@ -60,7 +60,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
   Future<void> _elegirFoto() async {
     try {
-      final archivo = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
+      final archivo = await elegirFotoConCamaraOGaleria(context);
       if (archivo == null) return;
 
       setState(() => _subiendoFoto = true);
