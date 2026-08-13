@@ -279,14 +279,12 @@ class _NuevoNinoFormState extends State<_NuevoNinoForm> {
             onChanged: (v) => setState(() => _tipoIdentificacion = v),
             validator: (v) => v == null ? 'Requerido' : null,
           ),
-          if (_tipoIdentificacion != null && _tipoIdentificacion != 'No tiene documento') ...[
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _identificacionMenorController,
-              decoration: const InputDecoration(labelText: 'Número de documento'),
-              validator: _requerido,
-            ),
-          ],
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _identificacionMenorController,
+            decoration: const InputDecoration(labelText: 'Número de documento'),
+            validator: (v) => _tipoIdentificacion == 'No tiene documento' ? null : _requerido(v),
+          ),
           const SizedBox(height: 16),
           TextFormField(
             controller: _nombresController,

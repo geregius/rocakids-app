@@ -231,14 +231,14 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
                       onChanged: (v) => setState(() => _tipoIdentificacionMenor = v),
                       validator: (v) => v == null ? 'Requerido' : null,
                     ),
-                    if (_tipoIdentificacionMenor != null && _tipoIdentificacionMenor != 'No tiene documento') ...[
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _identificacionMenorController,
-                        decoration: const InputDecoration(labelText: 'Número de documento del niño'),
-                        validator: _requerido,
-                      ),
-                    ],
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _identificacionMenorController,
+                      decoration: const InputDecoration(labelText: 'Número de documento del niño'),
+                      validator: (v) => _tipoIdentificacionMenor == 'No tiene documento'
+                          ? null
+                          : _requerido(v),
+                    ),
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _nombresNinoController,
