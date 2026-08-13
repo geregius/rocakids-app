@@ -59,11 +59,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   }
 
   Future<void> _elegirFoto() async {
-    final archivo = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (archivo == null) return;
-
-    setState(() => _subiendoFoto = true);
     try {
+      final archivo = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
+      if (archivo == null) return;
+
+      setState(() => _subiendoFoto = true);
       final bytes = await archivo.readAsBytes();
       final extension = archivo.name.contains('.') ? archivo.name.split('.').last : 'jpg';
       final url = await _authService.subirFotoServidor(bytes, extension);

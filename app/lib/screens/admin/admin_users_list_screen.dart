@@ -78,9 +78,10 @@ class _UsuarioTile extends StatelessWidget {
       leading: CircleAvatar(
         backgroundColor: esPendiente ? AppColors.amarillo : AppColors.azulMarino,
         foregroundColor: esPendiente ? AppColors.textoPrincipal : Colors.white,
-        child: Text(
-          usuario.nombre.isNotEmpty ? usuario.nombre[0].toUpperCase() : '?',
-        ),
+        backgroundImage: usuario.fotoUrl.isNotEmpty ? NetworkImage(usuario.fotoUrl) : null,
+        child: usuario.fotoUrl.isEmpty
+            ? Text(usuario.nombre.isNotEmpty ? usuario.nombre[0].toUpperCase() : '?')
+            : null,
       ),
       title: Text(usuario.nombreCompleto.isNotEmpty ? usuario.nombreCompleto : usuario.correo),
       subtitle: Text('${usuario.correo} · ${usuario.rol.etiqueta}'),
