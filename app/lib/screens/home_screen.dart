@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import 'admin/admin_users_list_screen.dart';
+import 'admin/user_edit_sheet.dart';
 
 class HomeScreen extends StatelessWidget {
   final UsuarioApp usuario;
@@ -33,6 +34,16 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 8),
             Text('Rol: ${usuario.rol.etiqueta}'),
             const SizedBox(height: 32),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.person),
+              label: const Text('Mi perfil'),
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => UserEditSheet(usuario: usuario, esAdmin: true),
+              ),
+            ),
+            const SizedBox(height: 12),
             if (usuario.rol == RolUsuario.administrador)
               ElevatedButton.icon(
                 icon: const Icon(Icons.people),

@@ -1,14 +1,20 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/usuario_app.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_colors.dart';
+import 'edit_perfil_servidor_sheet.dart';
 
-/// Hoja inferior para que un admin asigne rol y estado a un usuario.
+/// Hoja inferior con la ficha de un usuario. Quién la abre determina qué
+/// ve: un admin ve y puede cambiar rol/estado/antecedentes de cualquiera;
+/// cualquier usuario viendo su propia ficha (o un admin viendo la suya)
+/// puede editar su información de perfil.
 class UserEditSheet extends StatefulWidget {
   final UsuarioApp usuario;
+  final bool esAdmin;
 
-  const UserEditSheet({super.key, required this.usuario});
+  const UserEditSheet({super.key, required this.usuario, required this.esAdmin});
 
   @override
   State<UserEditSheet> createState() => _UserEditSheetState();
@@ -58,6 +64,20 @@ class _UserEditSheetState extends State<UserEditSheet> {
         setState(() => _guardando = false);
       }
     }
+  }
+
+  bool get _esPropio => FirebaseAuth.instance.currentUser?.uid == widget.usuario.uid;
+  bool get _puedeEditarPerfil => widget.esAdmin || _esPropio;
+
+  Future<void> _abrirEdicionPerfil() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => EditPerfilServidorSheet(usuario: widget.usuario, esPropio: _esPropio),
+    );
+    // Cerramos también esta ficha: sus datos quedaron desactualizados y el
+    // usuario puede volver a abrirla para ver la información ya al día.
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -111,46 +131,56 @@ class _UserEditSheetState extends State<UserEditSheet> {
                 style: TextStyle(color: AppColors.rojo),
               ),
             ],
-            const SizedBox(height: 20),
-            DropdownButtonFormField<RolUsuario>(
-              initialValue: _rolSeleccionado,
-              decoration: const InputDecoration(labelText: 'Rol'),
-              items: RolUsuario.asignables
-                  .map((r) => DropdownMenuItem(value: r, child: Text(r.etiqueta)))
-                  .toList(),
-              onChanged: (r) => setState(() => _rolSeleccionado = r!),
-            ),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Cuenta activa'),
-              subtitle: const Text('Si la desactivas, la persona no podrá iniciar sesión'),
-              value: _activo,
-              onChanged: (v) => setState(() => _activo = v),
-            ),
-            const SizedBox(height: 4),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Verificación de antecedentes'),
-              subtitle: Text(
-                _fechaVerificacionAntecedentes != null
-                    ? _formatearFecha(_fechaVerificacionAntecedentes!)
-                    : 'Sin registrar',
+            if (_puedeEditarPerfil) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _abrirEdicionPerfil,
+                icon: const Icon(Icons.edit),
+                label: const Text('Editar información'),
               ),
-              trailing: const Icon(Icons.edit_calendar),
-              onTap: _elegirFecha,
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: _guardando ? null : _guardar,
-              child: _guardando
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Text('Guardar cambios'),
-            ),
+            ],
+            if (widget.esAdmin) ...[
+              const SizedBox(height: 20),
+              DropdownButtonFormField<RolUsuario>(
+                initialValue: _rolSeleccionado,
+                decoration: const InputDecoration(labelText: 'Rol'),
+                items: RolUsuario.asignables
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r.etiqueta)))
+                    .toList(),
+                onChanged: (r) => setState(() => _rolSeleccionado = r!),
+              ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Cuenta activa'),
+                subtitle: const Text('Si la desactivas, la persona no podrá iniciar sesión'),
+                value: _activo,
+                onChanged: (v) => setState(() => _activo = v),
+              ),
+              const SizedBox(height: 4),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Verificación de antecedentes'),
+                subtitle: Text(
+                  _fechaVerificacionAntecedentes != null
+                      ? _formatearFecha(_fechaVerificacionAntecedentes!)
+                      : 'Sin registrar',
+                ),
+                trailing: const Icon(Icons.edit_calendar),
+                onTap: _elegirFecha,
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: _guardando ? null : _guardar,
+                child: _guardando
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Guardar cambios'),
+              ),
+            ],
           ],
         ),
       ),

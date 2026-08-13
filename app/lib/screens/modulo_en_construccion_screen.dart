@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
+import 'admin/user_edit_sheet.dart';
 
 /// Para roles ya aprobados y con perfil completo, pero cuyas pantallas
 /// propias todavía no existen (se activan módulo por módulo).
@@ -42,6 +43,16 @@ class ModuloEnConstruccionScreen extends StatelessWidget {
                 'Tu perfil está completo. Las herramientas para tu rol se '
                 'están construyendo y estarán disponibles pronto.',
                 textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.person),
+                label: const Text('Mi perfil'),
+                onPressed: () => showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (_) => UserEditSheet(usuario: usuario, esAdmin: false),
+                ),
               ),
             ],
           ),

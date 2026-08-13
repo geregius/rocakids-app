@@ -92,7 +92,7 @@ class _UsuarioTile extends StatelessWidget {
         showModalBottomSheet(
           context: context,
           isScrollControlled: true,
-          builder: (_) => UserEditSheet(usuario: usuario),
+          builder: (_) => UserEditSheet(usuario: usuario, esAdmin: true),
         );
       },
     );

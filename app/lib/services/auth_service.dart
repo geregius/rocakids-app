@@ -113,10 +113,14 @@ class AuthService {
     });
   }
 
-  /// El propio servidor completa su perfil (documento, EPS, contacto de
-  /// emergencia, foto). Las reglas de seguridad le impiden tocar su rol
-  /// o su estado activo desde aquí.
+  /// Completa/edita el perfil de un servidor (documento, EPS, contacto de
+  /// emergencia, foto). Sirve tanto para que el propio servidor llene su
+  /// perfil por primera vez, como para que un admin corrija los datos de
+  /// otro — en ambos casos las reglas de seguridad impiden tocar el rol
+  /// o el estado activo por esta vía (eso es siempre responsabilidad del
+  /// admin, con [actualizarRolYEstado]).
   Future<void> completarPerfilServidor({
+    String? uid,
     required String tipoDocumento,
     required String numeroDocumento,
     required String telefono,
@@ -126,11 +130,11 @@ class AuthService {
     required String contactoEmergenciaTelefono,
     required String fotoUrl,
   }) {
-    final user = _auth.currentUser;
-    if (user == null) {
+    final destinoUid = uid ?? _auth.currentUser?.uid;
+    if (destinoUid == null) {
       throw const AuthException('No hay sesión activa.');
     }
-    return _firestore.collection('usuarios').doc(user.uid).update({
+    return _firestore.collection('usuarios').doc(destinoUid).update({
       'tipoDocumento': tipoDocumento,
       'numeroDocumento': numeroDocumento,
       'telefono': telefono,
@@ -143,7 +147,9 @@ class AuthService {
   }
 
   /// Sube la foto de perfil del servidor logueado y devuelve la URL
-  /// pública para guardarla en su documento.
+  /// pública para guardarla en su documento. Las reglas de Storage solo
+  /// permiten que cada quien suba su propia foto (un admin no puede
+  /// reemplazar la foto de otro servidor).
   Future<String> subirFotoServidor(Uint8List bytes, String extension) async {
     final user = _auth.currentUser;
     if (user == null) {
