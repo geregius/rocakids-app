@@ -19,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _authService = AuthService();
 
   bool _cargando = false;
+  bool _mostrarPassword = false;
   String? _error;
 
   @override
@@ -95,10 +96,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _passwordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
+                      obscureText: !_mostrarPassword,
+                      decoration: InputDecoration(
                         labelText: 'Contraseña',
-                        prefixIcon: Icon(Icons.lock_outline),
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _mostrarPassword ? Icons.visibility_off : Icons.visibility,
+                            color: AppColors.azulMarino,
+                          ),
+                          tooltip: _mostrarPassword ? 'Ocultar contraseña' : 'Mostrar contraseña',
+                          onPressed: () => setState(() => _mostrarPassword = !_mostrarPassword),
+                        ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {

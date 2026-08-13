@@ -21,6 +21,7 @@ class _SignUpServidorScreenState extends State<SignUpServidorScreen> {
   final _authService = AuthService();
 
   bool _cargando = false;
+  bool _mostrarPassword = false;
   String? _error;
 
   @override
@@ -129,8 +130,18 @@ class _SignUpServidorScreenState extends State<SignUpServidorScreen> {
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _passwordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(labelText: 'Contraseña'),
+                      obscureText: !_mostrarPassword,
+                      decoration: InputDecoration(
+                        labelText: 'Contraseña',
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _mostrarPassword ? Icons.visibility_off : Icons.visibility,
+                            color: AppColors.azulMarino,
+                          ),
+                          tooltip: _mostrarPassword ? 'Ocultar contraseña' : 'Mostrar contraseña',
+                          onPressed: () => setState(() => _mostrarPassword = !_mostrarPassword),
+                        ),
+                      ),
                       validator: (v) {
                         if (v == null || v.isEmpty) return 'Ingresa una contraseña';
                         if (v.length < 6) return 'Mínimo 6 caracteres';
