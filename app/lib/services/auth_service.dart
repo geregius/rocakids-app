@@ -149,6 +149,13 @@ class AuthService {
       );
       await batch.commit();
     } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        throw const AuthException(
+          'Ya tienes una cuenta con este correo. Inicia sesión y usa '
+          '"Mis hijos" desde tu pantalla principal para registrar niños '
+          '— no hace falta crear una cuenta nueva.',
+        );
+      }
       throw AuthException(_mensajeDeErrorRegistro(e.code));
     } catch (e) {
       // Si el batch falla (ej. documento del niño duplicado), no dejamos
@@ -167,6 +174,59 @@ class AuthService {
         );
       }
       throw AuthException('No se pudo completar el registro: $e');
+    }
+  }
+
+  /// El perfil de acudiente del usuario logueado, si ya lo tiene. Ser
+  /// acudiente es independiente del rol: un administrador o un maestro
+  /// también puede tener hijos propios registrados con la misma cuenta.
+  Future<Acudiente?> obtenerMiAcudiente() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+    final doc = await _firestore.collection('acudientes').doc(user.uid).get();
+    if (!doc.exists) return null;
+    return Acudiente.fromFirestore(user.uid, doc.data()!);
+  }
+
+  /// Crea el perfil de acudiente del usuario YA logueado (sin crear una
+  /// cuenta nueva ni tocar su rol actual). Es lo que usa, por ejemplo,
+  /// un administrador que también quiere registrar a sus propios hijos.
+  Future<void> crearPerfilAcudiente({
+    required Acudiente acudiente,
+    Uint8List? fotoBytes,
+    String? fotoExt,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+
+    String fotoUrl = '';
+    if (fotoBytes != null && fotoExt != null) {
+      fotoUrl = await subirFotoAcudiente(fotoBytes, fotoExt);
+    }
+
+    final batch = _firestore.batch();
+    batch.set(_firestore.collection('acudientes').doc(user.uid), {
+      ...acudiente.toFirestore(),
+      if (fotoUrl.isNotEmpty) 'fotoSeguridadUrl': fotoUrl,
+    });
+    batch.set(
+      _firestore.collection('acudientes_documentos').doc(acudiente.numeroDocumento),
+      {'uid': user.uid},
+    );
+
+    try {
+      await batch.commit();
+    } catch (e) {
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException(
+          'Este número de documento ya se encuentra registrado en el sistema.',
+        );
+      }
+      throw AuthException('No se pudo guardar tu perfil de acudiente: $e');
     }
   }
 

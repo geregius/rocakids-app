@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
+import 'acudiente_portal_screen.dart';
 import 'admin/admin_users_list_screen.dart';
 import 'admin/user_edit_sheet.dart';
 
@@ -43,6 +44,14 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 8),
             Text('Rol: ${usuario.rol.etiqueta}'),
             const SizedBox(height: 32),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.family_restroom),
+              label: const Text('Mis hijos'),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => AcudientePortalScreen(usuario: usuario)),
+              ),
+            ),
+            const SizedBox(height: 12),
             if (usuario.rol == RolUsuario.administrador)
               ElevatedButton.icon(
                 icon: const Icon(Icons.people),
