@@ -15,7 +15,7 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         centerTitle: false,
-        title: Image.asset('assets/images/logo_rocakids.png', height: 36, fit: BoxFit.contain),
+        title: Image.asset('assets/images/logo_rocakids_compacto.png', height: 40, fit: BoxFit.contain),
         actions: [
           IconButton(
             icon: const Icon(Icons.person),
