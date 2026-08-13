@@ -106,6 +106,10 @@ class AuthService {
       });
       batch.set(_firestore.collection('acudientes').doc(uid), acudiente.toFirestore());
       batch.set(
+        _firestore.collection('acudientes_documentos').doc(acudiente.numeroDocumento),
+        {'uid': uid},
+      );
+      batch.set(
         _firestore.collection('ninos').doc(nino.documentoIdentificacion),
         nino.toFirestore(),
       );
@@ -165,6 +169,92 @@ class AuthService {
       }
     }
     return ninos;
+  }
+
+  /// Busca un niño ya registrado por su documento (o llave interna) y,
+  /// si existe, lo vincula al acudiente logueado. Vínculo inmediato, sin
+  /// aprobación — el control real de quién retira a un niño ocurre en
+  /// el check-in/check-out, no aquí.
+  Future<Nino> vincularNinoExistente({
+    required String documentoNino,
+    required String parentescoTipo,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+
+    final docId = documentoNino.trim().toUpperCase();
+    final ninoDoc = await _firestore.collection('ninos').doc(docId).get();
+    if (!ninoDoc.exists) {
+      throw const AuthException('No se encontró ningún niño con ese documento.');
+    }
+    final nino = Nino.fromFirestore(ninoDoc.id, ninoDoc.data()!);
+
+    // Evita crear una relación duplicada si ya estaban vinculados.
+    final yaVinculado = await _firestore
+        .collection('nino_acudiente')
+        .where('fk_idAcudiente', isEqualTo: user.uid)
+        .where('fk_idNino', isEqualTo: docId)
+        .limit(1)
+        .get();
+    if (yaVinculado.docs.isNotEmpty) {
+      throw const AuthException('Ya estás vinculado a este niño.');
+    }
+
+    await _firestore.collection('nino_acudiente').add(
+      NinoAcudiente(
+        id: '',
+        fkIdNino: docId,
+        fkIdAcudiente: user.uid,
+        parentescoTipo: parentescoTipo,
+        autorizacionFormulario: 'Sí',
+        autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
+        esRepresentanteLegalFlag: false,
+      ).toFirestore(),
+    );
+    return nino;
+  }
+
+  /// Registra un niño NUEVO y lo vincula al acudiente logueado (para
+  /// cuando ya tiene cuenta y quiere agregar otro hijo).
+  Future<void> registrarNinoAdicional({
+    required Nino nino,
+    required String parentescoTipo,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+
+    final batch = _firestore.batch();
+    batch.set(
+      _firestore.collection('ninos').doc(nino.documentoIdentificacion),
+      nino.toFirestore(),
+    );
+    batch.set(
+      _firestore.collection('nino_acudiente').doc(),
+      NinoAcudiente(
+        id: '',
+        fkIdNino: nino.documentoIdentificacion,
+        fkIdAcudiente: user.uid,
+        parentescoTipo: parentescoTipo,
+        autorizacionFormulario: 'Sí',
+        autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
+        esRepresentanteLegalFlag: true,
+      ).toFirestore(),
+    );
+
+    try {
+      await batch.commit();
+    } catch (e) {
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException(
+          'Este número de documento ya se encuentra registrado en el sistema.',
+        );
+      }
+      throw AuthException('No se pudo registrar al niño: $e');
+    }
   }
 
   Future<void> signOut() => _auth.signOut();

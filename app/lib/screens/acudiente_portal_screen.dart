@@ -4,10 +4,10 @@ import '../models/nino.dart';
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import 'agregar_hijo_screen.dart';
 
-/// Portal simple del acudiente: ve a su(s) hijo(s) registrados.
-/// Todavía no permite agregar más niños ni editar datos — eso llega
-/// en una siguiente vuelta del Módulo 3.
+/// Portal simple del acudiente: ve a su(s) hijo(s) registrados y puede
+/// agregar más (vinculando uno existente o registrando uno nuevo).
 class AcudientePortalScreen extends StatefulWidget {
   final UsuarioApp usuario;
 
@@ -23,7 +23,18 @@ class _AcudientePortalScreenState extends State<AcudientePortalScreen> {
   @override
   void initState() {
     super.initState();
+    _cargarHijos();
+  }
+
+  void _cargarHijos() {
     _hijosFuture = AuthService().obtenerMisHijos();
+  }
+
+  Future<void> _abrirAgregarHijo() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AgregarHijoScreen()),
+    );
+    setState(_cargarHijos);
   }
 
   int _calcularEdad(DateTime fechaNacimiento) {
@@ -49,6 +60,11 @@ class _AcudientePortalScreenState extends State<AcudientePortalScreen> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _abrirAgregarHijo,
+        icon: const Icon(Icons.add),
+        label: const Text('Agregar hijo'),
+      ),
       body: Column(
         children: [
           Padding(
@@ -73,7 +89,7 @@ class _AcudientePortalScreenState extends State<AcudientePortalScreen> {
                   return const Center(child: Text('Todavía no tienes niños registrados.'));
                 }
                 return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
                   itemCount: hijos.length,
                   itemBuilder: (context, i) {
                     final nino = hijos[i];

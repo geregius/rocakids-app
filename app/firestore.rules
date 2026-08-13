@@ -40,6 +40,16 @@ service cloud.firestore {
       allow delete: if esAdmin();
     }
 
+    // Reserva de unicidad de documento de acudiente: doc ID = numeroDocumento.
+    // Mismo truco que en ninos — un segundo intento con el mismo documento
+    // cae en "update" (no permitido), así que Firestore rechaza el duplicado.
+    match /acudientes_documentos/{numeroDocumento} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid;
+      allow get: if request.auth != null;
+      allow update, delete: if esAdmin();
+    }
+
     match /acudientes/{uid} {
       allow get: if request.auth != null && request.auth.uid == uid;
       allow get, list: if esAdmin();
