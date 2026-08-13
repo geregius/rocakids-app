@@ -10,17 +10,26 @@ class AppTheme {
 
   static Color _elevatedBackground(Set<WidgetState> states) {
     if (states.contains(WidgetState.disabled)) return Colors.grey.shade300;
-    if (states.contains(WidgetState.pressed)) return AppColors.azulOscuro;
-    if (states.contains(WidgetState.hovered)) return AppColors.azulClaro;
+    if (states.contains(WidgetState.pressed)) return AppColors.purpura;
+    if (states.contains(WidgetState.hovered)) return AppColors.amarillo;
     return AppColors.azulMarino;
+  }
+
+  static Color _elevatedForeground(Set<WidgetState> states) {
+    if (states.contains(WidgetState.disabled)) return Colors.grey.shade600;
+    // Texto oscuro sobre el fondo amarillo del hover para que se lea bien.
+    if (states.contains(WidgetState.hovered) && !states.contains(WidgetState.pressed)) {
+      return AppColors.textoPrincipal;
+    }
+    return Colors.white;
   }
 
   static Color _outlinedOverlay(Set<WidgetState> states) {
     if (states.contains(WidgetState.pressed)) {
-      return AppColors.azulMarino.withValues(alpha: 0.16);
+      return AppColors.purpura.withValues(alpha: 0.18);
     }
     if (states.contains(WidgetState.hovered)) {
-      return AppColors.azulMarino.withValues(alpha: 0.08);
+      return AppColors.amarillo.withValues(alpha: 0.25);
     }
     return Colors.transparent;
   }
@@ -58,7 +67,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ButtonStyle(
           backgroundColor: WidgetStateProperty.resolveWith(_elevatedBackground),
-          foregroundColor: const WidgetStatePropertyAll(Colors.white),
+          foregroundColor: WidgetStateProperty.resolveWith(_elevatedForeground),
           padding: const WidgetStatePropertyAll(
             EdgeInsets.symmetric(vertical: 16, horizontal: 20),
           ),
