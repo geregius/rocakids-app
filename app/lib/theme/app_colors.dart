@@ -6,6 +6,7 @@ class AppColors {
 
   static const azulMarino = Color(0xFF003399);
   static const azulClaro = Color(0xFF2C5BB8);
+  static const azulOscuro = Color(0xFF002266);
   static const amarillo = Color(0xFFFFCC00);
   static const rojo = Color(0xFFE50000);
   static const purpura = Color(0xFF990099);
