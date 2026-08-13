@@ -18,6 +18,7 @@ Documentos relacionados en `docs/`:
 | App Flutter | dentro de `/app` en el repo |
 | Proyecto Firebase | `rocakidsarmenia-7935b` |
 | URL pública (Hosting) | https://rocakidsarmenia-7935b.web.app |
+| QR de acceso a la app | [`QR Aplicación.png`](../QR%20Aplicaci%C3%B3n.png) en la raíz del repo — QR para compartir con acudientes/servidores, apunta a la URL de Hosting. Por eso el fix de caché de la sección 8 es importante: quien entra por este QR debe ver siempre la versión más reciente sin pasos extra. |
 | Región Firestore | `southamerica-east1` (São Paulo) |
 | Región Storage (bucket) | `us-east1` — **a propósito distinta** a Firestore, es la única forma de tener el nivel gratuito real de Storage (`southamerica-east1` no tiene capa gratuita) |
 | Plan de Firebase | Blaze (pago por uso), pero configurado para costo real ≈ $0 en este volumen |
