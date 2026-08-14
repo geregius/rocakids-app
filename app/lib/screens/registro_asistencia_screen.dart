@@ -117,12 +117,22 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
     });
     try {
       final nino = await _authService.obtenerNinoPorDocumento(resultado.documentoIdentificacion);
-      final ultimoMovimiento = nino == null
-          ? null
-          : await _authService.obtenerUltimoMovimiento(nino.documentoIdentificacion);
-      final acudientes = nino == null
-          ? <Acudiente>[]
-          : await _authService.obtenerAcudientesDeNino(nino.documentoIdentificacion);
+      if (nino == null) {
+        if (mounted) {
+          setState(() {
+            _cargandoDetalle = false;
+            _error =
+                'No se encontró el registro completo de ${resultado.nombreCompleto} '
+                '(documento: ${resultado.documentoIdentificacion}). '
+                'Puede que su ficha esté incompleta — avísale al administrador.';
+          });
+        }
+        return;
+      }
+      final ultimoMovimiento = await _authService.obtenerUltimoMovimiento(
+        nino.documentoIdentificacion,
+      );
+      final acudientes = await _authService.obtenerAcudientesDeNino(nino.documentoIdentificacion);
       if (!mounted) return;
       setState(() {
         _nino = nino;
@@ -130,11 +140,11 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
         _acudientes = acudientes;
         _cargandoDetalle = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() {
           _cargandoDetalle = false;
-          _error = 'No se pudo cargar la información del niño.';
+          _error = 'No se pudo cargar la información del niño: $e';
         });
       }
     }
@@ -411,7 +421,11 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('No se encontró la información de este niño.'),
+          Text(
+            _error ?? 'No se encontró la información de este niño.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.rojo),
+          ),
           const SizedBox(height: 16),
           TextButton(onPressed: _volverABuscar, child: const Text('Volver a buscar')),
         ],

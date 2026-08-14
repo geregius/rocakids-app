@@ -76,7 +76,7 @@ class AppShell extends StatelessWidget {
       ),
       if (esServidor)
         _ItemMenu(
-          icon: Icons.how_to_reg,
+          icon: Icons.assignment_turned_in,
           label: 'Registro de asistencia',
           onTap: () => _irA(context, RegistroAsistenciaScreen(usuario: usuario)),
         ),
