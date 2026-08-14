@@ -9,6 +9,18 @@ service cloud.firestore {
         get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol.lower() == 'administrador';
     }
 
+    // Roles que pueden hacer entrada/salida de niños (check-in/check-out),
+    // decidido por Rafael: administrador, columna, líder de ministerio,
+    // líder escuela de siervos, maestro principal y maestro auxiliar.
+    function puedeRegistrarAsistencia() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol.lower() in [
+          'administrador', 'columna', 'lider_ministerio',
+          'lider_escuela_siervos', 'maestro_principal', 'maestro_auxiliar'
+        ];
+    }
+
     match /usuarios/{uid} {
       // Cualquiera autenticado puede leer su propio perfil. Un admin
       // puede leer (y listar) el perfil de cualquiera.
@@ -98,20 +110,27 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.fk_idAcudiente == request.auth.uid;
 
-      allow get: if esAdmin() || (
-        request.auth != null && resource.data.fk_idAcudiente == request.auth.uid
-      );
-      // El cliente debe consultar con .where('fk_idAcudiente', isEqualTo: uid);
-      // Firestore exige que cada doc del resultado cumpla esta condición.
-      allow list: if esAdmin() || (
-        request.auth != null && resource.data.fk_idAcudiente == request.auth.uid
-      );
+      // Cualquier autenticado puede leer relaciones (igual que ninos y
+      // ninos_busqueda) — hace falta para que quien hace check-in/out
+      // pueda ver qué acudientes están autorizados a entregar/retirar a
+      // CUALQUIER niño, no solo a los suyos.
+      allow get, list: if request.auth != null;
 
       allow update, delete: if esAdmin();
     }
 
+    match /registros/{registroId} {
+      // Entrada/salida de niños. Solo los roles de puedeRegistrarAsistencia()
+      // pueden crear o consultar el historial — es información operativa
+      // de seguridad, no algo que cualquier acudiente deba poder ver.
+      allow create: if puedeRegistrarAsistencia()
+        && request.resource.data.fkIdServidor == request.auth.uid;
+      allow get, list: if puedeRegistrarAsistencia();
+      allow update, delete: if esAdmin();
+    }
+
     // Todo lo demás queda cerrado por defecto hasta que se definan
-    // las reglas de cada módulo (registros, campañas, etc).
+    // las reglas de cada módulo (campañas, etc).
     match /{document=**} {
       allow read, write: if false;
     }

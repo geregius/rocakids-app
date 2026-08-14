@@ -7,6 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 
 import '../models/acudiente.dart';
 import '../models/nino.dart';
+import '../models/registro.dart';
 import '../models/usuario_app.dart';
 
 class AuthException implements Exception {
@@ -476,6 +477,67 @@ class AuthService {
       await batch.commit();
     }
     return actualizados;
+  }
+
+  /// Un niño por su documento (o llave interna), o null si no existe.
+  Future<Nino?> obtenerNinoPorDocumento(String documentoIdentificacion) async {
+    final doc = await _firestore.collection('ninos').doc(documentoIdentificacion).get();
+    if (!doc.exists) return null;
+    return Nino.fromFirestore(doc.id, doc.data()!);
+  }
+
+  /// El movimiento (Entrada/Salida) más reciente de un niño, si tiene
+  /// alguno. Con esto se decide si el próximo botón de check-in debe
+  /// decir "Registrar Entrada" o "Registrar Salida" — un niño cuyo
+  /// último movimiento fue "Entrada" está adentro; si fue "Salida" (o no
+  /// tiene ninguno todavía), está afuera.
+  Future<Registro?> obtenerUltimoMovimiento(String fkIdNino) async {
+    final snap = await _firestore
+        .collection('registros')
+        .where('fkIdNino', isEqualTo: fkIdNino)
+        .orderBy('fechaMovimiento', descending: true)
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) return null;
+    return Registro.fromFirestore(snap.docs.first.id, snap.docs.first.data());
+  }
+
+  /// Los acudientes autorizados a entregar/retirar a un niño (vía
+  /// `nino_acudiente`) — para que quien hace el check-in/check-out
+  /// verifique visualmente (foto de seguridad) quién está presente, en
+  /// vez de solo confiar en un nombre escrito a mano. Este es el control
+  /// de seguridad real del que habla el SOP.
+  Future<List<Acudiente>> obtenerAcudientesDeNino(String fkIdNino) async {
+    final relaciones = await _firestore
+        .collection('nino_acudiente')
+        .where('fk_idNino', isEqualTo: fkIdNino)
+        .get();
+
+    final acudientes = <Acudiente>[];
+    for (final rel in relaciones.docs) {
+      final acudienteUid = rel.data()['fk_idAcudiente'] as String?;
+      if (acudienteUid == null) continue;
+      final doc = await _firestore.collection('acudientes').doc(acudienteUid).get();
+      if (doc.exists) {
+        acudientes.add(Acudiente.fromFirestore(doc.id, doc.data()!));
+      }
+    }
+    return acudientes;
+  }
+
+  /// Registra un movimiento de entrada o salida (SOP §3.3). El uid y
+  /// nombre de quien registra los pone esta función (no el llamador),
+  /// para que siempre coincidan con la sesión real — así lo exige
+  /// también `firestore.rules`.
+  Future<void> registrarMovimiento(Registro registro) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+    final datos = registro.toFirestore()
+      ..['fkIdServidor'] = user.uid
+      ..['nombreServidor'] = registro.nombreServidor;
+    await _firestore.collection('registros').add(datos);
   }
 
   /// Busca un niño ya registrado por su documento (o llave interna) y,

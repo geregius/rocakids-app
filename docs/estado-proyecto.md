@@ -150,6 +150,22 @@ Los niños registrados ANTES del 2026-08-14 no tenían documento en esta colecci
 ### `nino_acudiente/{autoId}` — relación muchos-a-muchos
 Campos: `fk_idNino`, `fk_idAcudiente`, `parentescoTipo`, `autorizacionFormulario`, `autorizacionImagen`, `esRepresentanteLegalFlag`. Un niño puede tener varios acudientes, y un acudiente varios niños — ya soportado y probado.
 
+### `registros/{autoId}` — entrada/salida de niños (Módulo 4, Fase 1 — 2026-08-14)
+Campos: `fkIdNino` (vacío si es visitante), `nombreNinoVisitante`, `tipoMovimiento` (Entrada/Salida), `fechaMovimiento`, `numeroManilla`, `fkIdServidor`, `nombreServidor`, `fkIdAcudienteContacto`, `nombreAcudienteContacto`, `telefonoAcudienteVisitante`, `alertaMedicaVisitante`, `condicionMedicaVisitante`, `modalidadRegistro` (siempre `'App'` para lo escrito desde esta app), `servicio`, `grupoEdad`, `observacion`.
+
+**Fuente de verdad real:** no el SOP (que documenta un enum de `modalidadRegistro` que no coincide con lo real), sino el export real `D:\Downloads\DB RocaKids V2 (15).xlsx` → pestaña `REGISTROS` (3873 movimientos históricos). De ahí salió la lista de `Servicio` (`serviciosDisponibles` en `lib/models/registro.dart`): Domingo 1° Servicio, Domingo 2° Servicio, Miércoles, Ayuno, Casa2 — y la confirmación de que `grupoEdad` casi nunca se llenaba a mano en el sistema viejo (por eso se calcula automático, nunca manual, para niños ya registrados).
+
+**Decisiones de esta fase (confirmadas por Rafael, 2026-08-14):**
+- **Solo registro manual, con internet.** Sin escáner QR ni modo offline todavía — quedan para después, una vez esto se use en la iglesia y funcione bien.
+- **Quién puede registrar:** Administrador, Columna, Líder de Ministerio, Líder Escuela de Siervos, Maestro Principal, Maestro Auxiliar (`puedeRegistrarAsistencia()` en `firestore.rules` — básicamente todos los roles de servidor, `usuario.rol.esRolDeServidor`).
+- **Manilla:** campo de texto libre (no hay lista fija de manillas por salón, coincide con el dato real).
+- **Niño visitante (sin cuenta previa):** SÍ soportado desde ya, para no rechazar a nadie en la puerta — se guarda solo en el `registro` (nombre, adulto que lo trae, teléfono, alerta médica, grupo elegido a mano ya que no hay fecha de nacimiento), sin crear `ninos`/`acudientes`. ⚠️ Limitación conocida: como el visitante no queda en `ninos_busqueda`, no se puede "buscar" para registrarle la salida después — por ahora su registro queda solo como Entrada. Si un visitante vuelve, lo ideal es registrarlo formalmente (acudiente o maestro) para que tenga ficha completa.
+- Quién entrega/retira a un niño YA registrado se elige de la lista de acudientes vinculados (`AuthService.obtenerAcudientesDeNino()`, vía `nino_acudiente`) con su foto de seguridad para verificar identidad — y si su `estadoAutorizacion` es `Restringido`, se lo advierte en rojo al servidor. Esto es el control de seguridad real del que habla el SOP. Hay opción "Otro" con nombre libre por si quien retira no está en la lista.
+
+**Reglas de Firestore:** nueva función `puedeRegistrarAsistencia()` (lista fija de roles). `nino_acudiente` se abrió a `get`/`list` para cualquier autenticado (antes solo el propio acudiente o admin) — hace falta para poder ver quién puede retirar a CUALQUIER niño, no solo a los propios. Nuevo índice compuesto en `firestore.indexes.json` (`fkIdNino` + `fechaMovimiento desc`) para poder preguntar "¿cuál fue el último movimiento de este niño?" y así decidir si el próximo botón dice "Entrada" o "Salida".
+
+**Pendiente de esta misma pantalla:** escáner QR (Fase 2) y modo offline con cola de sincronización (Fase 3) — ver sección 9. El cierre automático nocturno es el Módulo 5, aparte, y necesita la primera Cloud Function del proyecto.
+
 ---
 
 ## 6. Pantallas construidas (`lib/screens/`)
@@ -179,6 +195,7 @@ Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `
 | `admin/admin_users_list_screen.dart` | Lista de todos los usuarios (`usuarios` collection), separa "pendientes de aprobación" del resto. Solo admin. |
 | `admin/user_edit_sheet.dart` | Ficha de un usuario: si es admin viendo a otro, puede cambiar rol/activo/fecha de verificación de antecedentes, y ver los datos de perfil. Botón "Editar información" (perfil) visible si es admin o si es el propio dueño viendo su ficha. |
 | `admin/edit_perfil_servidor_sheet.dart` | Formulario de edición de los campos de perfil de servidor (documento, EPS, etc.), reutilizado tanto para que el admin corrija a otro como para que uno mismo edite lo suyo. |
+| `registro_asistencia_screen.dart` | Sección "Registro de asistencia" (2026-08-14) — **todos los roles de servidor**. Busca un niño por nombre (reutiliza `ninos_busqueda`), muestra su foto/alerta médica, calcula si toca Entrada o Salida según su último movimiento, y pide quién lo entrega/retira (lista de acudientes vinculados con foto de seguridad, o "Otro"), servicio, manilla y observación. También permite registrar un niño **visitante** sin cuenta previa. Ver `registros/{autoId}` en sección 5 para el detalle completo y las limitaciones de esta primera fase. |
 | `auth_gate.dart` | El "router" central: según rol + si el perfil está completo, decide qué pantalla mostrar. Reactivo (usa Streams de Firestore), no necesita refrescos manuales. |
 
 **`lib/services/auth_service.dart`** centraliza TODA la lógica de Firebase (login, registro, subida de fotos, consultas). Vale la pena leerlo completo para entender los flujos exactos antes de tocarlo.
@@ -191,7 +208,8 @@ Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `
 - `usuarios`: cada quien lee lo suyo; admin lee/lista todo. Auto-registro solo con rol `usuario_externo` o `pendiente` (nunca uno con privilegios). Auto-edición permitida excepto `rol`, `activo`, `correo`, `fechaVerificacionAntecedentes` (esos son admin-only).
 - `acudientes`: mismo patrón — auto-registro propio, auto-edición excepto `estadoAutorizacion`/`observacionesRestriccion` (admin-only).
 - `acudientes_documentos` y `ninos`: **create-only** (el ID del documento es la clave única; un segundo intento con el mismo ID no puede "actualizar" porque no hay regla `allow update` para el cliente ahí) → previene duplicados sin lógica extra.
-- `nino_acudiente`: cualquiera autenticado puede crear una relación donde `fk_idAcudiente` sea su propio uid. Vínculo a un niño existente es **instantáneo, sin aprobación** (decisión explícita de Rafael: el control real de seguridad ocurre en el check-in/check-out, no aquí).
+- `nino_acudiente`: cualquiera autenticado puede crear una relación donde `fk_idAcudiente` sea su propio uid. Vínculo a un niño existente es **instantáneo, sin aprobación** (decisión explícita de Rafael: el control real de seguridad ocurre en el check-in/check-out, no aquí). `get`/`list` abierto a cualquier autenticado (desde 2026-08-14, para el check-in — antes solo el propio acudiente o admin).
+- `registros`: solo los roles de `puedeRegistrarAsistencia()` (administrador, columna, líder de ministerio, líder escuela de siervos, maestro principal, maestro auxiliar) pueden crear o leer — es información operativa de seguridad, no algo que un acudiente cualquiera deba poder ver. `fkIdServidor` debe coincidir con el uid de quien escribe.
 
 **Storage (`storage.rules`):**
 - `servidores_fotos/{uid}` y `acudientes_fotos/{uid}`: cada quien sube/reemplaza solo la suya.
@@ -215,9 +233,9 @@ Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `
 ## 9. Qué falta (pendiente, en orden sugerido)
 
 1. **Administración de Niños** (el resto del Módulo 3, explícitamente pospuesto): pantalla admin para listar/buscar niños, ver su ficha completa, y desde ahí vincular un acudiente ya existente o registrar uno nuevo. Roca­Kids ya soporta la relación muchos-a-muchos en el modelo de datos — falta la UI de administración.
-2. **Los otros 6 roles de servidor** (Líder Ministerio, Columna, Líder Escuela de Siervos, Maestro Principal, Maestro Auxiliar) no tienen pantallas propias todavía — el modelo y el flujo de aprobación ya los soporta.
-3. **Módulo 2 — Migración de datos reales:** existen archivos `DB RocaKids V2 (*).xlsx` en las Descargas de Rafael con datos reales de producción (niños, acudientes, servidores, equipos, formación, etc. — hoja `SERVIDORES` fue la referencia para el perfil de servidor que ya se construyó). Falta el script de importación a Firestore.
-4. **Módulo 4 — Check-in/Check-out con QR**, modo offline. Es el corazón operativo de la app según el SOP.
+2. **Pantallas propias por rol:** desde 2026-08-14, Líder Ministerio, Columna, Líder Escuela de Siervos, Maestro Principal y Maestro Auxiliar YA tienen acceso a "Registro de asistencia" (todos) y Maestro Principal/Auxiliar además a "Registrar familia" — pero siguen sin una pantalla de **inicio propia** con herramientas específicas de su rol (ven la genérica "módulo en construcción").
+3. **Módulo 2 — Migración de datos reales:** el archivo real es `D:\Downloads\DB RocaKids V2 (*).xlsx` (⚠️ ojo: NO es la carpeta Descargas normal de Windows, es una ruta directa en el disco D:) — datos reales de producción (niños, acudientes, servidores, equipos, formación, **3873 registros históricos de asistencia**, etc.). Ya se usó para diseñar `registros/` (sección 5) y para el perfil de servidor. Falta el script de importación a Firestore.
+4. **Módulo 4 — Check-in/Check-out:** ✅ Fase 1 (registro manual con internet) lista, ver `registros/{autoId}` en sección 5. Faltan Fase 2 (escáner QR) y Fase 3 (modo offline con cola de sincronización) — decisión explícita de Rafael de dejarlas para después.
 5. **Módulo 5 — Cierre automático nocturno** (requiere la primera Cloud Function del proyecto; ya se puede, el plan es Blaze).
 6. **Módulo 7 — Campañas de correo (Brevo):** falta confirmar si Rafael ya tiene cuenta/API key de Brevo.
 7. **Módulo 8 — Cumpleaños automáticos.**

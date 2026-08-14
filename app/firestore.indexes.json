@@ -1,4 +1,13 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "registros",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fkIdNino", "order": "ASCENDING" },
+        { "fieldPath": "fechaMovimiento", "order": "DESCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }
