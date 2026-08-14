@@ -85,27 +85,96 @@ class _VincularNinoForm extends StatefulWidget {
 
 class _VincularNinoFormState extends State<_VincularNinoForm> {
   final _formKey = GlobalKey<FormState>();
+  final _busquedaController = TextEditingController();
   final _documentoController = TextEditingController();
   String? _parentesco;
   bool _cargando = false;
+  bool _cargandoIndice = true;
+  bool _modoManual = false;
   String? _error;
   Nino? _encontrado;
 
+  List<NinoBusqueda> _indice = [];
+  List<NinoBusqueda> _resultados = [];
+  NinoBusqueda? _seleccionado;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarIndice();
+  }
+
+  Future<void> _cargarIndice() async {
+    try {
+      final indice = await AuthService().obtenerIndiceBusquedaNinos();
+      if (mounted) {
+        setState(() {
+          _indice = indice;
+          _cargandoIndice = false;
+        });
+      }
+    } catch (_) {
+      // Si falla traer el índice (ej. sin conexión), no dejamos a la
+      // persona sin poder avanzar: cae al ingreso manual del documento.
+      if (mounted) {
+        setState(() {
+          _cargandoIndice = false;
+          _modoManual = true;
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
+    _busquedaController.dispose();
     _documentoController.dispose();
     super.dispose();
   }
 
+  void _buscar(String texto) {
+    setState(() {
+      if (_seleccionado != null && texto == _seleccionado!.nombreCompleto) {
+        // Este cambio lo disparó nuestro propio _seleccionar() al fijar
+        // el texto del controller, no una edición manual: no lo tratamos
+        // como que la persona quiere buscar de nuevo.
+        return;
+      }
+      _seleccionado = null;
+      _resultados = texto.trim().isEmpty
+          ? []
+          : _indice.where((n) => n.coincideBusqueda(texto)).take(15).toList();
+    });
+  }
+
+  void _seleccionar(NinoBusqueda nino) {
+    setState(() {
+      _seleccionado = nino;
+      _resultados = [];
+      _busquedaController.text = nino.nombreCompleto;
+    });
+  }
+
   Future<void> _vincular() async {
     if (!_formKey.currentState!.validate()) return;
+    final documentoNino =
+        _modoManual ? _documentoController.text.trim() : _seleccionado?.documentoIdentificacion;
+    if (documentoNino == null || documentoNino.isEmpty) {
+      setState(
+        () => _error = _modoManual
+            ? 'Ingresa el número de documento.'
+            : 'Busca y selecciona al niño de la lista.',
+      );
+      return;
+    }
+
     setState(() {
       _cargando = true;
       _error = null;
     });
     try {
       final nino = await AuthService().vincularNinoExistente(
-        documentoNino: _documentoController.text,
+        documentoNino: documentoNino,
         parentescoTipo: _parentesco!,
       );
       setState(() => _encontrado = nino);
@@ -140,14 +209,71 @@ class _VincularNinoFormState extends State<_VincularNinoForm> {
         children: [
           Text('Vincular niño existente', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
-          const Text('Ingresa el número de documento con el que ya fue registrado.'),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _documentoController,
-            decoration: const InputDecoration(labelText: 'Número de documento del niño'),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-          ),
-          const SizedBox(height: 16),
+          if (_modoManual) ...[
+            const Text('Ingresa el número de documento con el que ya fue registrado.'),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _documentoController,
+              decoration: const InputDecoration(labelText: 'Número de documento del niño'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => setState(() => _modoManual = false),
+              child: const Text('Prefiero buscarlo por nombre'),
+            ),
+          ] else ...[
+            const Text('Escribe su nombre para buscarlo.'),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _busquedaController,
+              enabled: !_cargandoIndice,
+              decoration: InputDecoration(
+                labelText: 'Nombre del niño',
+                suffixIcon: _cargandoIndice
+                    ? const Padding(
+                        padding: EdgeInsets.all(14),
+                        child: SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : (_seleccionado != null
+                          ? const Icon(Icons.check_circle, color: AppColors.azulMarino)
+                          : null),
+              ),
+              onChanged: _buscar,
+            ),
+            if (_resultados.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 220),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.azulClaro.withValues(alpha: 0.4)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _resultados.length,
+                  itemBuilder: (context, i) {
+                    final r = _resultados[i];
+                    return ListTile(
+                      dense: true,
+                      title: Text(r.nombreCompleto),
+                      subtitle: Text('${calcularEdad(r.fechaNacimiento)} años'),
+                      onTap: () => _seleccionar(r),
+                    );
+                  },
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => setState(() => _modoManual = true),
+              child: const Text('Prefiero ingresar su número de documento'),
+            ),
+          ],
+          const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             initialValue: _parentesco,
             decoration: const InputDecoration(labelText: 'Tu parentesco con el niño'),

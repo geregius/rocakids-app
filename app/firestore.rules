@@ -83,6 +83,17 @@ service cloud.firestore {
       allow update, delete: if esAdmin();
     }
 
+    // Copia mínima de un niño (solo nombre y fecha de nacimiento, sin
+    // foto/documento/info médica) para que cualquier cuenta logueada
+    // pueda buscarlo por nombre al vincularlo, sin poder "navegar" datos
+    // sensibles de niños con los que no tiene ningún vínculo real. Se
+    // crea junto con ninos/{ninoId} (mismo ID) en el mismo batch.
+    match /ninos_busqueda/{ninoId} {
+      allow create: if request.auth != null;
+      allow get, list: if request.auth != null;
+      allow update, delete: if esAdmin();
+    }
+
     match /nino_acudiente/{relId} {
       allow create: if request.auth != null
         && request.resource.data.fk_idAcudiente == request.auth.uid;

@@ -129,6 +129,60 @@ class Nino {
   }
 }
 
+/// Copia mínima de un niño (solo nombre y fecha de nacimiento) que
+/// cualquier cuenta logueada puede listar para buscarlo por nombre al
+/// vincularlo — a propósito NO incluye foto, documento, ni información
+/// médica, para que alguien sin ningún vínculo real con el niño no pueda
+/// "navegar" esos datos sensibles solo con el nombre. Vive en la
+/// colección `ninos_busqueda`, escrita junto con `ninos` en el mismo
+/// batch (ver [Nino]).
+class NinoBusqueda {
+  final String documentoIdentificacion;
+  final String nombres;
+  final String apellidos;
+  final DateTime fechaNacimiento;
+
+  const NinoBusqueda({
+    required this.documentoIdentificacion,
+    required this.nombres,
+    required this.apellidos,
+    required this.fechaNacimiento,
+  });
+
+  String get nombreCompleto => '$nombres $apellidos';
+
+  Map<String, dynamic> toFirestore() => {
+    'nombres': nombres,
+    'apellidos': apellidos,
+    'fechaNacimiento': Timestamp.fromDate(fechaNacimiento),
+  };
+
+  factory NinoBusqueda.fromFirestore(String id, Map<String, dynamic> data) {
+    final fecha = data['fechaNacimiento'];
+    return NinoBusqueda(
+      documentoIdentificacion: id,
+      nombres: data['nombres'] as String? ?? '',
+      apellidos: data['apellidos'] as String? ?? '',
+      fechaNacimiento: fecha is Timestamp ? fecha.toDate() : DateTime.now(),
+    );
+  }
+
+  /// Compara sin distinguir mayúsculas/acentos, para que buscar "jose"
+  /// también encuentre a "José".
+  bool coincideBusqueda(String query) =>
+      _normalizar(nombreCompleto).contains(_normalizar(query));
+}
+
+const _acentos = {'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n'};
+
+String _normalizar(String texto) {
+  final buffer = StringBuffer();
+  for (final char in texto.toLowerCase().split('')) {
+    buffer.write(_acentos[char] ?? char);
+  }
+  return buffer.toString();
+}
+
 class NinoAcudiente {
   final String id;
   final String fkIdNino;

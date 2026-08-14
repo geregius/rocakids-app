@@ -136,6 +136,15 @@ class AuthService {
         if (fotoNinoUrl.isNotEmpty) 'fotoUrl': fotoNinoUrl,
       });
       batch.set(
+        _firestore.collection('ninos_busqueda').doc(nino.documentoIdentificacion),
+        NinoBusqueda(
+          documentoIdentificacion: nino.documentoIdentificacion,
+          nombres: nino.nombres,
+          apellidos: nino.apellidos,
+          fechaNacimiento: nino.fechaNacimiento,
+        ).toFirestore(),
+      );
+      batch.set(
         _firestore.collection('nino_acudiente').doc(),
         NinoAcudiente(
           id: '',
@@ -294,6 +303,18 @@ class AuthService {
     return ninos;
   }
 
+  /// Índice liviano (solo nombre y fecha de nacimiento, ver [NinoBusqueda])
+  /// de TODOS los niños registrados, para buscarlos por nombre al
+  /// vincularlos. Se trae completo una sola vez y se filtra en el
+  /// cliente mientras la persona escribe — es información de bajo riesgo
+  /// (sin foto/documento/datos médicos) y el volumen de niños de una
+  /// sola congregación es chico, así que no hace falta un motor de
+  /// búsqueda con índices por prefijo en Firestore.
+  Future<List<NinoBusqueda>> obtenerIndiceBusquedaNinos() async {
+    final snap = await _firestore.collection('ninos_busqueda').get();
+    return snap.docs.map((d) => NinoBusqueda.fromFirestore(d.id, d.data())).toList();
+  }
+
   /// Busca un niño ya registrado por su documento (o llave interna) y,
   /// si existe, lo vincula al acudiente logueado. Vínculo inmediato, sin
   /// aprobación — el control real de quién retira a un niño ocurre en
@@ -362,6 +383,15 @@ class AuthService {
       ...nino.toFirestore(),
       if (fotoNinoUrl.isNotEmpty) 'fotoUrl': fotoNinoUrl,
     });
+    batch.set(
+      _firestore.collection('ninos_busqueda').doc(nino.documentoIdentificacion),
+      NinoBusqueda(
+        documentoIdentificacion: nino.documentoIdentificacion,
+        nombres: nino.nombres,
+        apellidos: nino.apellidos,
+        fechaNacimiento: nino.fechaNacimiento,
+      ).toFirestore(),
+    );
     batch.set(
       _firestore.collection('nino_acudiente').doc(),
       NinoAcudiente(
