@@ -315,6 +315,40 @@ class AuthService {
     return snap.docs.map((d) => NinoBusqueda.fromFirestore(d.id, d.data())).toList();
   }
 
+  /// Rellena `ninos_busqueda` para niños que ya existían en `ninos` antes
+  /// de que existiera esa colección (o que por cualquier otro motivo
+  /// quedaron sin su copia de búsqueda — ej. un futuro script de
+  /// importación masiva que se olvide de escribirla). Solo un admin
+  /// puede listar TODO `ninos` (ver firestore.rules), así que esta
+  /// función es admin-only. Devuelve cuántos niños se reindexaron.
+  Future<int> reindexarBusquedaNinos() async {
+    final ninosSnap = await _firestore.collection('ninos').get();
+    if (ninosSnap.docs.isEmpty) return 0;
+
+    var actualizados = 0;
+    // Los batches de Firestore admiten máximo 500 operaciones; se
+    // procesa en tandas por si la base de niños llega a crecer bastante.
+    for (var i = 0; i < ninosSnap.docs.length; i += 400) {
+      final tanda = ninosSnap.docs.skip(i).take(400);
+      final batch = _firestore.batch();
+      for (final doc in tanda) {
+        final nino = Nino.fromFirestore(doc.id, doc.data());
+        batch.set(
+          _firestore.collection('ninos_busqueda').doc(doc.id),
+          NinoBusqueda(
+            documentoIdentificacion: doc.id,
+            nombres: nino.nombres,
+            apellidos: nino.apellidos,
+            fechaNacimiento: nino.fechaNacimiento,
+          ).toFirestore(),
+        );
+        actualizados++;
+      }
+      await batch.commit();
+    }
+    return actualizados;
+  }
+
   /// Busca un niño ya registrado por su documento (o llave interna) y,
   /// si existe, lo vincula al acudiente logueado. Vínculo inmediato, sin
   /// aprobación — el control real de quién retira a un niño ocurre en
