@@ -90,6 +90,7 @@ firebase deploy --only storage --project rocakidsarmenia-7935b
     /services           → AuthService (único punto de acceso a Firebase)
     /theme              → colores y tema visual
     /utils              → foto_picker.dart (selector cámara/galería reutilizable), selector_fecha_nacimiento.dart (día/mes/año + edad/grupo en vivo, ver sección 5)
+    /widgets            → app_shell.dart (menú lateral + layout responsivo, ver sección 6)
   /assets/images         → logo_rocakids.png (completo), logo_rocakids_compacto.png (sin tagline, para espacios chicos)
   firestore.rules        → reglas de seguridad de Firestore
   storage.rules           → reglas de seguridad de Storage
@@ -153,15 +154,24 @@ Campos: `fk_idNino`, `fk_idAcudiente`, `parentescoTipo`, `autorizacionFormulario
 
 ## 6. Pantallas construidas (`lib/screens/`)
 
+### `widgets/app_shell.dart` — estructura de navegación (2026-08-14)
+Todas las pantallas principales (`home_screen.dart`, `modulo_en_construccion_screen.dart`, `acudiente_portal_screen.dart`, `admin/admin_users_list_screen.dart`) se envuelven en `AppShell`, que da un **menú con todas las secciones**, filtrado según el rol de la cuenta:
+- Pantalla ≥800px de ancho (computador/navegador ancho): menú fijo a la izquierda, contenido a la derecha.
+- Pantalla angosta (celular): el mismo menú colapsa en un cajón deslizable (ícono ☰ en la barra superior).
+
+Ítems según rol: "Inicio" y "Mis hijos" (cualquier rol de servidor o admin), "Gestión de Servidores" y "Reindexar búsqueda de niños" (solo admin), "Mi perfil" (roles de servidor), "Cerrar sesión" (todos). Un acudiente puro (`usuario_externo`) solo ve "Mis hijos" y "Cerrar sesión" — su portal ya funciona como su "inicio".
+
+Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `Scaffold`/`AppBar`/botones de navegación — eso ahora vive todo en el shell) y el nombre de su sección (`seccionActiva`, para resaltarla en el menú y como título). Navegar entre secciones usa `Navigator.pushReplacement` (no se apilan pantallas ni aparece flecha de "atrás" al cambiar de sección).
+
 | Pantalla | Qué hace |
 |---|---|
 | `login_screen.dart` | Correo/contraseña + botones "Soy Acudiente" / "Soy Servidor". Selector mostrar/ocultar contraseña. |
 | `sign_up_servidor_screen.dart` | Registro de servidor → queda en rol `pendiente`, cierra sesión, muestra diálogo de confirmación. |
 | `sign_up_acudiente_screen.dart` | Registro de acudiente + su primer niño + relación, en un solo formulario. Fotos opcionales (acudiente y niño) con selector cámara/galería. Acceso inmediato al guardar. |
-| `pending_approval_screen.dart` | Para rol `pendiente` (servidor esperando aprobación) o roles sin sentido (`desconocido`). |
-| `complete_profile_screen.dart` | Bloqueo obligatorio: servidor con rol ya asignado no puede hacer nada más hasta llenar su perfil completo (documento, EPS, etc. + foto). |
-| `home_screen.dart` | Pantalla principal del **administrador**: botones "Mis hijos", "Gestión de Servidores", y "Reindexar búsqueda de niños" (herramienta de mantenimiento, ver `ninos_busqueda` en sección 5); ícono "Mi perfil" y "Cerrar sesión" en el AppBar. |
-| `modulo_en_construccion_screen.dart` | Pantalla principal para roles de servidor *distintos* a administrador (sus módulos aún no existen). También tiene "Mis hijos" y "Mi perfil". |
+| `pending_approval_screen.dart` | Para rol `pendiente` (servidor esperando aprobación) o roles sin sentido (`desconocido`). Sin menú — todavía no hay nada que navegar. |
+| `complete_profile_screen.dart` | Bloqueo obligatorio: servidor con rol ya asignado no puede hacer nada más hasta llenar su perfil completo (documento, EPS, etc. + foto). Sin menú, por el mismo motivo. |
+| `home_screen.dart` | Sección "Inicio" del **administrador**: mensaje de bienvenida + rol. Las acciones (Mis hijos, Gestión de Servidores, Reindexar, Mi perfil, Cerrar sesión) ahora viven en el menú de `AppShell`, no en botones propios de esta pantalla. |
+| `modulo_en_construccion_screen.dart` | Sección "Inicio" para roles de servidor *distintos* a administrador (sus módulos aún no existen). |
 | `acudiente_portal_screen.dart` | "Mis hijos" — accesible por CUALQUIER cuenta logueada. Si el usuario no tiene perfil de acudiente todavía: si ya es servidor con perfil completo, ofrece **reutilizar esos datos** (documento, teléfono, foto — sin re-subir la foto, misma URL de Storage) con un botón "Usar estos datos y continuar", con opción de "Prefiero ingresar otros datos" para caer al formulario manual completo. Si no es servidor o prefiere otros datos, pide el formulario. Si ya tiene perfil de acudiente, muestra la lista de niños (foto, edad, número de documento — sin género) + botón "Agregar hijo"; tocar un niño abre `nino_detalle_sheet.dart`. |
 | `nino_detalle_sheet.dart` | Ficha (hoja inferior) de un niño: foto, edad y grupo actuales (calculados al vuelo), documento, fecha de nacimiento, género, estado, autorización de imagen, y alerta médica si aplica. Se abre al tocar un niño en "Mis hijos". |
 | `agregar_hijo_screen.dart` | Desde el portal: vincular un niño ya registrado (buscándolo por nombre con lista en vivo — solo nombre/edad visibles, ver `ninos_busqueda` en sección 5 — o por número de documento como respaldo) o registrar uno nuevo. |

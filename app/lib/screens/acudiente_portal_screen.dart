@@ -8,6 +8,7 @@ import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/foto_picker.dart';
+import '../widgets/app_shell.dart';
 import 'agregar_hijo_screen.dart';
 import 'nino_detalle_sheet.dart';
 
@@ -26,6 +27,7 @@ class AcudientePortalScreen extends StatefulWidget {
 
 class _AcudientePortalScreenState extends State<AcudientePortalScreen> {
   late Future<Acudiente?> _acudienteFuture;
+  final _listaKey = GlobalKey<_ListaDeHijosState>();
 
   @override
   void initState() {
@@ -39,39 +41,43 @@ class _AcudientePortalScreenState extends State<AcudientePortalScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mis hijos'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Cerrar sesión',
-            onPressed: () => AuthService().signOut(),
-          ),
-        ],
-      ),
-      body: FutureBuilder<Acudiente?>(
-        future: _acudienteFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          if (snapshot.data == null) {
-            return _SinPerfilAcudiente(usuario: widget.usuario, onListo: _recargar);
-          }
-          return _ListaDeHijos(usuario: widget.usuario);
-        },
-      ),
+    return FutureBuilder<Acudiente?>(
+      future: _acudienteFuture,
+      builder: (context, snapshot) {
+        final cargando = snapshot.connectionState == ConnectionState.waiting;
+        final tieneAcudiente = !cargando && !snapshot.hasError && snapshot.data != null;
+
+        Widget body;
+        if (cargando) {
+          body = const Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          body = Center(child: Text('Error: ${snapshot.error}'));
+        } else if (!tieneAcudiente) {
+          body = _SinPerfilAcudiente(usuario: widget.usuario, onListo: _recargar);
+        } else {
+          body = _ListaDeHijos(key: _listaKey, usuario: widget.usuario);
+        }
+
+        return AppShell(
+          usuario: widget.usuario,
+          seccionActiva: 'Mis hijos',
+          floatingActionButton: tieneAcudiente
+              ? FloatingActionButton.extended(
+                  onPressed: () => _listaKey.currentState?.abrirAgregarHijo(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Agregar hijo'),
+                )
+              : null,
+          body: body,
+        );
+      },
     );
   }
 }
 
 class _ListaDeHijos extends StatefulWidget {
   final UsuarioApp usuario;
-  const _ListaDeHijos({required this.usuario});
+  const _ListaDeHijos({super.key, required this.usuario});
 
   @override
   State<_ListaDeHijos> createState() => _ListaDeHijosState();
@@ -90,7 +96,7 @@ class _ListaDeHijosState extends State<_ListaDeHijos> {
     _hijosFuture = AuthService().obtenerMisHijos();
   }
 
-  Future<void> _abrirAgregarHijo() async {
+  Future<void> abrirAgregarHijo() async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const AgregarHijoScreen()),
     );
@@ -99,75 +105,68 @@ class _ListaDeHijosState extends State<_ListaDeHijos> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _abrirAgregarHijo,
-        icon: const Icon(Icons.add),
-        label: const Text('Agregar hijo'),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'Bienvenido, ${widget.usuario.nombre}',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'Bienvenido, ${widget.usuario.nombre}',
+            style: Theme.of(context).textTheme.headlineSmall,
           ),
-          Expanded(
-            child: FutureBuilder<List<Nino>>(
-              future: _hijosFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-                final hijos = snapshot.data ?? [];
-                if (hijos.isEmpty) {
-                  return const Center(child: Text('Todavía no tienes niños registrados.'));
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
-                  itemCount: hijos.length,
-                  itemBuilder: (context, i) {
-                    final nino = hijos[i];
-                    return Card(
-                      child: ListTile(
-                        onTap: () => showModalBottomSheet<void>(
-                          context: context,
-                          isScrollControlled: true,
-                          builder: (_) => NinoDetalleSheet(nino: nino),
-                        ),
-                        leading: CircleAvatar(
-                          backgroundColor: AppColors.amarillo,
-                          backgroundImage:
-                              nino.fotoUrl.isNotEmpty ? NetworkImage(nino.fotoUrl) : null,
-                          child: nino.fotoUrl.isEmpty
-                              ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
-                              : null,
-                        ),
-                        title: Text(nino.nombreCompleto),
-                        subtitle: Text(
-                          '${calcularEdad(nino.fechaNacimiento)} años · '
-                          '${nino.identificacionMenor.isNotEmpty ? nino.identificacionMenor : 'Sin documento'}',
-                        ),
-                        trailing: nino.alertaMedicaFlag
-                            ? const Tooltip(
-                                message: 'Tiene condición médica/alergia registrada',
-                                child: Icon(Icons.medical_information, color: AppColors.rojo),
-                              )
+        ),
+        Expanded(
+          child: FutureBuilder<List<Nino>>(
+            future: _hijosFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(child: Text('Error: ${snapshot.error}'));
+              }
+              final hijos = snapshot.data ?? [];
+              if (hijos.isEmpty) {
+                return const Center(child: Text('Todavía no tienes niños registrados.'));
+              }
+              return ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
+                itemCount: hijos.length,
+                itemBuilder: (context, i) {
+                  final nino = hijos[i];
+                  return Card(
+                    child: ListTile(
+                      onTap: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => NinoDetalleSheet(nino: nino),
+                      ),
+                      leading: CircleAvatar(
+                        backgroundColor: AppColors.amarillo,
+                        backgroundImage:
+                            nino.fotoUrl.isNotEmpty ? NetworkImage(nino.fotoUrl) : null,
+                        child: nino.fotoUrl.isEmpty
+                            ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
                             : null,
                       ),
-                    );
-                  },
-                );
-              },
-            ),
+                      title: Text(nino.nombreCompleto),
+                      subtitle: Text(
+                        '${calcularEdad(nino.fechaNacimiento)} años · '
+                        '${nino.identificacionMenor.isNotEmpty ? nino.identificacionMenor : 'Sin documento'}',
+                      ),
+                      trailing: nino.alertaMedicaFlag
+                          ? const Tooltip(
+                              message: 'Tiene condición médica/alergia registrada',
+                              child: Icon(Icons.medical_information, color: AppColors.rojo),
+                            )
+                          : null,
+                    ),
+                  );
+                },
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

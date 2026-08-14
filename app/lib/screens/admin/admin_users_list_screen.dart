@@ -3,17 +3,21 @@ import 'package:flutter/material.dart';
 import '../../models/usuario_app.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/app_shell.dart';
 import 'user_edit_sheet.dart';
 
 class AdminUsersListScreen extends StatelessWidget {
-  const AdminUsersListScreen({super.key});
+  final UsuarioApp usuario;
+
+  const AdminUsersListScreen({super.key, required this.usuario});
 
   @override
   Widget build(BuildContext context) {
     final authService = AuthService();
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Gestión de Servidores')),
+    return AppShell(
+      usuario: usuario,
+      seccionActiva: 'Gestión de Servidores',
       body: StreamBuilder<List<UsuarioApp>>(
         stream: authService.listarUsuarios(),
         builder: (context, snapshot) {
