@@ -149,7 +149,10 @@ class _ListaDeHijosState extends State<_ListaDeHijos> {
                               : null,
                         ),
                         title: Text(nino.nombreCompleto),
-                        subtitle: Text('${calcularEdad(nino.fechaNacimiento)} años · ${nino.genero}'),
+                        subtitle: Text(
+                          '${calcularEdad(nino.fechaNacimiento)} años · '
+                          '${nino.identificacionMenor.isNotEmpty ? nino.identificacionMenor : 'Sin documento'}',
+                        ),
                         trailing: nino.alertaMedicaFlag
                             ? const Tooltip(
                                 message: 'Tiene condición médica/alergia registrada',
