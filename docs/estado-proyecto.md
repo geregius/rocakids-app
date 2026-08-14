@@ -89,7 +89,7 @@ firebase deploy --only storage --project rocakidsarmenia-7935b
       /admin            → pantallas exclusivas de administrador
     /services           → AuthService (único punto de acceso a Firebase)
     /theme              → colores y tema visual
-    /utils              → foto_picker.dart (selector cámara/galería reutilizable)
+    /utils              → foto_picker.dart (selector cámara/galería reutilizable), selector_fecha_nacimiento.dart (día/mes/año + edad/grupo en vivo, ver sección 5)
   /assets/images         → logo_rocakids.png (completo), logo_rocakids_compacto.png (sin tagline, para espacios chicos)
   firestore.rules        → reglas de seguridad de Firestore
   storage.rules           → reglas de seguridad de Storage
@@ -124,6 +124,18 @@ Solo contiene `{uid}`. Existe únicamente para que las reglas de seguridad bloqu
 El **ID del documento en Firestore** es el documento real del menor, o si no tiene, la llave interna generada según el SOP §3.2 (`fechaNacimiento-PRIMERNOMBRE-PRIMERAPELLIDO`, ver `generarLlaveInterna()` en `lib/models/nino.dart`). Esto previene duplicados de la misma forma que `acudientes_documentos`, sin necesitar una colección aparte.
 
 Campos: `tipoIdentificacion`, `identificacionMenor`, `nombres`, `apellidos`, `fechaNacimiento`, `genero`, `estadoRegistro`, `alertaMedicaFlag`, `condicionMedica`, `autorizoFotoFlag`, `fotoUrl`.
+
+**Grupo/aula del ministerio infantil — a propósito NO es un campo de esta colección.** Se calcula en la UI a partir de la edad actual (`grupoParaEdad()` en `lib/models/nino.dart`), nunca se guarda: el grupo de un niño cambia con el tiempo según su edad en cada visita, así que guardarlo en el registro del menor lo dejaría desactualizado. Grupos actuales (fijados por Rafael, 2026-08-14):
+
+| Grupo | Edad |
+|---|---|
+| José | 2 años |
+| David | 3-4 años |
+| Judá | 5-6 años |
+| Daniel | 7-8 años |
+| Santiago | 9-10 años |
+
+RocaKids solo recibe niños de 2 a 10 años (`edadMinimaRegistro`/`edadMaximaRegistro` en `nino.dart`) — el registro de un niño fuera de ese rango queda bloqueado con un mensaje de error, tanto en el registro inicial de acudiente (`sign_up_acudiente_screen.dart`) como al agregar un hijo adicional (`agregar_hijo_screen.dart`). El campo de fecha de nacimiento en ambos formularios usa `SelectorFechaNacimiento` (día/mes/año en dropdowns en vez de un calendario, con el año acotado al rango plausible 2-10 años) y muestra la edad y el grupo calculados en vivo mientras se llena.
 
 ### `nino_acudiente/{autoId}` — relación muchos-a-muchos
 Campos: `fk_idNino`, `fk_idAcudiente`, `parentescoTipo`, `autorizacionFormulario`, `autorizacionImagen`, `esRepresentanteLegalFlag`. Un niño puede tener varios acudientes, y un acudiente varios niños — ya soportado y probado.

@@ -96,16 +96,6 @@ class _ListaDeHijosState extends State<_ListaDeHijos> {
     setState(_cargarHijos);
   }
 
-  int _calcularEdad(DateTime fechaNacimiento) {
-    final ahora = DateTime.now();
-    var edad = ahora.year - fechaNacimiento.year;
-    if (ahora.month < fechaNacimiento.month ||
-        (ahora.month == fechaNacimiento.month && ahora.day < fechaNacimiento.day)) {
-      edad--;
-    }
-    return edad;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -149,7 +139,7 @@ class _ListaDeHijosState extends State<_ListaDeHijos> {
                           child: Icon(Icons.child_care, color: AppColors.textoPrincipal),
                         ),
                         title: Text(nino.nombreCompleto),
-                        subtitle: Text('${_calcularEdad(nino.fechaNacimiento)} años · ${nino.genero}'),
+                        subtitle: Text('${calcularEdad(nino.fechaNacimiento)} años · ${nino.genero}'),
                         trailing: nino.alertaMedicaFlag
                             ? const Tooltip(
                                 message: 'Tiene condición médica/alergia registrada',

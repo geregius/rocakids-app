@@ -18,6 +18,36 @@ const parentescos = [
   'Acudiente Autorizado',
 ];
 
+/// Rango de edad que recibe el ministerio infantil (RocaKids no recibe
+/// bebés menores de 2 años, ni preadolescentes de 11 años o más).
+const edadMinimaRegistro = 2;
+const edadMaximaRegistro = 10;
+
+/// Edad actual (en años cumplidos) a partir de la fecha de nacimiento.
+int calcularEdad(DateTime fechaNacimiento) {
+  final ahora = DateTime.now();
+  var edad = ahora.year - fechaNacimiento.year;
+  if (ahora.month < fechaNacimiento.month ||
+      (ahora.month == fechaNacimiento.month && ahora.day < fechaNacimiento.day)) {
+    edad--;
+  }
+  return edad;
+}
+
+/// Grupo/aula del ministerio infantil al que pertenecería un niño HOY,
+/// según su edad actual. A propósito no se guarda en el registro del
+/// menor ni en ningún lado: la edad (y por lo tanto el grupo) cambia con
+/// el tiempo, así que debe recalcularse cada vez que haga falta (ej. al
+/// registrar el ingreso), no quedar fijada desde el momento del registro.
+String? grupoParaEdad(int edad) {
+  if (edad == 2) return 'José';
+  if (edad >= 3 && edad <= 4) return 'David';
+  if (edad >= 5 && edad <= 6) return 'Judá';
+  if (edad >= 7 && edad <= 8) return 'Daniel';
+  if (edad >= 9 && edad <= 10) return 'Santiago';
+  return null;
+}
+
 /// Genera la llave interna del SOP (§3.2) cuando el menor no tiene
 /// número de documento: fechaNacimiento-PRIMERNOMBRE-PRIMERAPELLIDO.
 String generarLlaveInterna({

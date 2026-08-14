@@ -7,6 +7,7 @@ import '../models/nino.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/foto_picker.dart';
+import '../utils/selector_fecha_nacimiento.dart';
 
 /// Registro de un Acudiente junto con su primer niño. A diferencia del
 /// registro de servidor, aquí el acceso es inmediato — no requiere
@@ -89,21 +90,17 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
     });
   }
 
-  Future<void> _elegirFechaNacimiento() async {
-    final fecha = await showDatePicker(
-      context: context,
-      initialDate: DateTime(DateTime.now().year - 5),
-      firstDate: DateTime(1990),
-      lastDate: DateTime.now(),
-      helpText: 'Fecha de nacimiento del niño',
-    );
-    if (fecha != null) setState(() => _fechaNacimiento = fecha);
-  }
-
   Future<void> _registrar() async {
     if (!_formKey.currentState!.validate()) return;
     if (_fechaNacimiento == null) {
       setState(() => _error = 'Selecciona la fecha de nacimiento del niño.');
+      return;
+    }
+    if (grupoParaEdad(calcularEdad(_fechaNacimiento!)) == null) {
+      setState(
+        () => _error =
+            'RocaKids recibe niños de $edadMinimaRegistro a $edadMaximaRegistro años.',
+      );
       return;
     }
 
@@ -337,18 +334,9 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
                       validator: _requerido,
                     ),
                     const SizedBox(height: 16),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Fecha de nacimiento'),
-                      subtitle: Text(
-                        _fechaNacimiento != null
-                            ? '${_fechaNacimiento!.day.toString().padLeft(2, '0')}/'
-                                '${_fechaNacimiento!.month.toString().padLeft(2, '0')}/'
-                                '${_fechaNacimiento!.year}'
-                            : 'Toca para seleccionar',
-                      ),
-                      trailing: const Icon(Icons.calendar_month, color: AppColors.azulMarino),
-                      onTap: _elegirFechaNacimiento,
+                    SelectorFechaNacimiento(
+                      value: _fechaNacimiento,
+                      onChanged: (v) => setState(() => _fechaNacimiento = v),
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
