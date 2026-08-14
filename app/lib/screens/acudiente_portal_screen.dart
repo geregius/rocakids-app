@@ -9,6 +9,7 @@ import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/foto_picker.dart';
 import 'agregar_hijo_screen.dart';
+import 'nino_detalle_sheet.dart';
 
 /// Portal de "Mis hijos": accesible para CUALQUIER usuario logueado, sin
 /// importar su rol (un administrador o un maestro también puede tener
@@ -134,9 +135,18 @@ class _ListaDeHijosState extends State<_ListaDeHijos> {
                     final nino = hijos[i];
                     return Card(
                       child: ListTile(
-                        leading: const CircleAvatar(
+                        onTap: () => showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          builder: (_) => NinoDetalleSheet(nino: nino),
+                        ),
+                        leading: CircleAvatar(
                           backgroundColor: AppColors.amarillo,
-                          child: Icon(Icons.child_care, color: AppColors.textoPrincipal),
+                          backgroundImage:
+                              nino.fotoUrl.isNotEmpty ? NetworkImage(nino.fotoUrl) : null,
+                          child: nino.fotoUrl.isEmpty
+                              ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
+                              : null,
                         ),
                         title: Text(nino.nombreCompleto),
                         subtitle: Text('${calcularEdad(nino.fechaNacimiento)} años · ${nino.genero}'),
