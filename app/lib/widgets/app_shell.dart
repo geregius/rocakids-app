@@ -6,6 +6,7 @@ import '../screens/admin/admin_users_list_screen.dart';
 import '../screens/admin/user_edit_sheet.dart';
 import '../screens/home_screen.dart';
 import '../screens/modulo_en_construccion_screen.dart';
+import '../screens/registrar_familia_screen.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 
@@ -54,6 +55,8 @@ class AppShell extends StatelessWidget {
   List<_ItemMenu> _items(BuildContext context) {
     final esAdmin = usuario.rol == RolUsuario.administrador;
     final esServidor = usuario.rol.esRolDeServidor;
+    final esMaestro =
+        usuario.rol == RolUsuario.maestroPrincipal || usuario.rol == RolUsuario.maestroAuxiliar;
 
     return [
       if (esServidor)
@@ -70,6 +73,12 @@ class AppShell extends StatelessWidget {
         label: 'Mis hijos',
         onTap: () => _irA(context, AcudientePortalScreen(usuario: usuario)),
       ),
+      if (esMaestro)
+        _ItemMenu(
+          icon: Icons.group_add,
+          label: 'Registrar familia',
+          onTap: () => _irA(context, RegistrarFamiliaScreen(usuario: usuario)),
+        ),
       if (esAdmin) ...[
         _ItemMenu(
           icon: Icons.people,

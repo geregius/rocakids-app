@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import '../models/acudiente.dart';
@@ -183,6 +184,134 @@ class AuthService {
         );
       }
       throw AuthException('No se pudo completar el registro: $e');
+    }
+  }
+
+  /// Lo mismo que [registrarAcudienteConNino], pero hecho por un
+  /// SERVIDOR (maestro principal/auxiliar) en nombre de una familia —
+  /// ej. en la mesa de registro de un servicio, cuando el papá o la mamá
+  /// no puede hacerlo desde su propio celular.
+  ///
+  /// La diferencia clave: quien llama YA tiene su propia sesión abierta
+  /// (el maestro) y no se puede perder. Crear la cuenta nueva con la app
+  /// de Firebase "de siempre" dejaría al maestro logueado como la
+  /// familia nueva en vez de como él mismo (así es como funciona
+  /// `createUserWithEmailAndPassword`: inicia sesión automáticamente con
+  /// la cuenta que acaba de crear). Para evitarlo, todo este registro
+  /// ocurre en una app de Firebase secundaria y temporal — el maestro
+  /// nunca deja de estar en su propia sesión.
+  Future<void> registrarAcudienteConNinoDesdeServidor({
+    required String correo,
+    required String password,
+    required Acudiente acudiente,
+    required Nino nino,
+    required String parentescoTipo,
+    Uint8List? fotoAcudienteBytes,
+    String? fotoAcudienteExt,
+    Uint8List? fotoNinoBytes,
+    String? fotoNinoExt,
+  }) async {
+    final app = await Firebase.initializeApp(
+      name: 'registroTemporal-${DateTime.now().microsecondsSinceEpoch}',
+      options: Firebase.app().options,
+    );
+    final auth = FirebaseAuth.instanceFor(app: app);
+    final firestore = FirebaseFirestore.instanceFor(app: app);
+    final storage = FirebaseStorage.instanceFor(app: app);
+
+    UserCredential? credential;
+    try {
+      credential = await auth.createUserWithEmailAndPassword(
+        email: correo.trim(),
+        password: password,
+      );
+      final uid = credential.user!.uid;
+
+      String fotoAcudienteUrl = '';
+      if (fotoAcudienteBytes != null && fotoAcudienteExt != null) {
+        final ref = storage.ref('acudientes_fotos/$uid/foto.$fotoAcudienteExt');
+        await ref.putData(fotoAcudienteBytes);
+        fotoAcudienteUrl = await ref.getDownloadURL();
+      }
+      String fotoNinoUrl = '';
+      if (fotoNinoBytes != null && fotoNinoExt != null) {
+        final ref = storage.ref('ninos_fotos/${nino.documentoIdentificacion}/foto.$fotoNinoExt');
+        await ref.putData(fotoNinoBytes);
+        fotoNinoUrl = await ref.getDownloadURL();
+      }
+
+      final batch = firestore.batch();
+      batch.set(firestore.collection('usuarios').doc(uid), {
+        'correo': correo.trim(),
+        'nombre': acudiente.nombres,
+        'apellido': acudiente.apellidos,
+        'rol': RolUsuario.usuarioExterno.valorFirestore,
+        'activo': true,
+        'creadoEn': FieldValue.serverTimestamp(),
+      });
+      batch.set(firestore.collection('acudientes').doc(uid), {
+        ...acudiente.toFirestore(),
+        if (fotoAcudienteUrl.isNotEmpty) 'fotoSeguridadUrl': fotoAcudienteUrl,
+      });
+      batch.set(
+        firestore.collection('acudientes_documentos').doc(acudiente.numeroDocumento),
+        {'uid': uid},
+      );
+      batch.set(firestore.collection('ninos').doc(nino.documentoIdentificacion), {
+        ...nino.toFirestore(),
+        if (fotoNinoUrl.isNotEmpty) 'fotoUrl': fotoNinoUrl,
+      });
+      batch.set(
+        firestore.collection('ninos_busqueda').doc(nino.documentoIdentificacion),
+        NinoBusqueda(
+          documentoIdentificacion: nino.documentoIdentificacion,
+          nombres: nino.nombres,
+          apellidos: nino.apellidos,
+          fechaNacimiento: nino.fechaNacimiento,
+        ).toFirestore(),
+      );
+      batch.set(
+        firestore.collection('nino_acudiente').doc(),
+        NinoAcudiente(
+          id: '',
+          fkIdNino: nino.documentoIdentificacion,
+          fkIdAcudiente: uid,
+          parentescoTipo: parentescoTipo,
+          autorizacionFormulario: 'Sí',
+          autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
+          esRepresentanteLegalFlag: true,
+        ).toFirestore(),
+      );
+      await batch.commit();
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        throw const AuthException(
+          'Ya existe una cuenta con este correo. Pídele a la familia que '
+          'inicie sesión y use "Mis hijos" para registrar niños.',
+        );
+      }
+      throw AuthException(_mensajeDeErrorRegistro(e.code));
+    } catch (e) {
+      if (credential?.user != null) {
+        try {
+          await credential!.user!.delete();
+        } catch (_) {
+          // Nada más que hacer: la app secundaria se elimina igual abajo.
+        }
+      }
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException(
+          'Este número de documento ya se encuentra registrado en el sistema.',
+        );
+      }
+      throw AuthException('No se pudo completar el registro: $e');
+    } finally {
+      try {
+        await auth.signOut();
+      } catch (_) {}
+      try {
+        await app.delete();
+      } catch (_) {}
     }
   }
 
