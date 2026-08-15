@@ -37,7 +37,9 @@ class AppShell extends StatelessWidget {
   });
 
   void _irA(BuildContext context, Widget pantalla) {
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => pantalla));
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => pantalla));
   }
 
   Future<void> _reindexar(BuildContext context) async {
@@ -46,16 +48,24 @@ class AppShell extends StatelessWidget {
     try {
       final total = await AuthService().reindexarBusquedaNinos();
       messenger.showSnackBar(
-        SnackBar(content: Text('$total niños reindexados para la búsqueda por nombre.')),
+        SnackBar(
+          content: Text(
+            '$total niños reindexados para la búsqueda por nombre.',
+          ),
+        ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('No se pudo reindexar: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('No se pudo reindexar: $e')),
+      );
     }
   }
 
   Future<void> _migrarRelaciones(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(const SnackBar(content: Text('Migrando vínculos...')));
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Migrando vínculos...')),
+    );
     try {
       final total = await AuthService().migrarRelacionesADeterministico();
       messenger.showSnackBar(
@@ -69,8 +79,6 @@ class AppShell extends StatelessWidget {
   List<_ItemMenu> _items(BuildContext context) {
     final esAdmin = usuario.rol == RolUsuario.administrador;
     final esServidor = usuario.rol.esRolDeServidor;
-    final esMaestro =
-        usuario.rol == RolUsuario.maestroPrincipal || usuario.rol == RolUsuario.maestroAuxiliar;
 
     return [
       if (esServidor)
@@ -79,7 +87,9 @@ class AppShell extends StatelessWidget {
           label: 'Inicio',
           onTap: () => _irA(
             context,
-            esAdmin ? HomeScreen(usuario: usuario) : ModuloEnConstruccionScreen(usuario: usuario),
+            esAdmin
+                ? HomeScreen(usuario: usuario)
+                : ModuloEnConstruccionScreen(usuario: usuario),
           ),
         ),
       _ItemMenu(
@@ -91,9 +101,10 @@ class AppShell extends StatelessWidget {
         _ItemMenu(
           icon: Icons.assignment_turned_in,
           label: 'Registro de asistencia',
-          onTap: () => _irA(context, RegistroAsistenciaScreen(usuario: usuario)),
+          onTap: () =>
+              _irA(context, RegistroAsistenciaScreen(usuario: usuario)),
         ),
-      if (esMaestro)
+      if (esServidor)
         _ItemMenu(
           icon: Icons.group_add,
           label: 'Registrar familia',
@@ -231,11 +242,16 @@ class _Menu extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    usuario.nombreCompleto.isNotEmpty ? usuario.nombreCompleto : usuario.correo,
+                    usuario.nombreCompleto.isNotEmpty
+                        ? usuario.nombreCompleto
+                        : usuario.correo,
                     style: Theme.of(context).textTheme.bodyMedium,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  Text(usuario.rol.etiqueta, style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    usuario.rol.etiqueta,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ],
               ),
             ),
@@ -265,7 +281,9 @@ class _Menu extends StatelessWidget {
                         ),
                       ),
                       selected: item.label == seccionActiva,
-                      selectedTileColor: AppColors.azulClaro.withValues(alpha: 0.1),
+                      selectedTileColor: AppColors.azulClaro.withValues(
+                        alpha: 0.1,
+                      ),
                       onTap: () {
                         if (dentroDeDrawer) Navigator.of(context).pop();
                         item.onTap();

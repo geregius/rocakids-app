@@ -11,8 +11,9 @@ import '../utils/foto_picker.dart';
 import '../utils/selector_fecha_nacimiento.dart';
 import '../widgets/app_shell.dart';
 
-/// Para que un maestro (principal o auxiliar) registre una familia
-/// nueva en nombre de ella — ej. en la mesa de registro de un servicio,
+/// Para que un servidor (administrador, columna, líder de ministerio,
+/// líder escuela de siervos, maestro principal o auxiliar) registre una
+/// familia nueva en nombre de ella — ej. en la mesa de registro de un servicio,
 /// cuando el papá o la mamá no puede hacerlo desde su propio celular.
 /// Mismo formulario que el auto-registro público de acudiente, pero
 /// quien lo llena es un servidor que ya tiene su propia sesión abierta
@@ -83,7 +84,9 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
     final bytes = await archivo.readAsBytes();
     setState(() {
       _fotoAcudienteBytes = bytes;
-      _fotoAcudienteExt = archivo.name.contains('.') ? archivo.name.split('.').last : 'jpg';
+      _fotoAcudienteExt = archivo.name.contains('.')
+          ? archivo.name.split('.').last
+          : 'jpg';
     });
   }
 
@@ -93,7 +96,9 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
     final bytes = await archivo.readAsBytes();
     setState(() {
       _fotoNinoBytes = bytes;
-      _fotoNinoExt = archivo.name.contains('.') ? archivo.name.split('.').last : 'jpg';
+      _fotoNinoExt = archivo.name.contains('.')
+          ? archivo.name.split('.').last
+          : 'jpg';
     });
   }
 
@@ -144,7 +149,8 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
       _error = null;
     });
 
-    final tieneDocumento = _tipoIdentificacionMenor != 'No tiene documento' &&
+    final tieneDocumento =
+        _tipoIdentificacionMenor != 'No tiene documento' &&
         _identificacionMenorController.text.trim().isNotEmpty;
 
     final documentoIdentificacion = tieneDocumento
@@ -168,14 +174,18 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
     final nino = Nino(
       documentoIdentificacion: documentoIdentificacion,
       tipoIdentificacion: _tipoIdentificacionMenor!,
-      identificacionMenor: tieneDocumento ? _identificacionMenorController.text.trim() : '',
+      identificacionMenor: tieneDocumento
+          ? _identificacionMenorController.text.trim()
+          : '',
       nombres: _nombresNinoController.text.trim(),
       apellidos: _apellidosNinoController.text.trim(),
       fechaNacimiento: _fechaNacimiento!,
       genero: _genero!,
       estadoRegistro: 'Activo',
       alertaMedicaFlag: _tieneCondicionMedica,
-      condicionMedica: _tieneCondicionMedica ? _condicionMedicaController.text.trim() : '',
+      condicionMedica: _tieneCondicionMedica
+          ? _condicionMedicaController.text.trim()
+          : '',
       autorizoFotoFlag: _autorizaFoto,
     );
 
@@ -207,7 +217,8 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
     }
   }
 
-  String? _requerido(String? v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null;
+  String? _requerido(String? v) =>
+      (v == null || v.trim().isEmpty) ? 'Requerido' : null;
 
   @override
   Widget build(BuildContext context) {
@@ -226,7 +237,11 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle, color: AppColors.azulMarino, size: 56),
+              const Icon(
+                Icons.check_circle,
+                color: AppColors.azulMarino,
+                size: 56,
+              ),
               const SizedBox(height: 16),
               Text(
                 '¡Familia de $_ultimaFamiliaRegistrada registrada!',
@@ -265,7 +280,10 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                   'que definas acá.',
                 ),
                 const SizedBox(height: 20),
-                Text('Datos del acudiente', style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  'Datos del acudiente',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
                 const SizedBox(height: 12),
                 Center(
                   child: Column(
@@ -274,7 +292,9 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                         onTap: _elegirFotoAcudiente,
                         child: CircleAvatar(
                           radius: 40,
-                          backgroundColor: AppColors.azulClaro.withValues(alpha: 0.2),
+                          backgroundColor: AppColors.azulClaro.withValues(
+                            alpha: 0.2,
+                          ),
                           backgroundImage: _fotoAcudienteBytes != null
                               ? MemoryImage(_fotoAcudienteBytes!)
                               : null,
@@ -296,7 +316,9 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: _tipoDocumento,
-                  decoration: const InputDecoration(labelText: 'Tipo de documento'),
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo de documento',
+                  ),
                   items: tiposDocumentoAcudiente
                       .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                       .toList(),
@@ -307,7 +329,9 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                 TextFormField(
                   controller: _numeroDocumentoController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Número de documento'),
+                  decoration: const InputDecoration(
+                    labelText: 'Número de documento',
+                  ),
                   validator: _requerido,
                 ),
                 const SizedBox(height: 16),
@@ -326,16 +350,22 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                 TextFormField(
                   controller: _telefonoController,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Teléfono / WhatsApp'),
+                  decoration: const InputDecoration(
+                    labelText: 'Teléfono / WhatsApp',
+                  ),
                   validator: _requerido,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _correoController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Correo electrónico'),
+                  decoration: const InputDecoration(
+                    labelText: 'Correo electrónico',
+                  ),
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Ingresa el correo';
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Ingresa el correo';
+                    }
                     if (!v.contains('@')) return 'Correo inválido';
                     return null;
                   },
@@ -346,14 +376,20 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                   obscureText: !_mostrarPassword,
                   decoration: InputDecoration(
                     labelText: 'Contraseña',
-                    helperText: 'Defínela junto con la familia — la van a necesitar.',
+                    helperText:
+                        'Defínela junto con la familia — la van a necesitar.',
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _mostrarPassword ? Icons.visibility_off : Icons.visibility,
+                        _mostrarPassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                         color: AppColors.azulMarino,
                       ),
-                      tooltip: _mostrarPassword ? 'Ocultar contraseña' : 'Mostrar contraseña',
-                      onPressed: () => setState(() => _mostrarPassword = !_mostrarPassword),
+                      tooltip: _mostrarPassword
+                          ? 'Ocultar contraseña'
+                          : 'Mostrar contraseña',
+                      onPressed: () =>
+                          setState(() => _mostrarPassword = !_mostrarPassword),
                     ),
                   ),
                   validator: (v) {
@@ -363,7 +399,10 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                   },
                 ),
                 const SizedBox(height: 28),
-                Text('Datos del niño', style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  'Datos del niño',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
                 const SizedBox(height: 12),
                 Center(
                   child: Column(
@@ -372,9 +411,12 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                         onTap: _elegirFotoNino,
                         child: CircleAvatar(
                           radius: 40,
-                          backgroundColor: AppColors.amarillo.withValues(alpha: 0.3),
-                          backgroundImage:
-                              _fotoNinoBytes != null ? MemoryImage(_fotoNinoBytes!) : null,
+                          backgroundColor: AppColors.amarillo.withValues(
+                            alpha: 0.3,
+                          ),
+                          backgroundImage: _fotoNinoBytes != null
+                              ? MemoryImage(_fotoNinoBytes!)
+                              : null,
                           child: _fotoNinoBytes == null
                               ? const Icon(Icons.add_a_photo, size: 28)
                               : null,
@@ -382,7 +424,9 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _fotoNinoBytes == null ? 'Foto del niño (opcional)' : 'Toca para cambiarla',
+                        _fotoNinoBytes == null
+                            ? 'Foto del niño (opcional)'
+                            : 'Toca para cambiarla',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -391,30 +435,41 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: _tipoIdentificacionMenor,
-                  decoration: const InputDecoration(labelText: 'Tipo de documento del niño'),
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo de documento del niño',
+                  ),
                   items: tiposIdentificacionMenor
                       .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                       .toList(),
-                  onChanged: (v) => setState(() => _tipoIdentificacionMenor = v),
+                  onChanged: (v) =>
+                      setState(() => _tipoIdentificacionMenor = v),
                   validator: (v) => v == null ? 'Requerido' : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _identificacionMenorController,
-                  decoration: const InputDecoration(labelText: 'Número de documento del niño'),
+                  decoration: const InputDecoration(
+                    labelText: 'Número de documento del niño',
+                  ),
                   validator: (v) =>
-                      _tipoIdentificacionMenor == 'No tiene documento' ? null : _requerido(v),
+                      _tipoIdentificacionMenor == 'No tiene documento'
+                      ? null
+                      : _requerido(v),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _nombresNinoController,
-                  decoration: const InputDecoration(labelText: 'Nombres del niño'),
+                  decoration: const InputDecoration(
+                    labelText: 'Nombres del niño',
+                  ),
                   validator: _requerido,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _apellidosNinoController,
-                  decoration: const InputDecoration(labelText: 'Apellidos del niño'),
+                  decoration: const InputDecoration(
+                    labelText: 'Apellidos del niño',
+                  ),
                   validator: _requerido,
                 ),
                 const SizedBox(height: 16),
@@ -426,15 +481,21 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                 DropdownButtonFormField<String>(
                   initialValue: _genero,
                   decoration: const InputDecoration(labelText: 'Género'),
-                  items: generos.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                  items: generos
+                      .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                      .toList(),
                   onChanged: (v) => setState(() => _genero = v),
                   validator: (v) => v == null ? 'Requerido' : null,
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: _parentesco,
-                  decoration: const InputDecoration(labelText: 'Parentesco del acudiente con el niño'),
-                  items: parentescos.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
+                  decoration: const InputDecoration(
+                    labelText: 'Parentesco del acudiente con el niño',
+                  ),
+                  items: parentescos
+                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                      .toList(),
                   onChanged: (v) => setState(() => _parentesco = v),
                   validator: (v) => v == null ? 'Requerido' : null,
                 ),
@@ -449,9 +510,12 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text('¿Presenta alguna condición médica o alergia?'),
+                  title: const Text(
+                    '¿Presenta alguna condición médica o alergia?',
+                  ),
                   value: _tieneCondicionMedica,
-                  onChanged: (v) => setState(() => _tieneCondicionMedica = v ?? false),
+                  onChanged: (v) =>
+                      setState(() => _tieneCondicionMedica = v ?? false),
                 ),
                 if (_tieneCondicionMedica) ...[
                   const SizedBox(height: 8),
@@ -461,7 +525,8 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Detalle de la condición médica / alergia',
                     ),
-                    validator: (v) => _tieneCondicionMedica ? _requerido(v) : null,
+                    validator: (v) =>
+                        _tieneCondicionMedica ? _requerido(v) : null,
                   ),
                 ],
                 if (_error != null) ...[
@@ -479,7 +544,10 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Text('Registrar familia'),
                 ),

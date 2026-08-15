@@ -45,6 +45,11 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   bool _otroAcudiente = false;
   final _otroNombreController = TextEditingController();
 
+  // Completar documento de un niño ya registrado que no lo tenía.
+  String? _tipoIdentificacionCompletar;
+  final _documentoCompletarController = TextEditingController();
+  bool _guardandoDocumento = false;
+
   // Compartidos entre el formulario de niño registrado y el de visitante.
   String? _servicio;
   final _manillaController = TextEditingController();
@@ -53,6 +58,8 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   // Visitante (sin cuenta previa).
   final _nombreVisitanteController = TextEditingController();
   String? _grupoVisitante;
+  String? _tipoIdentificacionVisitante;
+  final _documentoVisitanteController = TextEditingController();
   final _acudienteVisitanteController = TextEditingController();
   final _telefonoVisitanteController = TextEditingController();
   bool _alertaMedicaVisitante = false;
@@ -72,9 +79,11 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   void dispose() {
     _busquedaController.dispose();
     _otroNombreController.dispose();
+    _documentoCompletarController.dispose();
     _manillaController.dispose();
     _observacionController.dispose();
     _nombreVisitanteController.dispose();
+    _documentoVisitanteController.dispose();
     _acudienteVisitanteController.dispose();
     _telefonoVisitanteController.dispose();
     _condicionMedicaVisitanteController.dispose();
@@ -115,6 +124,8 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       _manillaController.clear();
       _observacionController.clear();
       _otroNombreController.clear();
+      _tipoIdentificacionCompletar = null;
+      _documentoCompletarController.clear();
     });
     try {
       final nino = await _authService.obtenerNinoPorDocumento(
@@ -161,6 +172,49 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
     return 'Salida';
   }
 
+  Future<void> _completarDocumento() async {
+    if (_nino == null) return;
+    if (_tipoIdentificacionCompletar == null) {
+      setState(() => _error = 'Selecciona el tipo de documento.');
+      return;
+    }
+    if (_documentoCompletarController.text.trim().isEmpty) {
+      setState(() => _error = 'Ingresa el número de documento.');
+      return;
+    }
+
+    setState(() {
+      _guardandoDocumento = true;
+      _error = null;
+    });
+    try {
+      await _authService.completarDocumentoNino(
+        documentoIdentificacion: _nino!.documentoIdentificacion,
+        tipoIdentificacion: _tipoIdentificacionCompletar!,
+        identificacionMenor: _documentoCompletarController.text.trim(),
+      );
+      final actualizado = await _authService.obtenerNinoPorDocumento(
+        _nino!.documentoIdentificacion,
+      );
+      if (mounted) {
+        setState(() {
+          _nino = actualizado;
+          _guardandoDocumento = false;
+        });
+      }
+    } on AuthException catch (e) {
+      setState(() {
+        _error = e.mensaje;
+        _guardandoDocumento = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'No se pudo guardar el documento.';
+        _guardandoDocumento = false;
+      });
+    }
+  }
+
   void _volverABuscar() {
     setState(() {
       _modo = _Modo.buscar;
@@ -183,11 +237,13 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       setState(() => _confirmacion = null);
       _volverABuscar();
       _nombreVisitanteController.clear();
+      _documentoVisitanteController.clear();
       _acudienteVisitanteController.clear();
       _telefonoVisitanteController.clear();
       _condicionMedicaVisitanteController.clear();
       setState(() {
         _grupoVisitante = null;
+        _tipoIdentificacionVisitante = null;
         _alertaMedicaVisitante = false;
       });
     });
@@ -198,8 +254,8 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
     if (_nino!.identificacionMenor.isEmpty) {
       setState(
         () => _error =
-            'Este niño no tiene número de documento — no se puede registrar su '
-            'entrada ni salida hasta que un administrador complete ese dato.',
+            'Este niño no tiene número de documento — complétalo primero arriba '
+            'para poder registrar su entrada o salida.',
       );
       return;
     }
@@ -270,6 +326,14 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       setState(() => _error = 'Selecciona el grupo aproximado del niño.');
       return;
     }
+    if (_tipoIdentificacionVisitante == null) {
+      setState(() => _error = 'Selecciona el tipo de documento del niño.');
+      return;
+    }
+    if (_documentoVisitanteController.text.trim().isEmpty) {
+      setState(() => _error = 'Ingresa el número de documento del niño.');
+      return;
+    }
     if (_acudienteVisitanteController.text.trim().isEmpty) {
       setState(() => _error = 'Ingresa el nombre del adulto que lo trae.');
       return;
@@ -297,6 +361,8 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       fkIdServidor: '',
       nombreServidor: widget.usuario.nombreCompleto,
       nombreAcudienteContacto: _acudienteVisitanteController.text.trim(),
+      tipoIdentificacionVisitante: _tipoIdentificacionVisitante!,
+      documentoNinoVisitante: _documentoVisitanteController.text.trim(),
       telefonoAcudienteVisitante: _telefonoVisitanteController.text.trim(),
       alertaMedicaVisitante: _alertaMedicaVisitante,
       condicionMedicaVisitante: _alertaMedicaVisitante
@@ -553,21 +619,64 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
               color: AppColors.rojo.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(Icons.block, color: AppColors.rojo),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Este niño no tiene número de documento registrado. No se puede '
-                    'registrar su entrada ni salida hasta que un administrador '
-                    'complete ese dato en su ficha.',
-                    style: TextStyle(
-                      color: AppColors.rojo,
-                      fontWeight: FontWeight.bold,
+                const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.block, color: AppColors.rojo),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Este niño no tiene número de documento registrado. No se '
+                        'puede registrar su entrada ni salida hasta completarlo. '
+                        'Complétalo aquí mismo:',
+                        style: TextStyle(
+                          color: AppColors.rojo,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _tipoIdentificacionCompletar,
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo de documento',
+                    filled: true,
+                    fillColor: AppColors.superficie,
                   ),
+                  items: tiposIdentificacionMenor
+                      .where((t) => t != 'No tiene documento')
+                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                      .toList(),
+                  onChanged: (v) =>
+                      setState(() => _tipoIdentificacionCompletar = v),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _documentoCompletarController,
+                  decoration: const InputDecoration(
+                    labelText: 'Número de documento',
+                    filled: true,
+                    fillColor: AppColors.superficie,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: _guardandoDocumento ? null : _completarDocumento,
+                  child: _guardandoDocumento
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Guardar documento y continuar'),
                 ),
               ],
             ),
@@ -751,6 +860,25 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
             ),
           ],
           onChanged: (v) => setState(() => _grupoVisitante = v),
+        ),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<String>(
+          initialValue: _tipoIdentificacionVisitante,
+          decoration: const InputDecoration(
+            labelText: 'Tipo de documento del niño',
+          ),
+          items: tiposIdentificacionMenor
+              .where((t) => t != 'No tiene documento')
+              .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+              .toList(),
+          onChanged: (v) => setState(() => _tipoIdentificacionVisitante = v),
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _documentoVisitanteController,
+          decoration: const InputDecoration(
+            labelText: 'Número de documento del niño',
+          ),
         ),
         const SizedBox(height: 16),
         TextFormField(

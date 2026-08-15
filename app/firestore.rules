@@ -107,13 +107,26 @@ service cloud.firestore {
       // Un admin puede editar cualquier campo. El padre/madre vinculado
       // puede corregir los datos básicos, pero NO el documento del menor
       // (cambiarlo movería la llave primaria, una migración más
-      // delicada) ni el estado de registro ni la foto.
+      // delicada) ni el estado de registro ni la foto. Quien hace
+      // check-in/out puede completar el documento (y SOLO eso) ahí
+      // mismo si el niño no lo tenía — ver el bloqueo en /registros.
       allow update: if esAdmin() || (
         esPadreOMadreDe(ninoId) &&
         request.resource.data.tipoIdentificacion == resource.data.tipoIdentificacion &&
         request.resource.data.identificacionMenor == resource.data.identificacionMenor &&
         request.resource.data.estadoRegistro == resource.data.estadoRegistro &&
         request.resource.data.fotoUrl == resource.data.fotoUrl
+      ) || (
+        puedeRegistrarAsistencia() &&
+        request.resource.data.nombres == resource.data.nombres &&
+        request.resource.data.apellidos == resource.data.apellidos &&
+        request.resource.data.fechaNacimiento == resource.data.fechaNacimiento &&
+        request.resource.data.genero == resource.data.genero &&
+        request.resource.data.estadoRegistro == resource.data.estadoRegistro &&
+        request.resource.data.fotoUrl == resource.data.fotoUrl &&
+        request.resource.data.autorizoFotoFlag == resource.data.autorizoFotoFlag &&
+        request.resource.data.alertaMedicaFlag == resource.data.alertaMedicaFlag &&
+        request.resource.data.condicionMedica == resource.data.condicionMedica
       );
 
       allow delete: if esAdmin();
@@ -156,17 +169,18 @@ service cloud.firestore {
       //
       // Bloqueo explícito (decisión de Rafael, importante para la
       // migración del Módulo 2: muchos niños migrados no van a tener
-      // número de documento): un niño YA REGISTRADO (fkIdNino no vacío)
-      // solo puede tener un movimiento si su ficha en `ninos` tiene
-      // `identificacionMenor` con valor. Los niños VISITANTE (fkIdNino
-      // vacío, sin ficha en `ninos`) no aplican — nunca tienen documento
-      // por diseño.
+      // número de documento): TODO movimiento debe tener un documento de
+      // identidad asociado — el del niño YA REGISTRADO (`ninos.
+      // identificacionMenor`), o el capturado en el momento para un niño
+      // VISITANTE (`documentoNinoVisitante`). Ningún caso puede quedar
+      // sin documento.
       allow create: if puedeRegistrarAsistencia()
         && request.resource.data.fkIdServidor == request.auth.uid
         && (
-          request.resource.data.fkIdNino == '' ||
-          get(/databases/$(database)/documents/ninos/$(request.resource.data.fkIdNino))
-            .data.identificacionMenor != ''
+          request.resource.data.fkIdNino != ''
+            ? get(/databases/$(database)/documents/ninos/$(request.resource.data.fkIdNino))
+                .data.identificacionMenor != ''
+            : request.resource.data.documentoNinoVisitante != ''
         );
       allow get, list: if puedeRegistrarAsistencia();
       allow update, delete: if esAdmin();

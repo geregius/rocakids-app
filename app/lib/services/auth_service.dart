@@ -24,16 +24,25 @@ class AuthService {
   final FirebaseFirestore _firestore;
   final FirebaseStorage _storage;
 
-  AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore, FirebaseStorage? storage})
-    : _auth = auth ?? FirebaseAuth.instance,
-      _firestore = firestore ?? FirebaseFirestore.instance,
-      _storage = storage ?? FirebaseStorage.instance;
+  AuthService({
+    FirebaseAuth? auth,
+    FirebaseFirestore? firestore,
+    FirebaseStorage? storage,
+  }) : _auth = auth ?? FirebaseAuth.instance,
+       _firestore = firestore ?? FirebaseFirestore.instance,
+       _storage = storage ?? FirebaseStorage.instance;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
-  Future<void> signIn({required String correo, required String password}) async {
+  Future<void> signIn({
+    required String correo,
+    required String password,
+  }) async {
     try {
-      await _auth.signInWithEmailAndPassword(email: correo.trim(), password: password);
+      await _auth.signInWithEmailAndPassword(
+        email: correo.trim(),
+        password: password,
+      );
     } on FirebaseAuthException catch (e) {
       throw AuthException(_mensajeDeError(e.code));
     }
@@ -105,7 +114,10 @@ class AuthService {
       // sesión con la que Storage pudiera autorizar la subida.
       String fotoAcudienteUrl = '';
       if (fotoAcudienteBytes != null && fotoAcudienteExt != null) {
-        fotoAcudienteUrl = await subirFotoAcudiente(fotoAcudienteBytes, fotoAcudienteExt);
+        fotoAcudienteUrl = await subirFotoAcudiente(
+          fotoAcudienteBytes,
+          fotoAcudienteExt,
+        );
       }
       String fotoNinoUrl = '';
       if (fotoNinoBytes != null && fotoNinoExt != null) {
@@ -130,15 +142,22 @@ class AuthService {
         if (fotoAcudienteUrl.isNotEmpty) 'fotoSeguridadUrl': fotoAcudienteUrl,
       });
       batch.set(
-        _firestore.collection('acudientes_documentos').doc(acudiente.numeroDocumento),
+        _firestore
+            .collection('acudientes_documentos')
+            .doc(acudiente.numeroDocumento),
         {'uid': uid},
       );
-      batch.set(_firestore.collection('ninos').doc(nino.documentoIdentificacion), {
-        ...nino.toFirestore(),
-        if (fotoNinoUrl.isNotEmpty) 'fotoUrl': fotoNinoUrl,
-      });
       batch.set(
-        _firestore.collection('ninos_busqueda').doc(nino.documentoIdentificacion),
+        _firestore.collection('ninos').doc(nino.documentoIdentificacion),
+        {
+          ...nino.toFirestore(),
+          if (fotoNinoUrl.isNotEmpty) 'fotoUrl': fotoNinoUrl,
+        },
+      );
+      batch.set(
+        _firestore
+            .collection('ninos_busqueda')
+            .doc(nino.documentoIdentificacion),
         NinoBusqueda(
           documentoIdentificacion: nino.documentoIdentificacion,
           nombres: nino.nombres,
@@ -147,7 +166,9 @@ class AuthService {
         ).toFirestore(),
       );
       batch.set(
-        _firestore.collection('nino_acudiente').doc('${nino.documentoIdentificacion}_$uid'),
+        _firestore
+            .collection('nino_acudiente')
+            .doc('${nino.documentoIdentificacion}_$uid'),
         NinoAcudiente(
           id: '',
           fkIdNino: nino.documentoIdentificacion,
@@ -189,8 +210,8 @@ class AuthService {
   }
 
   /// Lo mismo que [registrarAcudienteConNino], pero hecho por un
-  /// SERVIDOR (maestro principal/auxiliar) en nombre de una familia —
-  /// ej. en la mesa de registro de un servicio, cuando el papá o la mamá
+  /// SERVIDOR (cualquier rol operativo, ver AppShell) en nombre de una
+  /// familia — ej. en la mesa de registro de un servicio, cuando el papá o la mamá
   /// no puede hacerlo desde su propio celular.
   ///
   /// La diferencia clave: quien llama YA tiene su propia sesión abierta
@@ -236,7 +257,9 @@ class AuthService {
       }
       String fotoNinoUrl = '';
       if (fotoNinoBytes != null && fotoNinoExt != null) {
-        final ref = storage.ref('ninos_fotos/${nino.documentoIdentificacion}/foto.$fotoNinoExt');
+        final ref = storage.ref(
+          'ninos_fotos/${nino.documentoIdentificacion}/foto.$fotoNinoExt',
+        );
         await ref.putData(fotoNinoBytes);
         fotoNinoUrl = await ref.getDownloadURL();
       }
@@ -255,15 +278,22 @@ class AuthService {
         if (fotoAcudienteUrl.isNotEmpty) 'fotoSeguridadUrl': fotoAcudienteUrl,
       });
       batch.set(
-        firestore.collection('acudientes_documentos').doc(acudiente.numeroDocumento),
+        firestore
+            .collection('acudientes_documentos')
+            .doc(acudiente.numeroDocumento),
         {'uid': uid},
       );
-      batch.set(firestore.collection('ninos').doc(nino.documentoIdentificacion), {
-        ...nino.toFirestore(),
-        if (fotoNinoUrl.isNotEmpty) 'fotoUrl': fotoNinoUrl,
-      });
       batch.set(
-        firestore.collection('ninos_busqueda').doc(nino.documentoIdentificacion),
+        firestore.collection('ninos').doc(nino.documentoIdentificacion),
+        {
+          ...nino.toFirestore(),
+          if (fotoNinoUrl.isNotEmpty) 'fotoUrl': fotoNinoUrl,
+        },
+      );
+      batch.set(
+        firestore
+            .collection('ninos_busqueda')
+            .doc(nino.documentoIdentificacion),
         NinoBusqueda(
           documentoIdentificacion: nino.documentoIdentificacion,
           nombres: nino.nombres,
@@ -272,7 +302,9 @@ class AuthService {
         ).toFirestore(),
       );
       batch.set(
-        firestore.collection('nino_acudiente').doc('${nino.documentoIdentificacion}_$uid'),
+        firestore
+            .collection('nino_acudiente')
+            .doc('${nino.documentoIdentificacion}_$uid'),
         NinoAcudiente(
           id: '',
           fkIdNino: nino.documentoIdentificacion,
@@ -353,7 +385,9 @@ class AuthService {
       if (fotoUrl.isNotEmpty) 'fotoSeguridadUrl': fotoUrl,
     });
     batch.set(
-      _firestore.collection('acudientes_documentos').doc(acudiente.numeroDocumento),
+      _firestore
+          .collection('acudientes_documentos')
+          .doc(acudiente.numeroDocumento),
       {'uid': user.uid},
     );
 
@@ -392,9 +426,14 @@ class AuthService {
     );
 
     final batch = _firestore.batch();
-    batch.set(_firestore.collection('acudientes').doc(user.uid), acudiente.toFirestore());
     batch.set(
-      _firestore.collection('acudientes_documentos').doc(acudiente.numeroDocumento),
+      _firestore.collection('acudientes').doc(user.uid),
+      acudiente.toFirestore(),
+    );
+    batch.set(
+      _firestore
+          .collection('acudientes_documentos')
+          .doc(acudiente.numeroDocumento),
       {'uid': user.uid},
     );
 
@@ -442,7 +481,9 @@ class AuthService {
   /// búsqueda con índices por prefijo en Firestore.
   Future<List<NinoBusqueda>> obtenerIndiceBusquedaNinos() async {
     final snap = await _firestore.collection('ninos_busqueda').get();
-    return snap.docs.map((d) => NinoBusqueda.fromFirestore(d.id, d.data())).toList();
+    return snap.docs
+        .map((d) => NinoBusqueda.fromFirestore(d.id, d.data()))
+        .toList();
   }
 
   /// Rellena `ninos_busqueda` para niños que ya existían en `ninos` antes
@@ -481,7 +522,10 @@ class AuthService {
 
   /// Un niño por su documento (o llave interna), o null si no existe.
   Future<Nino?> obtenerNinoPorDocumento(String documentoIdentificacion) async {
-    final doc = await _firestore.collection('ninos').doc(documentoIdentificacion).get();
+    final doc = await _firestore
+        .collection('ninos')
+        .doc(documentoIdentificacion)
+        .get();
     if (!doc.exists) return null;
     return Nino.fromFirestore(doc.id, doc.data()!);
   }
@@ -494,7 +538,10 @@ class AuthService {
   Future<NinoAcudiente?> obtenerMiRelacionConNino(String fkIdNino) async {
     final user = _auth.currentUser;
     if (user == null) return null;
-    final doc = await _firestore.collection('nino_acudiente').doc('${fkIdNino}_${user.uid}').get();
+    final doc = await _firestore
+        .collection('nino_acudiente')
+        .doc('${fkIdNino}_${user.uid}')
+        .get();
     if (!doc.exists) return null;
     return NinoAcudiente.fromFirestore(doc.id, doc.data()!);
   }
@@ -530,6 +577,33 @@ class AuthService {
     return migrados;
   }
 
+  /// Completa el documento de un niño que no lo tenía (el "ajuste
+  /// inmediato" que pidió Rafael): quien hace el check-in puede
+  /// arreglarlo ahí mismo en vez de tener que ir a buscar a un admin.
+  /// Las reglas de seguridad solo dejan tocar ESTOS dos campos por esta
+  /// vía — nada más del niño se puede cambiar así (ver
+  /// `puedeRegistrarAsistencia()` en firestore.rules). El doc ID del
+  /// niño (su llave interna) no cambia aunque ahora tenga documento.
+  Future<void> completarDocumentoNino({
+    required String documentoIdentificacion,
+    required String tipoIdentificacion,
+    required String identificacionMenor,
+  }) async {
+    try {
+      await _firestore.collection('ninos').doc(documentoIdentificacion).update({
+        'tipoIdentificacion': tipoIdentificacion,
+        'identificacionMenor': identificacionMenor,
+      });
+    } catch (e) {
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException(
+          'No tienes permiso para completar el documento de este niño.',
+        );
+      }
+      throw AuthException('No se pudo guardar el documento: $e');
+    }
+  }
+
   /// Edita los datos básicos de un niño. Las reglas de seguridad
   /// permiten esto al padre/madre vinculado o a un admin — a propósito
   /// NO incluye `tipoIdentificacion`/`identificacionMenor` (cambiar el
@@ -555,14 +629,19 @@ class AuthService {
         'alertaMedicaFlag': alertaMedicaFlag,
         'condicionMedica': alertaMedicaFlag ? condicionMedica : '',
       });
-      await _firestore.collection('ninos_busqueda').doc(documentoIdentificacion).update({
-        'nombres': nombres,
-        'apellidos': apellidos,
-        'fechaNacimiento': Timestamp.fromDate(fechaNacimiento),
-      });
+      await _firestore
+          .collection('ninos_busqueda')
+          .doc(documentoIdentificacion)
+          .update({
+            'nombres': nombres,
+            'apellidos': apellidos,
+            'fechaNacimiento': Timestamp.fromDate(fechaNacimiento),
+          });
     } catch (e) {
       if (e.toString().contains('permission-denied')) {
-        throw const AuthException('No tienes permiso para editar la información de este niño.');
+        throw const AuthException(
+          'No tienes permiso para editar la información de este niño.',
+        );
       }
       throw AuthException('No se pudo guardar: $e');
     }
@@ -599,7 +678,10 @@ class AuthService {
     for (final rel in relaciones.docs) {
       final acudienteUid = rel.data()['fk_idAcudiente'] as String?;
       if (acudienteUid == null) continue;
-      final doc = await _firestore.collection('acudientes').doc(acudienteUid).get();
+      final doc = await _firestore
+          .collection('acudientes')
+          .doc(acudienteUid)
+          .get();
       if (doc.exists) {
         acudientes.add(Acudiente.fromFirestore(doc.id, doc.data()!));
       }
@@ -638,7 +720,9 @@ class AuthService {
     final docId = documentoNino.trim().toUpperCase();
     final ninoDoc = await _firestore.collection('ninos').doc(docId).get();
     if (!ninoDoc.exists) {
-      throw const AuthException('No se encontró ningún niño con ese documento.');
+      throw const AuthException(
+        'No se encontró ningún niño con ese documento.',
+      );
     }
     final nino = Nino.fromFirestore(ninoDoc.id, ninoDoc.data()!);
 
@@ -647,17 +731,20 @@ class AuthService {
     // permitido) en vez de crear un duplicado — mismo patrón que ninos
     // y acudientes_documentos.
     try {
-      await _firestore.collection('nino_acudiente').doc('${docId}_${user.uid}').set(
-        NinoAcudiente(
-          id: '',
-          fkIdNino: docId,
-          fkIdAcudiente: user.uid,
-          parentescoTipo: parentescoTipo,
-          autorizacionFormulario: 'Sí',
-          autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
-          esRepresentanteLegalFlag: false,
-        ).toFirestore(),
-      );
+      await _firestore
+          .collection('nino_acudiente')
+          .doc('${docId}_${user.uid}')
+          .set(
+            NinoAcudiente(
+              id: '',
+              fkIdNino: docId,
+              fkIdAcudiente: user.uid,
+              parentescoTipo: parentescoTipo,
+              autorizacionFormulario: 'Sí',
+              autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
+              esRepresentanteLegalFlag: false,
+            ).toFirestore(),
+          );
     } catch (e) {
       if (e.toString().contains('permission-denied')) {
         throw const AuthException('Ya estás vinculado a este niño.');
@@ -682,14 +769,21 @@ class AuthService {
 
     String fotoNinoUrl = '';
     if (fotoNinoBytes != null && fotoNinoExt != null) {
-      fotoNinoUrl = await subirFotoNino(nino.documentoIdentificacion, fotoNinoBytes, fotoNinoExt);
+      fotoNinoUrl = await subirFotoNino(
+        nino.documentoIdentificacion,
+        fotoNinoBytes,
+        fotoNinoExt,
+      );
     }
 
     final batch = _firestore.batch();
-    batch.set(_firestore.collection('ninos').doc(nino.documentoIdentificacion), {
-      ...nino.toFirestore(),
-      if (fotoNinoUrl.isNotEmpty) 'fotoUrl': fotoNinoUrl,
-    });
+    batch.set(
+      _firestore.collection('ninos').doc(nino.documentoIdentificacion),
+      {
+        ...nino.toFirestore(),
+        if (fotoNinoUrl.isNotEmpty) 'fotoUrl': fotoNinoUrl,
+      },
+    );
     batch.set(
       _firestore.collection('ninos_busqueda').doc(nino.documentoIdentificacion),
       NinoBusqueda(
@@ -700,7 +794,9 @@ class AuthService {
       ).toFirestore(),
     );
     batch.set(
-      _firestore.collection('nino_acudiente').doc('${nino.documentoIdentificacion}_${user.uid}'),
+      _firestore
+          .collection('nino_acudiente')
+          .doc('${nino.documentoIdentificacion}_${user.uid}'),
       NinoAcudiente(
         id: '',
         fkIdNino: nino.documentoIdentificacion,
@@ -734,7 +830,9 @@ class AuthService {
     if (user == null) {
       throw const AuthException('No hay sesión activa.');
     }
-    return _firestore.collection('usuarios').doc(user.uid).snapshots().map((doc) {
+    return _firestore.collection('usuarios').doc(user.uid).snapshots().map((
+      doc,
+    ) {
       if (!doc.exists) {
         throw const AuthException(
           'Tu cuenta no tiene un perfil asignado en el sistema. Contacta a un administrador.',
@@ -747,10 +845,20 @@ class AuthService {
   /// Solo funciona si quien llama es admin (lo garantizan las reglas
   /// de seguridad; si no lo es, Firestore rechaza la consulta).
   Stream<List<UsuarioApp>> listarUsuarios() {
-    return _firestore.collection('usuarios').snapshots().map(
-      (snap) => snap.docs.map((d) => UsuarioApp.fromFirestore(d.id, d.data())).toList()
-        ..sort((a, b) => a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase())),
-    );
+    return _firestore
+        .collection('usuarios')
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs
+                  .map((d) => UsuarioApp.fromFirestore(d.id, d.data()))
+                  .toList()
+                ..sort(
+                  (a, b) => a.nombreCompleto.toLowerCase().compareTo(
+                    b.nombreCompleto.toLowerCase(),
+                  ),
+                ),
+        );
   }
 
   Future<void> actualizarRolYEstado({
@@ -763,7 +871,9 @@ class AuthService {
       'rol': rol.valorFirestore,
       'activo': activo,
       if (fechaVerificacionAntecedentes != null)
-        'fechaVerificacionAntecedentes': Timestamp.fromDate(fechaVerificacionAntecedentes),
+        'fechaVerificacionAntecedentes': Timestamp.fromDate(
+          fechaVerificacionAntecedentes,
+        ),
     });
   }
 
@@ -828,7 +938,11 @@ class AuthService {
 
   /// Sube la foto de un niño (solo la primera vez — ver storage.rules) y
   /// devuelve la URL.
-  Future<String> subirFotoNino(String ninoDocId, Uint8List bytes, String extension) async {
+  Future<String> subirFotoNino(
+    String ninoDocId,
+    Uint8List bytes,
+    String extension,
+  ) async {
     if (_auth.currentUser == null) {
       throw const AuthException('No hay sesión activa.');
     }

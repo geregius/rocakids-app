@@ -28,8 +28,11 @@ class Registro {
   final String numeroManilla;
   final String fkIdServidor; // uid de quien registra
   final String nombreServidor;
-  final String fkIdAcudienteContacto; // uid del acudiente, vacío si "otro"/visitante
+  final String
+  fkIdAcudienteContacto; // uid del acudiente, vacío si "otro"/visitante
   final String nombreAcudienteContacto;
+  final String tipoIdentificacionVisitante;
+  final String documentoNinoVisitante;
   final String telefonoAcudienteVisitante;
   final bool alertaMedicaVisitante;
   final String condicionMedicaVisitante;
@@ -49,6 +52,8 @@ class Registro {
     required this.nombreServidor,
     this.fkIdAcudienteContacto = '',
     required this.nombreAcudienteContacto,
+    this.tipoIdentificacionVisitante = '',
+    this.documentoNinoVisitante = '',
     this.telefonoAcudienteVisitante = '',
     this.alertaMedicaVisitante = false,
     this.condicionMedicaVisitante = '',
@@ -72,6 +77,8 @@ class Registro {
     'nombreServidor': nombreServidor,
     'fkIdAcudienteContacto': fkIdAcudienteContacto,
     'nombreAcudienteContacto': nombreAcudienteContacto,
+    'tipoIdentificacionVisitante': tipoIdentificacionVisitante,
+    'documentoNinoVisitante': documentoNinoVisitante,
     'telefonoAcudienteVisitante': telefonoAcudienteVisitante,
     'alertaMedicaVisitante': alertaMedicaVisitante,
     'condicionMedicaVisitante': condicionMedicaVisitante,
@@ -94,9 +101,14 @@ class Registro {
       nombreServidor: data['nombreServidor'] as String? ?? '',
       fkIdAcudienteContacto: data['fkIdAcudienteContacto'] as String? ?? '',
       nombreAcudienteContacto: data['nombreAcudienteContacto'] as String? ?? '',
-      telefonoAcudienteVisitante: data['telefonoAcudienteVisitante'] as String? ?? '',
+      tipoIdentificacionVisitante:
+          data['tipoIdentificacionVisitante'] as String? ?? '',
+      documentoNinoVisitante: data['documentoNinoVisitante'] as String? ?? '',
+      telefonoAcudienteVisitante:
+          data['telefonoAcudienteVisitante'] as String? ?? '',
       alertaMedicaVisitante: data['alertaMedicaVisitante'] as bool? ?? false,
-      condicionMedicaVisitante: data['condicionMedicaVisitante'] as String? ?? '',
+      condicionMedicaVisitante:
+          data['condicionMedicaVisitante'] as String? ?? '',
       modalidadRegistro: data['modalidadRegistro'] as String? ?? '',
       servicio: data['servicio'] as String? ?? '',
       grupoEdad: data['grupoEdad'] as String? ?? '',
