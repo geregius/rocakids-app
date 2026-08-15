@@ -153,8 +153,21 @@ service cloud.firestore {
       // Entrada/salida de niños. Solo los roles de puedeRegistrarAsistencia()
       // pueden crear o consultar el historial — es información operativa
       // de seguridad, no algo que cualquier acudiente deba poder ver.
+      //
+      // Bloqueo explícito (decisión de Rafael, importante para la
+      // migración del Módulo 2: muchos niños migrados no van a tener
+      // número de documento): un niño YA REGISTRADO (fkIdNino no vacío)
+      // solo puede tener un movimiento si su ficha en `ninos` tiene
+      // `identificacionMenor` con valor. Los niños VISITANTE (fkIdNino
+      // vacío, sin ficha en `ninos`) no aplican — nunca tienen documento
+      // por diseño.
       allow create: if puedeRegistrarAsistencia()
-        && request.resource.data.fkIdServidor == request.auth.uid;
+        && request.resource.data.fkIdServidor == request.auth.uid
+        && (
+          request.resource.data.fkIdNino == '' ||
+          get(/databases/$(database)/documents/ninos/$(request.resource.data.fkIdNino))
+            .data.identificacionMenor != ''
+        );
       allow get, list: if puedeRegistrarAsistencia();
       allow update, delete: if esAdmin();
     }

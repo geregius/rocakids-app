@@ -22,7 +22,8 @@ class RegistroAsistenciaScreen extends StatefulWidget {
   const RegistroAsistenciaScreen({super.key, required this.usuario});
 
   @override
-  State<RegistroAsistenciaScreen> createState() => _RegistroAsistenciaScreenState();
+  State<RegistroAsistenciaScreen> createState() =>
+      _RegistroAsistenciaScreenState();
 }
 
 class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
@@ -116,7 +117,9 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       _otroNombreController.clear();
     });
     try {
-      final nino = await _authService.obtenerNinoPorDocumento(resultado.documentoIdentificacion);
+      final nino = await _authService.obtenerNinoPorDocumento(
+        resultado.documentoIdentificacion,
+      );
       if (nino == null) {
         if (mounted) {
           setState(() {
@@ -132,7 +135,9 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       final ultimoMovimiento = await _authService.obtenerUltimoMovimiento(
         nino.documentoIdentificacion,
       );
-      final acudientes = await _authService.obtenerAcudientesDeNino(nino.documentoIdentificacion);
+      final acudientes = await _authService.obtenerAcudientesDeNino(
+        nino.documentoIdentificacion,
+      );
       if (!mounted) return;
       setState(() {
         _nino = nino;
@@ -190,6 +195,14 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
 
   Future<void> _registrarMovimientoNino() async {
     if (_nino == null) return;
+    if (_nino!.identificacionMenor.isEmpty) {
+      setState(
+        () => _error =
+            'Este niño no tiene número de documento — no se puede registrar su '
+            'entrada ni salida hasta que un administrador complete ese dato.',
+      );
+      return;
+    }
     if (_servicio == null) {
       setState(() => _error = 'Selecciona el servicio.');
       return;
@@ -221,7 +234,9 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       numeroManilla: _manillaController.text.trim(),
       fkIdServidor: '',
       nombreServidor: widget.usuario.nombreCompleto,
-      fkIdAcudienteContacto: _otroAcudiente ? '' : (_acudienteElegido?.uid ?? ''),
+      fkIdAcudienteContacto: _otroAcudiente
+          ? ''
+          : (_acudienteElegido?.uid ?? ''),
       nombreAcudienteContacto: nombreContacto,
       servicio: _servicio!,
       grupoEdad: grupoParaEdad(edad) ?? '',
@@ -230,7 +245,9 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
 
     try {
       await _authService.registrarMovimiento(registro);
-      _mostrarConfirmacionYReiniciar('¡$_accion registrada para ${_nino!.nombreCompleto}!');
+      _mostrarConfirmacionYReiniciar(
+        '¡$_accion registrada para ${_nino!.nombreCompleto}!',
+      );
     } on AuthException catch (e) {
       setState(() {
         _error = e.mensaje;
@@ -282,8 +299,9 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       nombreAcudienteContacto: _acudienteVisitanteController.text.trim(),
       telefonoAcudienteVisitante: _telefonoVisitanteController.text.trim(),
       alertaMedicaVisitante: _alertaMedicaVisitante,
-      condicionMedicaVisitante:
-          _alertaMedicaVisitante ? _condicionMedicaVisitanteController.text.trim() : '',
+      condicionMedicaVisitante: _alertaMedicaVisitante
+          ? _condicionMedicaVisitanteController.text.trim()
+          : '',
       servicio: _servicio!,
       grupoEdad: _grupoVisitante!,
       observacion: _observacionController.text.trim(),
@@ -317,7 +335,9 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
-            child: _confirmacion != null ? _buildConfirmacion() : _buildContenido(),
+            child: _confirmacion != null
+                ? _buildConfirmacion()
+                : _buildContenido(),
           ),
         ),
       ),
@@ -330,7 +350,11 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       children: [
         const Icon(Icons.check_circle, color: AppColors.azulMarino, size: 56),
         const SizedBox(height: 16),
-        Text(_confirmacion!, style: Theme.of(context).textTheme.titleLarge, textAlign: TextAlign.center),
+        Text(
+          _confirmacion!,
+          style: Theme.of(context).textTheme.titleLarge,
+          textAlign: TextAlign.center,
+        ),
       ],
     );
   }
@@ -350,9 +374,14 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Registro de asistencia', style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          'Registro de asistencia',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
         const SizedBox(height: 8),
-        const Text('Busca al niño por nombre para registrar su entrada o salida.'),
+        const Text(
+          'Busca al niño por nombre para registrar su entrada o salida.',
+        ),
         const SizedBox(height: 16),
         TextFormField(
           controller: _busquedaController,
@@ -377,7 +406,9 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
           Container(
             constraints: const BoxConstraints(maxHeight: 260),
             decoration: BoxDecoration(
-              border: Border.all(color: AppColors.azulClaro.withValues(alpha: 0.4)),
+              border: Border.all(
+                color: AppColors.azulClaro.withValues(alpha: 0.4),
+              ),
               borderRadius: BorderRadius.circular(8),
             ),
             child: ListView.builder(
@@ -413,7 +444,10 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   Widget _buildNinoSeleccionado() {
     if (_cargandoDetalle) {
       return const Center(
-        child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()),
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: CircularProgressIndicator(),
+        ),
       );
     }
     final nino = _nino;
@@ -427,7 +461,10 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
             style: const TextStyle(color: AppColors.rojo),
           ),
           const SizedBox(height: 16),
-          TextButton(onPressed: _volverABuscar, child: const Text('Volver a buscar')),
+          TextButton(
+            onPressed: _volverABuscar,
+            child: const Text('Volver a buscar'),
+          ),
         ],
       );
     }
@@ -452,9 +489,14 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
                 CircleAvatar(
                   radius: 32,
                   backgroundColor: AppColors.amarillo,
-                  backgroundImage: nino.fotoUrl.isNotEmpty ? NetworkImage(nino.fotoUrl) : null,
+                  backgroundImage: nino.fotoUrl.isNotEmpty
+                      ? NetworkImage(nino.fotoUrl)
+                      : null,
                   child: nino.fotoUrl.isEmpty
-                      ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
+                      ? const Icon(
+                          Icons.child_care,
+                          color: AppColors.textoPrincipal,
+                        )
                       : null,
                 ),
                 const SizedBox(width: 16),
@@ -462,9 +504,14 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(nino.nombreCompleto, style: Theme.of(context).textTheme.titleMedium),
                       Text(
-                        grupo != null ? '$edad años · Grupo $grupo' : '$edad años',
+                        nino.nombreCompleto,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        grupo != null
+                            ? '$edad años · Grupo $grupo'
+                            : '$edad años',
                       ),
                     ],
                   ),
@@ -498,113 +545,161 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
             ),
           ),
         ],
-        const SizedBox(height: 20),
-        Text(
-          _accion == 'Entrada' ? 'Registrar ENTRADA' : 'Registrar SALIDA',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 12),
-        Text(
-          _accion == 'Entrada'
-              ? '¿Quién lo entrega?'
-              : '¿Quién lo retira? Verifica con la foto de seguridad.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 8),
-        RadioGroup<String>(
-          groupValue: _otroAcudiente ? 'otro' : _acudienteElegido?.uid,
-          onChanged: (v) => setState(() {
-            if (v == 'otro') {
-              _otroAcudiente = true;
-              _acudienteElegido = null;
-            } else {
-              _otroAcudiente = false;
-              _acudienteElegido = _acudientes.where((a) => a.uid == v).firstOrNull;
-            }
-          }),
-          child: Column(
-            children: [
-              ..._acudientes.map(
-                (a) => Card(
-                  color: _acudienteElegido == a && !_otroAcudiente
-                      ? AppColors.azulClaro.withValues(alpha: 0.15)
-                      : null,
-                  child: RadioListTile<String>(
-                    value: a.uid,
-                    secondary: CircleAvatar(
-                      backgroundImage: a.fotoSeguridadUrl.isNotEmpty
-                          ? NetworkImage(a.fotoSeguridadUrl)
-                          : null,
-                      child: a.fotoSeguridadUrl.isEmpty ? const Icon(Icons.person) : null,
+        if (nino.identificacionMenor.isEmpty) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.rojo.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.block, color: AppColors.rojo),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Este niño no tiene número de documento registrado. No se puede '
+                    'registrar su entrada ni salida hasta que un administrador '
+                    'complete ese dato en su ficha.',
+                    style: TextStyle(
+                      color: AppColors.rojo,
+                      fontWeight: FontWeight.bold,
                     ),
-                    title: Text(a.nombreCompleto),
-                    subtitle: a.estadoAutorizacion == 'Restringido'
-                        ? Text(
-                            a.observacionesRestriccion.isNotEmpty
-                                ? 'RESTRINGIDO: ${a.observacionesRestriccion}'
-                                : 'RESTRINGIDO — no debería retirar al niño',
-                            style: const TextStyle(
-                              color: AppColors.rojo,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
-                        : null,
                   ),
                 ),
-              ),
-              Card(
-                child: RadioListTile<String>(
-                  value: 'otro',
-                  secondary: const Icon(Icons.person_outline),
-                  title: const Text('Otro (no está en la lista)'),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        if (_otroAcudiente) ...[
+        ] else ...[
+          const SizedBox(height: 20),
+          Text(
+            _accion == 'Entrada' ? 'Registrar ENTRADA' : 'Registrar SALIDA',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _accion == 'Entrada'
+                ? '¿Quién lo entrega?'
+                : '¿Quién lo retira? Verifica con la foto de seguridad.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 8),
+          RadioGroup<String>(
+            groupValue: _otroAcudiente ? 'otro' : _acudienteElegido?.uid,
+            onChanged: (v) => setState(() {
+              if (v == 'otro') {
+                _otroAcudiente = true;
+                _acudienteElegido = null;
+              } else {
+                _otroAcudiente = false;
+                _acudienteElegido = _acudientes
+                    .where((a) => a.uid == v)
+                    .firstOrNull;
+              }
+            }),
+            child: Column(
+              children: [
+                ..._acudientes.map(
+                  (a) => Card(
+                    color: _acudienteElegido == a && !_otroAcudiente
+                        ? AppColors.azulClaro.withValues(alpha: 0.15)
+                        : null,
+                    child: RadioListTile<String>(
+                      value: a.uid,
+                      secondary: CircleAvatar(
+                        backgroundImage: a.fotoSeguridadUrl.isNotEmpty
+                            ? NetworkImage(a.fotoSeguridadUrl)
+                            : null,
+                        child: a.fotoSeguridadUrl.isEmpty
+                            ? const Icon(Icons.person)
+                            : null,
+                      ),
+                      title: Text(a.nombreCompleto),
+                      subtitle: a.estadoAutorizacion == 'Restringido'
+                          ? Text(
+                              a.observacionesRestriccion.isNotEmpty
+                                  ? 'RESTRINGIDO: ${a.observacionesRestriccion}'
+                                  : 'RESTRINGIDO — no debería retirar al niño',
+                              style: const TextStyle(
+                                color: AppColors.rojo,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+                Card(
+                  child: RadioListTile<String>(
+                    value: 'otro',
+                    secondary: const Icon(Icons.person_outline),
+                    title: const Text('Otro (no está en la lista)'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_otroAcudiente) ...[
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _otroNombreController,
+              decoration: const InputDecoration(
+                labelText: 'Nombre de quien entrega/retira',
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _servicio,
+            decoration: const InputDecoration(labelText: 'Servicio'),
+            items: serviciosDisponibles
+                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                .toList(),
+            onChanged: (v) => setState(() => _servicio = v),
+          ),
+          const SizedBox(height: 16),
           TextFormField(
-            controller: _otroNombreController,
-            decoration: const InputDecoration(labelText: 'Nombre de quien entrega/retira'),
+            controller: _manillaController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Número de manilla'),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _observacionController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Observación (opcional)',
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              _error!,
+              style: const TextStyle(color: AppColors.rojo),
+              textAlign: TextAlign.center,
+            ),
+          ],
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: _guardando ? null : _registrarMovimientoNino,
+            child: _guardando
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Text(
+                    _accion == 'Entrada'
+                        ? 'Registrar Entrada'
+                        : 'Registrar Salida',
+                  ),
           ),
         ],
-        const SizedBox(height: 16),
-        DropdownButtonFormField<String>(
-          initialValue: _servicio,
-          decoration: const InputDecoration(labelText: 'Servicio'),
-          items: serviciosDisponibles
-              .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-              .toList(),
-          onChanged: (v) => setState(() => _servicio = v),
-        ),
-        const SizedBox(height: 16),
-        TextFormField(
-          controller: _manillaController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Número de manilla'),
-        ),
-        const SizedBox(height: 16),
-        TextFormField(
-          controller: _observacionController,
-          maxLines: 2,
-          decoration: const InputDecoration(labelText: 'Observación (opcional)'),
-        ),
-        if (_error != null) ...[
-          const SizedBox(height: 16),
-          Text(_error!, style: const TextStyle(color: AppColors.rojo), textAlign: TextAlign.center),
-        ],
-        const SizedBox(height: 24),
-        ElevatedButton(
-          onPressed: _guardando ? null : _registrarMovimientoNino,
-          child: _guardando
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : Text(_accion == 'Entrada' ? 'Registrar Entrada' : 'Registrar Salida'),
-        ),
       ],
     );
   }
@@ -622,7 +717,10 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
           label: const Text('Volver a buscar'),
         ),
         const SizedBox(height: 8),
-        Text('Registrar niño visitante', style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          'Registrar niño visitante',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
         const SizedBox(height: 8),
         const Text(
           'Para un niño que llega por primera vez y todavía no tiene cuenta ni registro. '
@@ -632,31 +730,42 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
         const SizedBox(height: 16),
         TextFormField(
           controller: _nombreVisitanteController,
-          decoration: const InputDecoration(labelText: 'Nombre completo del niño'),
+          decoration: const InputDecoration(
+            labelText: 'Nombre completo del niño',
+          ),
         ),
         const SizedBox(height: 16),
         DropdownButtonFormField<String>(
           initialValue: _grupoVisitante,
-          decoration: const InputDecoration(labelText: 'Grupo aproximado (según su edad)'),
+          decoration: const InputDecoration(
+            labelText: 'Grupo aproximado (según su edad)',
+          ),
           items: const [
             DropdownMenuItem(value: 'José', child: Text('José (2 años)')),
             DropdownMenuItem(value: 'David', child: Text('David (3-4 años)')),
             DropdownMenuItem(value: 'Judá', child: Text('Judá (5-6 años)')),
             DropdownMenuItem(value: 'Daniel', child: Text('Daniel (7-8 años)')),
-            DropdownMenuItem(value: 'Santiago', child: Text('Santiago (9-10 años)')),
+            DropdownMenuItem(
+              value: 'Santiago',
+              child: Text('Santiago (9-10 años)'),
+            ),
           ],
           onChanged: (v) => setState(() => _grupoVisitante = v),
         ),
         const SizedBox(height: 16),
         TextFormField(
           controller: _acudienteVisitanteController,
-          decoration: const InputDecoration(labelText: 'Nombre del adulto que lo trae'),
+          decoration: const InputDecoration(
+            labelText: 'Nombre del adulto que lo trae',
+          ),
         ),
         const SizedBox(height: 16),
         TextFormField(
           controller: _telefonoVisitanteController,
           keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(labelText: 'Teléfono del adulto (opcional)'),
+          decoration: const InputDecoration(
+            labelText: 'Teléfono del adulto (opcional)',
+          ),
         ),
         const SizedBox(height: 8),
         CheckboxListTile(
@@ -671,7 +780,9 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
           TextFormField(
             controller: _condicionMedicaVisitanteController,
             maxLines: 2,
-            decoration: const InputDecoration(labelText: 'Detalle de la condición médica / alergia'),
+            decoration: const InputDecoration(
+              labelText: 'Detalle de la condición médica / alergia',
+            ),
           ),
         ],
         const SizedBox(height: 16),
@@ -693,11 +804,17 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
         TextFormField(
           controller: _observacionController,
           maxLines: 2,
-          decoration: const InputDecoration(labelText: 'Observación (opcional)'),
+          decoration: const InputDecoration(
+            labelText: 'Observación (opcional)',
+          ),
         ),
         if (_error != null) ...[
           const SizedBox(height: 16),
-          Text(_error!, style: const TextStyle(color: AppColors.rojo), textAlign: TextAlign.center),
+          Text(
+            _error!,
+            style: const TextStyle(color: AppColors.rojo),
+            textAlign: TextAlign.center,
+          ),
         ],
         const SizedBox(height: 24),
         ElevatedButton(
@@ -706,7 +823,10 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
               ? const SizedBox(
                   height: 20,
                   width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
               : const Text('Registrar Entrada'),
         ),
