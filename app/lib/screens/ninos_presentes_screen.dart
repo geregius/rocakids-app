@@ -136,6 +136,7 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
                     for (final grupo in ordenados)
                       if (grupos[grupo] != null)
                         _GrupoSection(
+                          key: ValueKey(grupo),
                           nombre: grupo,
                           registros: grupos[grupo]!,
                           ninosPorId: _ninosPorId,
@@ -156,6 +157,7 @@ class _GrupoSection extends StatelessWidget {
   final UsuarioApp usuario;
 
   const _GrupoSection({
+    super.key,
     required this.nombre,
     required this.registros,
     required this.ninosPorId,
@@ -164,26 +166,30 @@ class _GrupoSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final rangoEdad = rangoEdadPorGrupo[nombre];
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Card(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Text(
-                'Grupo $nombre (${registros.length})',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.azulMarino,
-                  fontWeight: FontWeight.bold,
-                ),
+        clipBehavior: Clip.antiAlias,
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            initiallyExpanded: true,
+            title: Text(
+              rangoEdad != null
+                  ? 'Grupo $nombre · $rangoEdad (${registros.length})'
+                  : 'Grupo $nombre (${registros.length})',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: AppColors.azulMarino,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const Divider(height: 1),
-            for (final r in registros)
-              _NinoPresenteTile(registro: r, ninosPorId: ninosPorId, usuario: usuario),
-          ],
+            children: [
+              const Divider(height: 1),
+              for (final r in registros)
+                _NinoPresenteTile(registro: r, ninosPorId: ninosPorId, usuario: usuario),
+            ],
+          ),
         ),
       ),
     );

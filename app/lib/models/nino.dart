@@ -13,6 +13,17 @@ const generos = ['Masculino', 'Femenino'];
 /// Los 5 grupos/aulas del ministerio infantil, en orden de edad.
 const gruposEdad = ['José', 'David', 'Judá', 'Daniel', 'Santiago'];
 
+/// El rango de edad que representa cada grupo (para mostrar junto al
+/// nombre del grupo en las pantallas que lo requieran) — debe quedar
+/// sincronizado con [grupoParaEdad].
+const rangoEdadPorGrupo = {
+  'José': '2 años',
+  'David': '3-4 años',
+  'Judá': '5-6 años',
+  'Daniel': '7-8 años',
+  'Santiago': '9-10 años',
+};
+
 const parentescos = [
   'Padre',
   'Madre',
