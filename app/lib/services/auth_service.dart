@@ -820,9 +820,11 @@ class AuthService {
     }
   }
 
-  /// Todos los acudientes registrados, para el panel admin "Acudientes y
-  /// Niños". Solo un admin puede listar TODO `acudientes` (ver
-  /// firestore.rules).
+  /// Todos los acudientes registrados, para el panel "Acudientes y
+  /// Niños". Puede listar TODO `acudientes` un admin, o cualquier rol
+  /// que haga check-in/out (`puedeRegistrarAsistencia()`, ver
+  /// firestore.rules) — pedido de Rafael para que líderes/columnas/
+  /// maestros también lo vean, no solo el admin.
   Stream<List<Acudiente>> listarAcudientes() {
     return _firestore
         .collection('acudientes')
@@ -840,8 +842,9 @@ class AuthService {
         );
   }
 
-  /// Todos los niños registrados, para el panel admin "Acudientes y
-  /// Niños". Solo un admin puede listar TODO `ninos` (ver firestore.rules).
+  /// Todos los niños registrados, para el panel "Acudientes y Niños".
+  /// Mismo permiso ampliado que [listarAcudientes] — admin o cualquier
+  /// rol que haga check-in/out.
   Stream<List<Nino>> listarNinosAdmin() {
     return _firestore
         .collection('ninos')

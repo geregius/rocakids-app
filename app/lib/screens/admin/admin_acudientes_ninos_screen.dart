@@ -9,9 +9,12 @@ import '../../widgets/app_shell.dart';
 import '../acudiente_detalle_sheet.dart';
 import '../nino_detalle_sheet.dart';
 
-/// Panel admin para ver la lista completa de acudientes Y niños (pedido
+/// Panel para ver la lista completa de acudientes Y niños (pedido
 /// explícito de Rafael, no solo niños) — extiende el pendiente
 /// "Administración de Niños" para incluir también a los acudientes.
+/// Accesible por CUALQUIER rol de servidor (no solo admin, ver
+/// `AppShell` y `puedeRegistrarAsistencia()` en firestore.rules), para
+/// que líderes/columnas/maestros también puedan consultarlo.
 class AdminAcudientesNinosScreen extends StatefulWidget {
   final UsuarioApp usuario;
 

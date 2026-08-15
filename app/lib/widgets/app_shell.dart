@@ -111,17 +111,21 @@ class AppShell extends StatelessWidget {
           label: 'Registrar familia',
           onTap: () => _irA(context, RegistrarFamiliaScreen(usuario: usuario)),
         ),
-      if (esAdmin) ...[
-        _ItemMenu(
-          icon: Icons.people,
-          label: 'Gestión de Servidores',
-          onTap: () => _irA(context, AdminUsersListScreen(usuario: usuario)),
-        ),
+      // Cualquier rol de servidor puede consultar acudientes y niños (no
+      // solo el admin) — pedido de Rafael, para que líderes/columnas/
+      // maestros puedan ver esta información sin depender de un admin.
+      if (esServidor)
         _ItemMenu(
           icon: Icons.diversity_3,
           label: 'Acudientes y Niños',
           onTap: () =>
               _irA(context, AdminAcudientesNinosScreen(usuario: usuario)),
+        ),
+      if (esAdmin) ...[
+        _ItemMenu(
+          icon: Icons.people,
+          label: 'Gestión de Servidores',
+          onTap: () => _irA(context, AdminUsersListScreen(usuario: usuario)),
         ),
         _ItemMenu(
           icon: Icons.sync,
