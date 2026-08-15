@@ -108,8 +108,8 @@ class AppShell extends StatelessWidget {
         ),
       if (esServidor)
         _ItemMenu(
-          icon: Icons.groups,
-          label: 'Niños presentes hoy',
+          icon: Icons.how_to_reg,
+          label: 'Menores Recibidos',
           onTap: () => _irA(context, NinosPresentesScreen(usuario: usuario)),
         ),
       if (esServidor)

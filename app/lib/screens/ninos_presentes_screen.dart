@@ -6,10 +6,11 @@ import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_shell.dart';
+import 'nino_detalle_sheet.dart';
 
 const _sinGrupo = 'Sin grupo';
 
-/// Sección "Niños presentes hoy", para los roles principales (ver
+/// Sección "Menores Recibidos", para los roles principales (ver
 /// `usuario.rol.esRolDeServidor`): quiénes están AHORA MISMO en el
 /// salón (no todos los que pasaron hoy), subdivididos por grupo de
 /// edad, cada grupo con su total. Una vista histórica del día completo
@@ -99,7 +100,7 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
   Widget build(BuildContext context) {
     return AppShell(
       usuario: widget.usuario,
-      seccionActiva: 'Niños presentes hoy',
+      seccionActiva: 'Menores Recibidos',
       body: _cargandoNinos
           ? const Center(child: CircularProgressIndicator())
           : StreamBuilder<List<Registro>>(
@@ -138,6 +139,7 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
                           nombre: grupo,
                           registros: grupos[grupo]!,
                           ninosPorId: _ninosPorId,
+                          usuario: widget.usuario,
                         ),
                   ],
                 );
@@ -151,11 +153,13 @@ class _GrupoSection extends StatelessWidget {
   final String nombre;
   final List<Registro> registros;
   final Map<String, Nino> ninosPorId;
+  final UsuarioApp usuario;
 
   const _GrupoSection({
     required this.nombre,
     required this.registros,
     required this.ninosPorId,
+    required this.usuario,
   });
 
   @override
@@ -177,7 +181,8 @@ class _GrupoSection extends StatelessWidget {
               ),
             ),
             const Divider(height: 1),
-            for (final r in registros) _NinoPresenteTile(registro: r, ninosPorId: ninosPorId),
+            for (final r in registros)
+              _NinoPresenteTile(registro: r, ninosPorId: ninosPorId, usuario: usuario),
           ],
         ),
       ),
@@ -188,8 +193,30 @@ class _GrupoSection extends StatelessWidget {
 class _NinoPresenteTile extends StatelessWidget {
   final Registro registro;
   final Map<String, Nino> ninosPorId;
+  final UsuarioApp usuario;
 
-  const _NinoPresenteTile({required this.registro, required this.ninosPorId});
+  const _NinoPresenteTile({
+    required this.registro,
+    required this.ninosPorId,
+    required this.usuario,
+  });
+
+  void _abrirFicha(BuildContext context) {
+    final nino = registro.esVisitante ? null : ninosPorId[registro.fkIdNino];
+    if (nino != null) {
+      showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => NinoDetalleSheet(nino: nino, usuario: usuario),
+      );
+    } else if (registro.esVisitante) {
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => _VisitanteDetalleSheet(registro: registro),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -200,11 +227,13 @@ class _NinoPresenteTile extends StatelessWidget {
     final tieneAlertaMedica =
         registro.esVisitante ? registro.alertaMedicaVisitante : (nino?.alertaMedicaFlag ?? false);
     final fotoUrl = nino?.fotoUrl ?? '';
-    final hora = registro.fechaMovimiento;
-    final horaTexto =
-        '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}';
+    final documento = registro.esVisitante
+        ? registro.documentoNinoVisitante
+        : (nino?.identificacionMenor ?? '');
+    final documentoTexto = documento.isNotEmpty ? documento : 'Sin documento';
 
     return ListTile(
+      onTap: () => _abrirFicha(context),
       leading: CircleAvatar(
         backgroundColor: AppColors.amarillo,
         backgroundImage: fotoUrl.isNotEmpty ? NetworkImage(fotoUrl) : null,
@@ -213,13 +242,126 @@ class _NinoPresenteTile extends StatelessWidget {
             : null,
       ),
       title: Text(nombre),
-      subtitle: Text('Entró a las $horaTexto · Manilla ${registro.numeroManilla}'),
+      subtitle: Text('$documentoTexto · Manilla ${registro.numeroManilla}'),
       trailing: tieneAlertaMedica
           ? const Tooltip(
               message: 'Tiene condición médica/alergia registrada',
               child: Icon(Icons.medical_information, color: AppColors.rojo),
             )
           : null,
+    );
+  }
+}
+
+/// Ficha mínima de un niño VISITANTE (no tiene documento `Nino` en la
+/// base — sus datos viven solo en el `Registro` de su entrada de hoy).
+class _VisitanteDetalleSheet extends StatelessWidget {
+  final Registro registro;
+  const _VisitanteDetalleSheet({required this.registro});
+
+  @override
+  Widget build(BuildContext context) {
+    final hora = registro.fechaMovimiento;
+    final horaTexto =
+        '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}';
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 24,
+        right: 24,
+        top: 24,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const CircleAvatar(
+                radius: 32,
+                backgroundColor: AppColors.amarillo,
+                child: Icon(Icons.child_care, color: AppColors.textoPrincipal),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      registro.nombreNinoVisitante,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    Text(
+                      'Visitante · Grupo ${registro.grupoEdad}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _FilaDato(
+            'Documento',
+            '${registro.tipoIdentificacionVisitante}: '
+                '${registro.documentoNinoVisitante.isNotEmpty ? registro.documentoNinoVisitante : 'Sin documento'}',
+          ),
+          _FilaDato('Manilla', registro.numeroManilla),
+          _FilaDato('Entró a las', horaTexto),
+          _FilaDato('Adulto que lo trajo', registro.nombreAcudienteContacto),
+          if (registro.telefonoAcudienteVisitante.isNotEmpty)
+            _FilaDato('Teléfono', registro.telefonoAcudienteVisitante),
+          if (registro.alertaMedicaVisitante) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.rojo.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.medical_information, color: AppColors.rojo),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      registro.condicionMedicaVisitante.isNotEmpty
+                          ? registro.condicionMedicaVisitante
+                          : 'Tiene una condición médica/alergia registrada.',
+                      style: const TextStyle(color: AppColors.rojo),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FilaDato extends StatelessWidget {
+  final String etiqueta;
+  final String valor;
+  const _FilaDato(this.etiqueta, this.valor);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(etiqueta, style: Theme.of(context).textTheme.bodySmall),
+          ),
+          Expanded(child: Text(valor)),
+        ],
+      ),
     );
   }
 }
