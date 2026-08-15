@@ -10,6 +10,9 @@ const tiposIdentificacionMenor = [
 
 const generos = ['Masculino', 'Femenino'];
 
+/// Los 5 grupos/aulas del ministerio infantil, en orden de edad.
+const gruposEdad = ['José', 'David', 'Judá', 'Daniel', 'Santiago'];
+
 const parentescos = [
   'Padre',
   'Madre',

@@ -7,6 +7,7 @@ import '../screens/admin/admin_users_list_screen.dart';
 import '../screens/admin/user_edit_sheet.dart';
 import '../screens/home_screen.dart';
 import '../screens/modulo_en_construccion_screen.dart';
+import '../screens/ninos_presentes_screen.dart';
 import '../screens/registrar_familia_screen.dart';
 import '../screens/registro_asistencia_screen.dart';
 import '../services/auth_service.dart';
@@ -104,6 +105,12 @@ class AppShell extends StatelessWidget {
           label: 'Registro de asistencia',
           onTap: () =>
               _irA(context, RegistroAsistenciaScreen(usuario: usuario)),
+        ),
+      if (esServidor)
+        _ItemMenu(
+          icon: Icons.groups,
+          label: 'Niños presentes hoy',
+          onTap: () => _irA(context, NinosPresentesScreen(usuario: usuario)),
         ),
       if (esServidor)
         _ItemMenu(

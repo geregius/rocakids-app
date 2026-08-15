@@ -647,6 +647,40 @@ class AuthService {
     }
   }
 
+  /// Todos los niños registrados, en una sola lectura (no reactivo) —
+  /// para cruzar contra "presentes hoy" sin mantener un listener abierto
+  /// todo el tiempo que dura el servicio. Mismo permiso que
+  /// [listarNinosAdmin] (`allow list`: admin o `puedeRegistrarAsistencia()`).
+  Future<List<Nino>> obtenerTodosLosNinos() async {
+    final snap = await _firestore.collection('ninos').get();
+    return snap.docs.map((d) => Nino.fromFirestore(d.id, d.data())).toList();
+  }
+
+  /// Movimientos de entrada/salida del día de HOY (hora local del
+  /// dispositivo), para la vista "Niños presentes hoy". Reactivo: se
+  /// actualiza solo a medida que se registran entradas/salidas durante
+  /// el servicio. Mismo permiso que [registrarMovimiento] para leer
+  /// (`puedeRegistrarAsistencia()`).
+  Stream<List<Registro>> registrosDeHoy() {
+    final ahora = DateTime.now();
+    final inicio = DateTime(ahora.year, ahora.month, ahora.day);
+    final fin = inicio.add(const Duration(days: 1));
+    return _firestore
+        .collection('registros')
+        .where(
+          'fechaMovimiento',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(inicio),
+        )
+        .where('fechaMovimiento', isLessThan: Timestamp.fromDate(fin))
+        .orderBy('fechaMovimiento')
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => Registro.fromFirestore(d.id, d.data()))
+              .toList(),
+        );
+  }
+
   /// El movimiento (Entrada/Salida) más reciente de un niño, si tiene
   /// alguno. Con esto se decide si el próximo botón de check-in debe
   /// decir "Registrar Entrada" o "Registrar Salida" — un niño cuyo
