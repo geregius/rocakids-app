@@ -820,6 +820,98 @@ class AuthService {
     }
   }
 
+  /// Todos los acudientes registrados, para el panel admin "Acudientes y
+  /// Niños". Solo un admin puede listar TODO `acudientes` (ver
+  /// firestore.rules).
+  Stream<List<Acudiente>> listarAcudientes() {
+    return _firestore
+        .collection('acudientes')
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs
+                  .map((d) => Acudiente.fromFirestore(d.id, d.data()))
+                  .toList()
+                ..sort(
+                  (a, b) => a.nombreCompleto.toLowerCase().compareTo(
+                    b.nombreCompleto.toLowerCase(),
+                  ),
+                ),
+        );
+  }
+
+  /// Todos los niños registrados, para el panel admin "Acudientes y
+  /// Niños". Solo un admin puede listar TODO `ninos` (ver firestore.rules).
+  Stream<List<Nino>> listarNinosAdmin() {
+    return _firestore
+        .collection('ninos')
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs.map((d) => Nino.fromFirestore(d.id, d.data())).toList()
+                ..sort(
+                  (a, b) => a.nombreCompleto.toLowerCase().compareTo(
+                    b.nombreCompleto.toLowerCase(),
+                  ),
+                ),
+        );
+  }
+
+  /// Los niños vinculados a un acudiente puntual (misma lógica que
+  /// [obtenerMisHijos], pero para CUALQUIER acudiente — usado desde el
+  /// panel admin y desde el check-in al mostrar la ficha de un acudiente).
+  Future<List<Nino>> obtenerHijosDeAcudiente(String acudienteUid) async {
+    final relaciones = await _firestore
+        .collection('nino_acudiente')
+        .where('fk_idAcudiente', isEqualTo: acudienteUid)
+        .get();
+
+    final ninos = <Nino>[];
+    for (final rel in relaciones.docs) {
+      final ninoId = rel.data()['fk_idNino'] as String?;
+      if (ninoId == null) continue;
+      final ninoDoc = await _firestore.collection('ninos').doc(ninoId).get();
+      if (ninoDoc.exists) {
+        ninos.add(Nino.fromFirestore(ninoDoc.id, ninoDoc.data()!));
+      }
+    }
+    return ninos;
+  }
+
+  /// Edita los datos de contacto/documento de un acudiente. Las reglas de
+  /// seguridad permiten esto al propio acudiente, a un admin, o a quien
+  /// hace check-in/out (decisión de Rafael, "para facilitar el proceso")
+  /// — en los tres casos, a propósito NUNCA incluye `estadoAutorizacion`
+  /// ni `observacionesRestriccion` (esos quedan admin-only, ver
+  /// firestore.rules).
+  Future<void> editarAcudiente({
+    required String uid,
+    required String tipoDocumento,
+    required String numeroDocumento,
+    required String nombres,
+    required String apellidos,
+    required String telefonoCelular,
+    required String correoElectronico,
+  }) async {
+    try {
+      await _firestore.collection('acudientes').doc(uid).update({
+        'tipoDocumento': tipoDocumento,
+        'numeroDocumento': numeroDocumento,
+        'nombres': nombres,
+        'apellidos': apellidos,
+        'telefonoCelular': telefonoCelular,
+        'correoElectronico': correoElectronico,
+      });
+    } catch (e) {
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException(
+          'No tienes permiso para editar la información de este acudiente.',
+        );
+      }
+      throw AuthException('No se pudo guardar: $e');
+    }
+  }
+
   Future<void> signOut() => _auth.signOut();
 
   /// Stream reactivo del perfil del usuario logueado: se actualiza solo

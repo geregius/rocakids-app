@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/usuario_app.dart';
 import '../screens/acudiente_portal_screen.dart';
+import '../screens/admin/admin_acudientes_ninos_screen.dart';
 import '../screens/admin/admin_users_list_screen.dart';
 import '../screens/admin/user_edit_sheet.dart';
 import '../screens/home_screen.dart';
@@ -115,6 +116,12 @@ class AppShell extends StatelessWidget {
           icon: Icons.people,
           label: 'Gestión de Servidores',
           onTap: () => _irA(context, AdminUsersListScreen(usuario: usuario)),
+        ),
+        _ItemMenu(
+          icon: Icons.diversity_3,
+          label: 'Acudientes y Niños',
+          onTap: () =>
+              _irA(context, AdminAcudientesNinosScreen(usuario: usuario)),
         ),
         _ItemMenu(
           icon: Icons.sync,

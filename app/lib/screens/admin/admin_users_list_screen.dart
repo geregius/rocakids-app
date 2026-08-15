@@ -28,7 +28,11 @@ class AdminUsersListScreen extends StatelessWidget {
             return Center(child: Text('Error: ${snapshot.error}'));
           }
 
-          final usuarios = snapshot.data ?? [];
+          // Los acudientes (rol usuario_externo) tienen su propia pantalla
+          // ("Acudientes y Niños") — aquí solo van los roles de servidor.
+          final usuarios = (snapshot.data ?? [])
+              .where((u) => u.rol != RolUsuario.usuarioExterno)
+              .toList();
           if (usuarios.isEmpty) {
             return const Center(child: Text('Todavía no hay usuarios registrados.'));
           }

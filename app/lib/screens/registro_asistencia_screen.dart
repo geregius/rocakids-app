@@ -7,6 +7,8 @@ import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_shell.dart';
+import 'editar_acudiente_sheet.dart';
+import 'editar_nino_sheet.dart';
 
 enum _Modo { buscar, ninoSeleccionado, visitante }
 
@@ -212,6 +214,51 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
         _error = 'No se pudo guardar el documento.';
         _guardandoDocumento = false;
       });
+    }
+  }
+
+  /// Edita los datos del niño seleccionado ahí mismo, en el momento del
+  /// check-in (decisión de Rafael, "para facilitar el proceso") — mismos
+  /// campos que ya puede tocar el padre/madre vinculado, ver
+  /// [AuthService.editarNino].
+  Future<void> _editarNino() async {
+    final nino = _nino;
+    if (nino == null) return;
+    final guardado = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => EditarNinoSheet(nino: nino),
+    );
+    if (guardado == true) {
+      final actualizado = await _authService.obtenerNinoPorDocumento(
+        nino.documentoIdentificacion,
+      );
+      if (mounted) setState(() => _nino = actualizado);
+    }
+  }
+
+  /// Edita los datos de un acudiente de la lista, ahí mismo, en el
+  /// momento del check-in — misma decisión de Rafael que [_editarNino].
+  Future<void> _editarAcudiente(Acudiente acudiente) async {
+    final guardado = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => EditarAcudienteSheet(acudiente: acudiente),
+    );
+    if (guardado == true && _nino != null) {
+      final actualizados = await _authService.obtenerAcudientesDeNino(
+        _nino!.documentoIdentificacion,
+      );
+      if (mounted) {
+        setState(() {
+          _acudientes = actualizados;
+          if (_acudienteElegido != null) {
+            _acudienteElegido = actualizados
+                .where((a) => a.uid == _acudienteElegido!.uid)
+                .firstOrNull;
+          }
+        });
+      }
     }
   }
 
@@ -582,6 +629,11 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
                     ],
                   ),
                 ),
+                IconButton(
+                  onPressed: _editarNino,
+                  icon: const Icon(Icons.edit),
+                  tooltip: 'Editar datos del niño',
+                ),
               ],
             ),
           ),
@@ -715,28 +767,39 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
                     color: _acudienteElegido == a && !_otroAcudiente
                         ? AppColors.azulClaro.withValues(alpha: 0.15)
                         : null,
-                    child: RadioListTile<String>(
-                      value: a.uid,
-                      secondary: CircleAvatar(
-                        backgroundImage: a.fotoSeguridadUrl.isNotEmpty
-                            ? NetworkImage(a.fotoSeguridadUrl)
-                            : null,
-                        child: a.fotoSeguridadUrl.isEmpty
-                            ? const Icon(Icons.person)
-                            : null,
-                      ),
-                      title: Text(a.nombreCompleto),
-                      subtitle: a.estadoAutorizacion == 'Restringido'
-                          ? Text(
-                              a.observacionesRestriccion.isNotEmpty
-                                  ? 'RESTRINGIDO: ${a.observacionesRestriccion}'
-                                  : 'RESTRINGIDO — no debería retirar al niño',
-                              style: const TextStyle(
-                                color: AppColors.rojo,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            )
-                          : null,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: RadioListTile<String>(
+                            value: a.uid,
+                            secondary: CircleAvatar(
+                              backgroundImage: a.fotoSeguridadUrl.isNotEmpty
+                                  ? NetworkImage(a.fotoSeguridadUrl)
+                                  : null,
+                              child: a.fotoSeguridadUrl.isEmpty
+                                  ? const Icon(Icons.person)
+                                  : null,
+                            ),
+                            title: Text(a.nombreCompleto),
+                            subtitle: a.estadoAutorizacion == 'Restringido'
+                                ? Text(
+                                    a.observacionesRestriccion.isNotEmpty
+                                        ? 'RESTRINGIDO: ${a.observacionesRestriccion}'
+                                        : 'RESTRINGIDO — no debería retirar al niño',
+                                    style: const TextStyle(
+                                      color: AppColors.rojo,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => _editarAcudiente(a),
+                          icon: const Icon(Icons.edit),
+                          tooltip: 'Editar datos del acudiente',
+                        ),
+                      ],
                     ),
                   ),
                 ),
