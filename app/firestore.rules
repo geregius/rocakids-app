@@ -21,6 +21,18 @@ service cloud.firestore {
         ];
     }
 
+    // El ID de nino_acudiente es determinístico ({ninoId}_{uid}, ver
+    // auth_service.dart), así que se puede consultar la relación exacta
+    // de quien llama con un niño puntual con una sola lectura. Solo
+    // Padre o Madre pueden editar la ficha del niño (decisión de
+    // Rafael) — no cualquier acudiente autorizado.
+    function esPadreOMadreDe(ninoId) {
+      let relId = ninoId + '_' + request.auth.uid;
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/nino_acudiente/$(relId)) &&
+        get(/databases/$(database)/documents/nino_acudiente/$(relId)).data.parentescoTipo in ['Padre', 'Madre'];
+    }
+
     match /usuarios/{uid} {
       // Cualquiera autenticado puede leer su propio perfil. Un admin
       // puede leer (y listar) el perfil de cualquiera.
@@ -92,7 +104,19 @@ service cloud.firestore {
       allow get: if request.auth != null;
       allow list: if esAdmin();
 
-      allow update, delete: if esAdmin();
+      // Un admin puede editar cualquier campo. El padre/madre vinculado
+      // puede corregir los datos básicos, pero NO el documento del menor
+      // (cambiarlo movería la llave primaria, una migración más
+      // delicada) ni el estado de registro ni la foto.
+      allow update: if esAdmin() || (
+        esPadreOMadreDe(ninoId) &&
+        request.resource.data.tipoIdentificacion == resource.data.tipoIdentificacion &&
+        request.resource.data.identificacionMenor == resource.data.identificacionMenor &&
+        request.resource.data.estadoRegistro == resource.data.estadoRegistro &&
+        request.resource.data.fotoUrl == resource.data.fotoUrl
+      );
+
+      allow delete: if esAdmin();
     }
 
     // Copia mínima de un niño (solo nombre y fecha de nacimiento, sin
@@ -103,12 +127,18 @@ service cloud.firestore {
     match /ninos_busqueda/{ninoId} {
       allow create: if request.auth != null;
       allow get, list: if request.auth != null;
-      allow update, delete: if esAdmin();
+      // Debe quedar sincronizado con el nombre en ninos/{ninoId} — mismo
+      // permiso que editar el niño en sí.
+      allow update: if esAdmin() || esPadreOMadreDe(ninoId);
+      allow delete: if esAdmin();
     }
 
     match /nino_acudiente/{relId} {
+      // El admin también puede crear (no solo el propio acudiente) para
+      // poder migrar relaciones viejas de ID aleatorio al esquema nuevo
+      // determinístico ({ninoId}_{uid}, ver esPadreOMadreDe arriba).
       allow create: if request.auth != null
-        && request.resource.data.fk_idAcudiente == request.auth.uid;
+        && (request.resource.data.fk_idAcudiente == request.auth.uid || esAdmin());
 
       // Cualquier autenticado puede leer relaciones (igual que ninos y
       // ninos_busqueda) — hace falta para que quien hace check-in/out

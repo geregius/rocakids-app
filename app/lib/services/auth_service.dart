@@ -147,7 +147,7 @@ class AuthService {
         ).toFirestore(),
       );
       batch.set(
-        _firestore.collection('nino_acudiente').doc(),
+        _firestore.collection('nino_acudiente').doc('${nino.documentoIdentificacion}_$uid'),
         NinoAcudiente(
           id: '',
           fkIdNino: nino.documentoIdentificacion,
@@ -272,7 +272,7 @@ class AuthService {
         ).toFirestore(),
       );
       batch.set(
-        firestore.collection('nino_acudiente').doc(),
+        firestore.collection('nino_acudiente').doc('${nino.documentoIdentificacion}_$uid'),
         NinoAcudiente(
           id: '',
           fkIdNino: nino.documentoIdentificacion,
@@ -486,6 +486,88 @@ class AuthService {
     return Nino.fromFirestore(doc.id, doc.data()!);
   }
 
+  /// La relación del acudiente logueado con un niño puntual (si tiene
+  /// una) — con esto se decide si puede editar la ficha del niño: solo
+  /// si su `parentescoTipo` es Padre o Madre (decisión de Rafael). El ID
+  /// de `nino_acudiente` es determinístico (`{fkIdNino}_{uid}`), así que
+  /// esto es una sola lectura directa, no una consulta.
+  Future<NinoAcudiente?> obtenerMiRelacionConNino(String fkIdNino) async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    final doc = await _firestore.collection('nino_acudiente').doc('${fkIdNino}_${user.uid}').get();
+    if (!doc.exists) return null;
+    return NinoAcudiente.fromFirestore(doc.id, doc.data()!);
+  }
+
+  /// Migra relaciones `nino_acudiente` viejas (creadas con ID aleatorio,
+  /// antes de 2026-08-14) al esquema nuevo determinístico
+  /// (`{fkIdNino}_{fkIdAcudiente}`, ver `esPadreOMadreDe()` en
+  /// firestore.rules) — sin esto, un padre/madre vinculado ANTES de ese
+  /// cambio no podría editar la ficha de su hijo, porque la relación no
+  /// se encontraría en la ruta que las reglas esperan. Admin-only.
+  /// Devuelve cuántas relaciones se migraron.
+  Future<int> migrarRelacionesADeterministico() async {
+    final snap = await _firestore.collection('nino_acudiente').get();
+    if (snap.docs.isEmpty) return 0;
+
+    var migrados = 0;
+    for (var i = 0; i < snap.docs.length; i += 400) {
+      final tanda = snap.docs.skip(i).take(400);
+      final batch = _firestore.batch();
+      for (final doc in tanda) {
+        final data = doc.data();
+        final ninoId = data['fk_idNino'] as String?;
+        final acudienteUid = data['fk_idAcudiente'] as String?;
+        if (ninoId == null || acudienteUid == null) continue;
+        final nuevoId = '${ninoId}_$acudienteUid';
+        if (doc.id == nuevoId) continue;
+        batch.set(_firestore.collection('nino_acudiente').doc(nuevoId), data);
+        batch.delete(doc.reference);
+        migrados++;
+      }
+      await batch.commit();
+    }
+    return migrados;
+  }
+
+  /// Edita los datos básicos de un niño. Las reglas de seguridad
+  /// permiten esto al padre/madre vinculado o a un admin — a propósito
+  /// NO incluye `tipoIdentificacion`/`identificacionMenor` (cambiar el
+  /// documento del menor cambiaría su llave primaria, una migración más
+  /// delicada) ni `estadoRegistro`/`fotoUrl` (esos quedan admin-only).
+  Future<void> editarNino({
+    required String documentoIdentificacion,
+    required String nombres,
+    required String apellidos,
+    required DateTime fechaNacimiento,
+    required String genero,
+    required bool autorizoFotoFlag,
+    required bool alertaMedicaFlag,
+    required String condicionMedica,
+  }) async {
+    try {
+      await _firestore.collection('ninos').doc(documentoIdentificacion).update({
+        'nombres': nombres,
+        'apellidos': apellidos,
+        'fechaNacimiento': Timestamp.fromDate(fechaNacimiento),
+        'genero': genero,
+        'autorizoFotoFlag': autorizoFotoFlag,
+        'alertaMedicaFlag': alertaMedicaFlag,
+        'condicionMedica': alertaMedicaFlag ? condicionMedica : '',
+      });
+      await _firestore.collection('ninos_busqueda').doc(documentoIdentificacion).update({
+        'nombres': nombres,
+        'apellidos': apellidos,
+        'fechaNacimiento': Timestamp.fromDate(fechaNacimiento),
+      });
+    } catch (e) {
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException('No tienes permiso para editar la información de este niño.');
+      }
+      throw AuthException('No se pudo guardar: $e');
+    }
+  }
+
   /// El movimiento (Entrada/Salida) más reciente de un niño, si tiene
   /// alguno. Con esto se decide si el próximo botón de check-in debe
   /// decir "Registrar Entrada" o "Registrar Salida" — un niño cuyo
@@ -560,28 +642,28 @@ class AuthService {
     }
     final nino = Nino.fromFirestore(ninoDoc.id, ninoDoc.data()!);
 
-    // Evita crear una relación duplicada si ya estaban vinculados.
-    final yaVinculado = await _firestore
-        .collection('nino_acudiente')
-        .where('fk_idAcudiente', isEqualTo: user.uid)
-        .where('fk_idNino', isEqualTo: docId)
-        .limit(1)
-        .get();
-    if (yaVinculado.docs.isNotEmpty) {
-      throw const AuthException('Ya estás vinculado a este niño.');
+    // El ID de la relación es determinístico (niño_acudiente), así que
+    // un segundo intento de vincular al mismo niño cae en "update" (no
+    // permitido) en vez de crear un duplicado — mismo patrón que ninos
+    // y acudientes_documentos.
+    try {
+      await _firestore.collection('nino_acudiente').doc('${docId}_${user.uid}').set(
+        NinoAcudiente(
+          id: '',
+          fkIdNino: docId,
+          fkIdAcudiente: user.uid,
+          parentescoTipo: parentescoTipo,
+          autorizacionFormulario: 'Sí',
+          autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
+          esRepresentanteLegalFlag: false,
+        ).toFirestore(),
+      );
+    } catch (e) {
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException('Ya estás vinculado a este niño.');
+      }
+      rethrow;
     }
-
-    await _firestore.collection('nino_acudiente').add(
-      NinoAcudiente(
-        id: '',
-        fkIdNino: docId,
-        fkIdAcudiente: user.uid,
-        parentescoTipo: parentescoTipo,
-        autorizacionFormulario: 'Sí',
-        autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
-        esRepresentanteLegalFlag: false,
-      ).toFirestore(),
-    );
     return nino;
   }
 
@@ -618,7 +700,7 @@ class AuthService {
       ).toFirestore(),
     );
     batch.set(
-      _firestore.collection('nino_acudiente').doc(),
+      _firestore.collection('nino_acudiente').doc('${nino.documentoIdentificacion}_${user.uid}'),
       NinoAcudiente(
         id: '',
         fkIdNino: nino.documentoIdentificacion,

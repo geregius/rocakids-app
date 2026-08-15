@@ -135,11 +135,14 @@ class _ListaDeHijosState extends State<_ListaDeHijos> {
                   final nino = hijos[i];
                   return Card(
                     child: ListTile(
-                      onTap: () => showModalBottomSheet<void>(
-                        context: context,
-                        isScrollControlled: true,
-                        builder: (_) => NinoDetalleSheet(nino: nino),
-                      ),
+                      onTap: () async {
+                        final cambio = await showModalBottomSheet<bool>(
+                          context: context,
+                          isScrollControlled: true,
+                          builder: (_) => NinoDetalleSheet(nino: nino, usuario: widget.usuario),
+                        );
+                        if (cambio == true) setState(_cargarHijos);
+                      },
                       leading: CircleAvatar(
                         backgroundColor: AppColors.amarillo,
                         backgroundImage:

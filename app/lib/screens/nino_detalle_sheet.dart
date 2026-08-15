@@ -1,18 +1,65 @@
 import 'package:flutter/material.dart';
 
 import '../models/nino.dart';
+import '../models/usuario_app.dart';
+import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import 'editar_nino_sheet.dart';
 
 /// Hoja inferior con la ficha completa de un niño: foto, documento, edad
 /// y grupo actuales (calculados al momento, no guardados — ver
-/// [grupoParaEdad]), y datos médicos/autorización si aplica.
-class NinoDetalleSheet extends StatelessWidget {
+/// [grupoParaEdad]), y datos médicos/autorización si aplica. Si quien la
+/// abre es el padre/madre vinculado (o un admin), puede editar la
+/// información desde acá.
+class NinoDetalleSheet extends StatefulWidget {
   final Nino nino;
+  final UsuarioApp usuario;
 
-  const NinoDetalleSheet({super.key, required this.nino});
+  const NinoDetalleSheet({super.key, required this.nino, required this.usuario});
+
+  @override
+  State<NinoDetalleSheet> createState() => _NinoDetalleSheetState();
+}
+
+class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
+  late Nino _nino;
+  bool _cargandoPermiso = true;
+  bool _puedeEditar = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nino = widget.nino;
+    _verificarPermiso();
+  }
+
+  Future<void> _verificarPermiso() async {
+    final esAdmin = widget.usuario.rol == RolUsuario.administrador;
+    var puedeEditar = esAdmin;
+    if (!puedeEditar) {
+      final relacion = await AuthService().obtenerMiRelacionConNino(_nino.documentoIdentificacion);
+      puedeEditar = relacion?.parentescoTipo == 'Padre' || relacion?.parentescoTipo == 'Madre';
+    }
+    if (mounted) {
+      setState(() {
+        _puedeEditar = puedeEditar;
+        _cargandoPermiso = false;
+      });
+    }
+  }
+
+  Future<void> _abrirEdicion() async {
+    final guardado = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => EditarNinoSheet(nino: _nino),
+    );
+    if (guardado == true && mounted) Navigator.of(context).pop(true);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final nino = _nino;
     final edad = calcularEdad(nino.fechaNacimiento);
     final grupo = grupoParaEdad(edad);
 
@@ -84,6 +131,14 @@ class NinoDetalleSheet extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+            ],
+            if (!_cargandoPermiso && _puedeEditar) ...[
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: _abrirEdicion,
+                icon: const Icon(Icons.edit),
+                label: const Text('Editar información'),
               ),
             ],
           ],

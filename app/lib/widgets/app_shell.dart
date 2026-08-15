@@ -53,6 +53,19 @@ class AppShell extends StatelessWidget {
     }
   }
 
+  Future<void> _migrarRelaciones(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('Migrando vínculos...')));
+    try {
+      final total = await AuthService().migrarRelacionesADeterministico();
+      messenger.showSnackBar(
+        SnackBar(content: Text('$total vínculos niño-acudiente migrados.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('No se pudo migrar: $e')));
+    }
+  }
+
   List<_ItemMenu> _items(BuildContext context) {
     final esAdmin = usuario.rol == RolUsuario.administrador;
     final esServidor = usuario.rol.esRolDeServidor;
@@ -96,6 +109,11 @@ class AppShell extends StatelessWidget {
           icon: Icons.sync,
           label: 'Reindexar búsqueda de niños',
           onTap: () => _reindexar(context),
+        ),
+        _ItemMenu(
+          icon: Icons.link,
+          label: 'Migrar vínculos niño-acudiente',
+          onTap: () => _migrarRelaciones(context),
         ),
       ],
       if (esServidor)
