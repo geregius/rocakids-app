@@ -243,6 +243,18 @@ Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `
 
 ## 9. Qué falta (pendiente, en orden sugerido)
 
+### ⚠️ Pendiente inmediato — conversación interrumpida el 2026-08-14, retomar aquí primero
+
+Rafael probó "Registrar familia" desde su cuenta admin y reportó 3 cosas seguidas (en ese orden), sin que ninguna se haya implementado todavía:
+
+1. **Bug: acudientes aparecen mezclados en "Gestión de Servidores".** Al crear una familia de prueba (Jairo Alexander Castañeda Barrios, rol `usuario_externo`) apareció listado en "Gestión de Servidores" junto a servidores reales (screenshot: "Todos los usuarios (3)" incluye al acudiente). Causa: `AdminUsersListScreen` + `AuthService.listarUsuarios()` traen y muestran TODOS los `usuarios` sin filtrar por rol — no distinguen servidores de acudientes. Hay que filtrar esa pantalla para que solo muestre roles de servidor (`usuario.rol.esRolDeServidor`), o separar en pestañas.
+2. **Falta una pantalla para ver acudientes y niños desde el panel admin.** Es esencialmente el pendiente #1 de esta lista ("Administración de Niños"), pero Rafael lo pidió explícitamente incluyendo también ACUDIENTES, no solo niños. Podría combinarse con el fix del punto 1: una sección "Acudientes y Niños" separada de "Gestión de Servidores", reutilizando patrones ya existentes (`admin_users_list_screen.dart` como plantilla de lista, `nino_detalle_sheet.dart`/`editar_nino_sheet.dart` para la ficha).
+3. **Quien registra asistencia debe poder editar acudiente/niño en el momento del registro, "para facilitar el proceso".** Extiende el patrón ya usado para el documento faltante (ver `completarDocumentoNino()` en sección 5, [[feature-bloqueo-sin-documento]] en memoria) — pero ahora para MÁS campos, y también del ACUDIENTE (que hoy no tiene ninguna edición propia desde el check-in). ⚠️ **Antes de implementar, confirmar con Rafael el alcance exacto** (¿qué campos del niño y del acudiente puede tocar quien hace check-in? ¿todos, o un subconjunto acotado como se ha hecho con `esPadreOMadreDe`/`completarDocumentoNino`?) — no asumir, dado el patrón ya establecido de acotar permisos campo por campo en `firestore.rules`.
+
+Ninguno de estos 3 puntos tiene código escrito todavía — la conversación se cortó justo después de que Rafael los describiera, para actualizar esta documentación antes de seguir. Empezar por aquí en la próxima sesión.
+
+---
+
 1. **Administración de Niños** (el resto del Módulo 3, explícitamente pospuesto): pantalla admin para listar/buscar niños, ver su ficha completa, y desde ahí vincular un acudiente ya existente o registrar uno nuevo. Roca­Kids ya soporta la relación muchos-a-muchos en el modelo de datos — falta la UI de administración.
 2. **Pantallas propias por rol:** desde 2026-08-14, Líder Ministerio, Columna, Líder Escuela de Siervos, Maestro Principal y Maestro Auxiliar YA tienen acceso a "Registro de asistencia" (todos) y Maestro Principal/Auxiliar además a "Registrar familia" — pero siguen sin una pantalla de **inicio propia** con herramientas específicas de su rol (ven la genérica "módulo en construcción").
 3. **Módulo 2 — Migración de datos reales:** el archivo real es `D:\Downloads\DB RocaKids V2 (*).xlsx` (⚠️ ojo: NO es la carpeta Descargas normal de Windows, es una ruta directa en el disco D:) — datos reales de producción (niños, acudientes, servidores, equipos, formación, **3873 registros históricos de asistencia**, etc.). Ya se usó para diseñar `registros/` (sección 5) y para el perfil de servidor. Falta el script de importación a Firestore.
@@ -259,6 +271,7 @@ Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `
 
 - **Admin:** `rafaelbalaguera@gmail.com` (rol administrador; también tiene o puede activar perfil de acudiente).
 - **Servidor de prueba:** `sweetgirl288kp@gmail.com` — Karen Alicia Paba Lopez, rol Maestro Principal.
+- **Acudiente de prueba:** `jairoalex@hotmail.com` — Jairo Alexander Castañeda Barrios, rol Usuario externo (creado el 2026-08-14 vía "Registrar familia" para probar ese flujo — es el que expuso el bug de la sección 9).
 - Puede haber niños/acudientes de prueba adicionales creados durante las pruebas de esta conversación.
 
 *(No se documentan contraseñas aquí por seguridad — las tiene Rafael.)*
