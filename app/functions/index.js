@@ -103,6 +103,13 @@ async function cerrarPresentesDeHoy(motivo) {
       grupoEdad: r.grupoEdad || '',
       observacion: `Salida automática (${motivo}) — no se registró salida manual.`,
     });
+    // Limpia el flag de presencia (ver ninoYaPresente() en
+    // firestore.rules) para que el niño pueda volver a recibir una
+    // Entrada después — si no se limpiara, quedaría bloqueado para
+    // siempre aunque ya se le haya dado salida.
+    if (r.fkIdNino) {
+      batch.update(db.collection('ninos').doc(r.fkIdNino), {presente: false});
+    }
   }
   await batch.commit();
   console.log(`Cierre automático (${motivo}): ${presentes.length} niños cerrados.`);

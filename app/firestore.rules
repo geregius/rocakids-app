@@ -33,6 +33,17 @@ service cloud.firestore {
         get(/databases/$(database)/documents/nino_acudiente/$(relId)).data.parentescoTipo in ['Padre', 'Madre'];
     }
 
+    // ninos/{ninoId}.presente se mantiene junto con cada Entrada/Salida
+    // (ver AuthService.registrarMovimiento() y las Cloud Functions de
+    // cierre automático) — evita que se le registre una SEGUNDA Entrada
+    // a un niño que ya está presente (ni por error humano ni por dos
+    // servidores registrándolo casi al mismo tiempo). `false` si el
+    // campo no existe (niños creados antes de este cambio, o que nunca
+    // han tenido una entrada).
+    function ninoYaPresente(ninoId) {
+      return get(/databases/$(database)/documents/ninos/$(ninoId)).data.get('presente', false) == true;
+    }
+
     match /usuarios/{uid} {
       // Cualquiera autenticado puede leer su propio perfil. Un admin
       // puede leer (y listar) el perfil de cualquiera.
@@ -191,6 +202,10 @@ service cloud.firestore {
       // identificacionMenor`), o el capturado en el momento para un niño
       // VISITANTE (`documentoNinoVisitante`). Ningún caso puede quedar
       // sin documento.
+      // Bloqueo explícito adicional (pedido de Rafael, 2026-08-17): no se
+      // puede registrar una Entrada para un niño que YA está presente —
+      // evita duplicados. No aplica a niños visitante (no tienen doc en
+      // `ninos`) ni a movimientos de Salida.
       allow create: if puedeRegistrarAsistencia()
         && request.resource.data.fkIdServidor == request.auth.uid
         && (
@@ -198,6 +213,11 @@ service cloud.firestore {
             ? get(/databases/$(database)/documents/ninos/$(request.resource.data.fkIdNino))
                 .data.identificacionMenor != ''
             : request.resource.data.documentoNinoVisitante != ''
+        )
+        && (
+          request.resource.data.tipoMovimiento != 'Entrada'
+            || request.resource.data.fkIdNino == ''
+            || !ninoYaPresente(request.resource.data.fkIdNino)
         );
       allow get, list: if puedeRegistrarAsistencia();
       allow update, delete: if esAdmin();

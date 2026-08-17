@@ -577,6 +577,53 @@ class AuthService {
     return migrados;
   }
 
+  /// Migración de una sola vez (2026-08-17): calcula quiénes están
+  /// presentes HOY (mismo criterio que `ninos_presentes_screen.dart`) y
+  /// les marca `ninos/{id}.presente = true`. Necesaria porque el campo
+  /// `presente` es nuevo — los niños que ya estaban adentro ANTES de
+  /// este cambio no lo tienen puesto todavía, y sin este backfill la
+  /// nueva validación de "no permitir una segunda Entrada" (ver
+  /// `firestore.rules`) no los reconocería como presentes. Solo aplica a
+  /// niños registrados (los visitantes no tienen doc en `ninos`).
+  /// Admin-only. Devuelve cuántos niños se marcaron.
+  Future<int> sincronizarPresenciaNinos() async {
+    final ahora = DateTime.now();
+    final inicio = DateTime(ahora.year, ahora.month, ahora.day);
+    final fin = inicio.add(const Duration(days: 1));
+    final snap = await _firestore
+        .collection('registros')
+        .where(
+          'fechaMovimiento',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(inicio),
+        )
+        .where('fechaMovimiento', isLessThan: Timestamp.fromDate(fin))
+        .orderBy('fechaMovimiento')
+        .get();
+
+    // Los registros vienen ordenados por fecha ascendente, así que el
+    // último que se procese por niño es su movimiento más reciente.
+    final ultimoPorNino = <String, String>{};
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      final fkIdNino = data['fkIdNino'] as String? ?? '';
+      if (fkIdNino.isEmpty) continue;
+      ultimoPorNino[fkIdNino] = data['tipoMovimiento'] as String? ?? '';
+    }
+    final presentesIds = ultimoPorNino.entries
+        .where((e) => e.value == 'Entrada')
+        .map((e) => e.key)
+        .toList();
+
+    if (presentesIds.isEmpty) return 0;
+
+    final batch = _firestore.batch();
+    for (final id in presentesIds) {
+      batch.update(_firestore.collection('ninos').doc(id), {'presente': true});
+    }
+    await batch.commit();
+    return presentesIds.length;
+  }
+
   /// Completa el documento de un niño que no lo tenía (el "ajuste
   /// inmediato" que pidió Rafael): quien hace el check-in puede
   /// arreglarlo ahí mismo en vez de tener que ir a buscar a un admin.
@@ -727,6 +774,12 @@ class AuthService {
   /// nombre de quien registra los pone esta función (no el llamador),
   /// para que siempre coincidan con la sesión real — así lo exige
   /// también `firestore.rules`.
+  ///
+  /// Junto con el registro (mismo batch atómico), actualiza
+  /// `ninos/{fkIdNino}.presente` — así `firestore.rules` puede rechazar
+  /// una SEGUNDA Entrada para un niño que ya está presente (pedido de
+  /// Rafael, 2026-08-17), incluso si dos servidores lo registran casi al
+  /// mismo tiempo. No aplica a niños visitante (no tienen doc en `ninos`).
   Future<void> registrarMovimiento(Registro registro) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -735,7 +788,26 @@ class AuthService {
     final datos = registro.toFirestore()
       ..['fkIdServidor'] = user.uid
       ..['nombreServidor'] = registro.nombreServidor;
-    await _firestore.collection('registros').add(datos);
+
+    final batch = _firestore.batch();
+    batch.set(_firestore.collection('registros').doc(), datos);
+    if (registro.fkIdNino.isNotEmpty) {
+      batch.update(_firestore.collection('ninos').doc(registro.fkIdNino), {
+        'presente': registro.tipoMovimiento == 'Entrada',
+      });
+    }
+    try {
+      await batch.commit();
+    } catch (e) {
+      if (e.toString().contains('permission-denied') &&
+          registro.tipoMovimiento == 'Entrada') {
+        throw const AuthException(
+          'Este niño ya tiene una entrada activa — puede que ya lo haya '
+          'registrado otra persona. Actualiza la pantalla e intenta de nuevo.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// Busca un niño ya registrado por su documento (o llave interna) y,

@@ -78,6 +78,23 @@ class AppShell extends StatelessWidget {
     }
   }
 
+  Future<void> _sincronizarPresencia(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Sincronizando presencia...')),
+    );
+    try {
+      final total = await AuthService().sincronizarPresenciaNinos();
+      messenger.showSnackBar(
+        SnackBar(content: Text('$total niños marcados como presentes hoy.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('No se pudo sincronizar: $e')),
+      );
+    }
+  }
+
   List<_ItemMenu> _items(BuildContext context) {
     final esAdmin = usuario.rol == RolUsuario.administrador;
     final esServidor = usuario.rol.esRolDeServidor;
@@ -143,6 +160,11 @@ class AppShell extends StatelessWidget {
           icon: Icons.link,
           label: 'Migrar vínculos niño-acudiente',
           onTap: () => _migrarRelaciones(context),
+        ),
+        _ItemMenu(
+          icon: Icons.checklist,
+          label: 'Sincronizar presencia de niños',
+          onTap: () => _sincronizarPresencia(context),
         ),
       ],
       if (esServidor)
