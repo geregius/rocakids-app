@@ -44,6 +44,21 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/ninos/$(ninoId)).data.get('presente', false) == true;
     }
 
+    // Quién puede ver el PANEL "Acudientes y Niños" (2026-08-17, pedido
+    // explícito de Rafael) — más acotado que puedeRegistrarAsistencia():
+    // solo administrador, columna y líder de ministerio, NO maestros ni
+    // líder de escuela de siervos. Solo controla `list` de `acudientes`
+    // (traer TODA la colección) — el `get` puntual de un acudiente sigue
+    // abierto a cualquier `puedeRegistrarAsistencia()`, lo sigue
+    // necesitando el check-in para mostrar quién puede retirar a un niño.
+    function puedeVerListaAcudientes() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol.lower() in [
+          'administrador', 'columna', 'lider_ministerio'
+        ];
+    }
+
     match /usuarios/{uid} {
       // Cualquiera autenticado puede leer su propio perfil. Un admin
       // puede leer (y listar) el perfil de cualquiera.
@@ -90,10 +105,12 @@ service cloud.firestore {
       allow get, list: if esAdmin();
       // Quien hace check-in/out necesita poder leer la ficha de CUALQUIER
       // acudiente (no solo la suya) para mostrarla y, si hace falta,
-      // editarla en el momento — ver el update de abajo. `list` también
-      // (no solo `get`) para el panel "Acudientes y Niños", que cualquier
-      // rol de servidor puede ver (pedido de Rafael).
-      allow get, list: if puedeRegistrarAsistencia();
+      // editarla en el momento — ver el update de abajo.
+      allow get: if puedeRegistrarAsistencia();
+      // `list` (traer TODA la colección) es más sensible que `get`
+      // puntual — solo para el panel "Acudientes y Niños", acotado a
+      // administrador/columna/líder de ministerio (2026-08-17).
+      allow list: if puedeVerListaAcudientes();
 
       // Auto-registro: solo su propio documento.
       allow create: if request.auth != null && request.auth.uid == uid;

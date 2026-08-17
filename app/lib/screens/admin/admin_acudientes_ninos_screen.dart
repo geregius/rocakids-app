@@ -12,9 +12,10 @@ import '../nino_detalle_sheet.dart';
 /// Panel para ver la lista completa de acudientes Y niños (pedido
 /// explícito de Rafael, no solo niños) — extiende el pendiente
 /// "Administración de Niños" para incluir también a los acudientes.
-/// Accesible por CUALQUIER rol de servidor (no solo admin, ver
-/// `AppShell` y `puedeRegistrarAsistencia()` en firestore.rules), para
-/// que líderes/columnas/maestros también puedan consultarlo.
+/// Nació accesible a cualquier rol de servidor (2026-08-14), pero
+/// Rafael pidió acotarlo (2026-08-17) a solo administrador, columna y
+/// líder de ministerio — ver `RolUsuario.puedeVerAcudientesYNinos` y
+/// `puedeVerListaAcudientes()` en firestore.rules.
 class AdminAcudientesNinosScreen extends StatefulWidget {
   final UsuarioApp usuario;
 

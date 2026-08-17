@@ -99,6 +99,15 @@ enum RolUsuario {
   bool get esRolDeServidor => this != RolUsuario.usuarioExterno &&
       this != RolUsuario.pendiente &&
       this != RolUsuario.desconocido;
+
+  /// Quién puede ver el panel "Acudientes y Niños" (2026-08-17, pedido
+  /// explícito de Rafael) — NO todos los roles principales, solo
+  /// administrador, columna y líder de ministerio. Debe quedar
+  /// sincronizado con `puedeVerListaAcudientes()` en firestore.rules.
+  bool get puedeVerAcudientesYNinos =>
+      this == RolUsuario.administrador ||
+      this == RolUsuario.columna ||
+      this == RolUsuario.liderMinisterio;
 }
 
 const gruposSanguineos = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
