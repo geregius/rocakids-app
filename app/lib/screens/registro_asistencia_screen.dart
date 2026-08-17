@@ -735,17 +735,44 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
               ],
             ),
           ),
+        ] else if (_accion == 'Salida') ...[
+          // Este niño ya tiene una Entrada de hoy sin Salida — esta
+          // pantalla es solo para registrar ENTRADAS (pedido de Rafael,
+          // 2026-08-17). Para darle salida, se hace desde "Menores
+          // Recibidos" (deslizando su tarjeta), no buscándolo aquí de
+          // nuevo — así se evita que alguien le dé salida por error
+          // pensando que estaba registrando otra entrada.
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.amarillo.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.info_outline, color: AppColors.textoPrincipal),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Este niño ya tiene una entrada registrada hoy. Para darle '
+                    'salida, ve a "Menores Recibidos" y desliza su tarjeta.',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ] else ...[
           const SizedBox(height: 20),
           Text(
-            _accion == 'Entrada' ? 'Registrar ENTRADA' : 'Registrar SALIDA',
+            'Registrar ENTRADA',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 12),
           Text(
-            _accion == 'Entrada'
-                ? '¿Quién lo entrega?'
-                : '¿Quién lo retira? Verifica con la foto de seguridad.',
+            '¿Quién lo entrega?',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 8),
@@ -867,11 +894,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
                       color: Colors.white,
                     ),
                   )
-                : Text(
-                    _accion == 'Entrada'
-                        ? 'Registrar Entrada'
-                        : 'Registrar Salida',
-                  ),
+                : const Text('Registrar Entrada'),
           ),
         ],
       ],
