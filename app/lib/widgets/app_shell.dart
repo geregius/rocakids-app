@@ -5,6 +5,7 @@ import '../screens/acudiente_portal_screen.dart';
 import '../screens/admin/admin_acudientes_ninos_screen.dart';
 import '../screens/admin/admin_users_list_screen.dart';
 import '../screens/admin/user_edit_sheet.dart';
+import '../screens/auth_gate.dart';
 import '../screens/home_screen.dart';
 import '../screens/modulo_en_construccion_screen.dart';
 import '../screens/ninos_presentes_screen.dart';
@@ -75,6 +76,26 @@ class AppShell extends StatelessWidget {
       );
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('No se pudo migrar: $e')));
+    }
+  }
+
+  /// Cierra la sesión y SIEMPRE cae en la pantalla de login, sin importar
+  /// desde qué sección se haya tocado "Cerrar sesión". Necesario porque
+  /// `_irA()` navega con `pushReplacement`: la primera vez que se cambia
+  /// de sección desde el menú, la ruta de `AuthGate` (el widget que
+  /// decide qué pantalla mostrar según el estado de sesión) queda
+  /// reemplazada y sale del árbol de navegación — así que ya no hay
+  /// nadie escuchando `authStateChanges` para reaccionar solo al cerrar
+  /// sesión. Por eso, en vez de confiar en esa reactividad, se limpia
+  /// TODO el stack de navegación y se vuelve a poner `AuthGate` desde
+  /// cero, que con la sesión ya cerrada muestra el login de inmediato.
+  Future<void> _cerrarSesion(BuildContext context) async {
+    await AuthService().signOut();
+    if (context.mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AuthGate()),
+        (route) => false,
+      );
     }
   }
 
@@ -182,7 +203,7 @@ class AppShell extends StatelessWidget {
         icon: Icons.logout,
         label: 'Cerrar sesión',
         separadorAntes: !esServidor,
-        onTap: () => AuthService().signOut(),
+        onTap: () => _cerrarSesion(context),
       ),
     ];
   }
