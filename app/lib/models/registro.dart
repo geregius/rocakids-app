@@ -14,6 +14,26 @@ const serviciosDisponibles = [
 
 const tiposMovimiento = ['Entrada', 'Salida'];
 
+/// El servicio que corresponde AHORA según el día/hora de hoy, para
+/// pre-seleccionarlo en el formulario de registro (el servidor lo puede
+/// cambiar igual si hace falta) — pedido de Rafael, 2026-08-15. `null`
+/// si hoy no hay ningún servicio (lunes, martes, jueves).
+String? servicioSugerido([DateTime? ahora]) {
+  final hoy = ahora ?? DateTime.now();
+  switch (hoy.weekday) {
+    case DateTime.wednesday:
+      return 'Miércoles';
+    case DateTime.friday:
+      return 'Casa2';
+    case DateTime.saturday:
+      return 'Ayuno';
+    case DateTime.sunday:
+      return hoy.hour < 10 ? 'Domingo 1° Servicio' : 'Domingo 2° Servicio';
+    default:
+      return null;
+  }
+}
+
 /// Un movimiento de entrada o salida de un niño (SOP §2.4, tabla
 /// REGISTROS). Puede ser de un niño YA registrado (`fkIdNino` con valor)
 /// o de un niño VISITANTE que llega por primera vez sin cuenta previa

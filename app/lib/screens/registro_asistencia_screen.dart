@@ -74,6 +74,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   @override
   void initState() {
     super.initState();
+    _servicio = servicioSugerido();
     _cargarIndice();
   }
 
@@ -122,7 +123,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       _error = null;
       _acudienteElegido = null;
       _otroAcudiente = false;
-      _servicio = null;
+      _servicio = servicioSugerido();
       _manillaController.clear();
       _observacionController.clear();
       _otroNombreController.clear();
@@ -546,6 +547,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
           onPressed: () => setState(() {
             _modo = _Modo.visitante;
             _error = null;
+            _servicio = servicioSugerido();
           }),
           icon: const Icon(Icons.person_add_alt),
           label: const Text('Es la primera vez que viene (visitante)'),
