@@ -23,6 +23,14 @@ const _sinGrupo = 'Sin grupo';
 /// visitante (`registrar_asistencia_screen.dart` solo permite su
 /// Entrada), CADA entrada de visitante de hoy cuenta como presente —
 /// es una limitación conocida de esta fase, no un bug de esta pantalla.
+///
+/// Deslizar la tarjeta de un niño (a cualquier lado) le da la SALIDA de
+/// inmediato — sin confirmación ni volver a preguntar quién lo retira,
+/// pedido explícito de Rafael: se asume que se lo entrega la MISMA
+/// persona que quedó registrada en su entrada (`fkIdAcudienteContacto`/
+/// `nombreAcudienteContacto`, copiados tal cual al nuevo registro de
+/// Salida). Un cierre automático nocturno (Cloud Function,
+/// `functions/index.js`) cubre a quien se quede sin salida manual.
 class NinosPresentesScreen extends StatefulWidget {
   final UsuarioApp usuario;
 
@@ -36,6 +44,14 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
   final _authService = AuthService();
   bool _cargandoNinos = true;
   Map<String, Nino> _ninosPorId = {};
+
+  // IDs de registros de ENTRADA a los que ya se les dio salida desde esta
+  // pantalla, pero el stream de Firestore todavía no lo refleja (hay un
+  // pequeño retraso de red). Se ocultan de inmediato en el cliente para
+  // que el swipe se sienta instantáneo; el propio ID nuevo de cada
+  // entrada futura nunca choca con uno viejo, así que no hace falta
+  // limpiar este set.
+  final Set<String> _ocultosOptimista = {};
 
   @override
   void initState() {
@@ -76,7 +92,44 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
     return [
       ...ultimoPorNino.values.where((r) => r.tipoMovimiento == 'Entrada'),
       ...visitantesPresentes,
-    ];
+    ].where((r) => !_ocultosOptimista.contains(r.id)).toList();
+  }
+
+  /// Registra la salida de `entrada` con la fecha/hora actual, copiando
+  /// quién lo retira desde su propia entrada (mismo criterio que pidió
+  /// Rafael: "solo se entrega a la misma persona que lo recibió").
+  Future<void> _darSalida(Registro entrada) async {
+    setState(() => _ocultosOptimista.add(entrada.id));
+    final salida = Registro(
+      id: '',
+      fkIdNino: entrada.fkIdNino,
+      nombreNinoVisitante: entrada.nombreNinoVisitante,
+      tipoMovimiento: 'Salida',
+      fechaMovimiento: DateTime.now(),
+      numeroManilla: entrada.numeroManilla,
+      fkIdServidor: '',
+      nombreServidor: widget.usuario.nombreCompleto,
+      fkIdAcudienteContacto: entrada.fkIdAcudienteContacto,
+      nombreAcudienteContacto: entrada.nombreAcudienteContacto,
+      tipoIdentificacionVisitante: entrada.tipoIdentificacionVisitante,
+      documentoNinoVisitante: entrada.documentoNinoVisitante,
+      telefonoAcudienteVisitante: entrada.telefonoAcudienteVisitante,
+      alertaMedicaVisitante: entrada.alertaMedicaVisitante,
+      condicionMedicaVisitante: entrada.condicionMedicaVisitante,
+      servicio: entrada.servicio,
+      grupoEdad: entrada.grupoEdad,
+      observacion: 'Salida registrada deslizando la tarjeta en Menores Recibidos.',
+    );
+    try {
+      await _authService.registrarMovimiento(salida);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _ocultosOptimista.remove(entrada.id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo registrar la salida: $e')),
+        );
+      }
+    }
   }
 
   Map<String, List<Registro>> _agruparPorEdad(List<Registro> presentes) {
@@ -141,6 +194,7 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
                           registros: grupos[grupo]!,
                           ninosPorId: _ninosPorId,
                           usuario: widget.usuario,
+                          onDarSalida: _darSalida,
                         ),
                   ],
                 );
@@ -155,6 +209,7 @@ class _GrupoSection extends StatelessWidget {
   final List<Registro> registros;
   final Map<String, Nino> ninosPorId;
   final UsuarioApp usuario;
+  final ValueChanged<Registro> onDarSalida;
 
   const _GrupoSection({
     super.key,
@@ -162,6 +217,7 @@ class _GrupoSection extends StatelessWidget {
     required this.registros,
     required this.ninosPorId,
     required this.usuario,
+    required this.onDarSalida,
   });
 
   @override
@@ -187,7 +243,12 @@ class _GrupoSection extends StatelessWidget {
             children: [
               const Divider(height: 1),
               for (final r in registros)
-                _NinoPresenteTile(registro: r, ninosPorId: ninosPorId, usuario: usuario),
+                _NinoPresenteTile(
+                  registro: r,
+                  ninosPorId: ninosPorId,
+                  usuario: usuario,
+                  onDarSalida: onDarSalida,
+                ),
             ],
           ),
         ),
@@ -200,11 +261,13 @@ class _NinoPresenteTile extends StatelessWidget {
   final Registro registro;
   final Map<String, Nino> ninosPorId;
   final UsuarioApp usuario;
+  final ValueChanged<Registro> onDarSalida;
 
   const _NinoPresenteTile({
     required this.registro,
     required this.ninosPorId,
     required this.usuario,
+    required this.onDarSalida,
   });
 
   void _abrirFicha(BuildContext context) {
@@ -238,23 +301,46 @@ class _NinoPresenteTile extends StatelessWidget {
         : (nino?.identificacionMenor ?? '');
     final documentoTexto = documento.isNotEmpty ? documento : 'Sin documento';
 
-    return ListTile(
-      onTap: () => _abrirFicha(context),
-      leading: CircleAvatar(
-        backgroundColor: AppColors.amarillo,
-        backgroundImage: fotoUrl.isNotEmpty ? NetworkImage(fotoUrl) : null,
-        child: fotoUrl.isEmpty
-            ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
+    return Dismissible(
+      key: ValueKey(registro.id),
+      direction: DismissDirection.horizontal,
+      background: _fondoSalida(Alignment.centerLeft),
+      secondaryBackground: _fondoSalida(Alignment.centerRight),
+      onDismissed: (_) => onDarSalida(registro),
+      child: ListTile(
+        onTap: () => _abrirFicha(context),
+        leading: CircleAvatar(
+          backgroundColor: AppColors.amarillo,
+          backgroundImage: fotoUrl.isNotEmpty ? NetworkImage(fotoUrl) : null,
+          child: fotoUrl.isEmpty
+              ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
+              : null,
+        ),
+        title: Text(nombre),
+        subtitle: Text('$documentoTexto · Manilla ${registro.numeroManilla}'),
+        trailing: tieneAlertaMedica
+            ? const Tooltip(
+                message: 'Tiene condición médica/alergia registrada',
+                child: Icon(Icons.medical_information, color: AppColors.rojo),
+              )
             : null,
       ),
-      title: Text(nombre),
-      subtitle: Text('$documentoTexto · Manilla ${registro.numeroManilla}'),
-      trailing: tieneAlertaMedica
-          ? const Tooltip(
-              message: 'Tiene condición médica/alergia registrada',
-              child: Icon(Icons.medical_information, color: AppColors.rojo),
-            )
-          : null,
+    );
+  }
+
+  Widget _fondoSalida(Alignment alignment) {
+    return Container(
+      color: AppColors.rojo,
+      alignment: alignment,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.logout, color: Colors.white),
+          SizedBox(width: 8),
+          Text('Salida', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 }
