@@ -486,40 +486,6 @@ class AuthService {
         .toList();
   }
 
-  /// Rellena `ninos_busqueda` para niños que ya existían en `ninos` antes
-  /// de que existiera esa colección (o que por cualquier otro motivo
-  /// quedaron sin su copia de búsqueda — ej. un futuro script de
-  /// importación masiva que se olvide de escribirla). Solo un admin
-  /// puede listar TODO `ninos` (ver firestore.rules), así que esta
-  /// función es admin-only. Devuelve cuántos niños se reindexaron.
-  Future<int> reindexarBusquedaNinos() async {
-    final ninosSnap = await _firestore.collection('ninos').get();
-    if (ninosSnap.docs.isEmpty) return 0;
-
-    var actualizados = 0;
-    // Los batches de Firestore admiten máximo 500 operaciones; se
-    // procesa en tandas por si la base de niños llega a crecer bastante.
-    for (var i = 0; i < ninosSnap.docs.length; i += 400) {
-      final tanda = ninosSnap.docs.skip(i).take(400);
-      final batch = _firestore.batch();
-      for (final doc in tanda) {
-        final nino = Nino.fromFirestore(doc.id, doc.data());
-        batch.set(
-          _firestore.collection('ninos_busqueda').doc(doc.id),
-          NinoBusqueda(
-            documentoIdentificacion: doc.id,
-            nombres: nino.nombres,
-            apellidos: nino.apellidos,
-            fechaNacimiento: nino.fechaNacimiento,
-          ).toFirestore(),
-        );
-        actualizados++;
-      }
-      await batch.commit();
-    }
-    return actualizados;
-  }
-
   /// Un niño por su documento (o llave interna), o null si no existe.
   Future<Nino?> obtenerNinoPorDocumento(String documentoIdentificacion) async {
     final doc = await _firestore
@@ -544,84 +510,6 @@ class AuthService {
         .get();
     if (!doc.exists) return null;
     return NinoAcudiente.fromFirestore(doc.id, doc.data()!);
-  }
-
-  /// Migra relaciones `nino_acudiente` viejas (creadas con ID aleatorio,
-  /// antes de 2026-08-14) al esquema nuevo determinístico
-  /// (`{fkIdNino}_{fkIdAcudiente}`, ver `esPadreOMadreDe()` en
-  /// firestore.rules) — sin esto, un padre/madre vinculado ANTES de ese
-  /// cambio no podría editar la ficha de su hijo, porque la relación no
-  /// se encontraría en la ruta que las reglas esperan. Admin-only.
-  /// Devuelve cuántas relaciones se migraron.
-  Future<int> migrarRelacionesADeterministico() async {
-    final snap = await _firestore.collection('nino_acudiente').get();
-    if (snap.docs.isEmpty) return 0;
-
-    var migrados = 0;
-    for (var i = 0; i < snap.docs.length; i += 400) {
-      final tanda = snap.docs.skip(i).take(400);
-      final batch = _firestore.batch();
-      for (final doc in tanda) {
-        final data = doc.data();
-        final ninoId = data['fk_idNino'] as String?;
-        final acudienteUid = data['fk_idAcudiente'] as String?;
-        if (ninoId == null || acudienteUid == null) continue;
-        final nuevoId = '${ninoId}_$acudienteUid';
-        if (doc.id == nuevoId) continue;
-        batch.set(_firestore.collection('nino_acudiente').doc(nuevoId), data);
-        batch.delete(doc.reference);
-        migrados++;
-      }
-      await batch.commit();
-    }
-    return migrados;
-  }
-
-  /// Migración de una sola vez (2026-08-17): calcula quiénes están
-  /// presentes HOY (mismo criterio que `ninos_presentes_screen.dart`) y
-  /// les marca `ninos/{id}.presente = true`. Necesaria porque el campo
-  /// `presente` es nuevo — los niños que ya estaban adentro ANTES de
-  /// este cambio no lo tienen puesto todavía, y sin este backfill la
-  /// nueva validación de "no permitir una segunda Entrada" (ver
-  /// `firestore.rules`) no los reconocería como presentes. Solo aplica a
-  /// niños registrados (los visitantes no tienen doc en `ninos`).
-  /// Admin-only. Devuelve cuántos niños se marcaron.
-  Future<int> sincronizarPresenciaNinos() async {
-    final ahora = DateTime.now();
-    final inicio = DateTime(ahora.year, ahora.month, ahora.day);
-    final fin = inicio.add(const Duration(days: 1));
-    final snap = await _firestore
-        .collection('registros')
-        .where(
-          'fechaMovimiento',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(inicio),
-        )
-        .where('fechaMovimiento', isLessThan: Timestamp.fromDate(fin))
-        .orderBy('fechaMovimiento')
-        .get();
-
-    // Los registros vienen ordenados por fecha ascendente, así que el
-    // último que se procese por niño es su movimiento más reciente.
-    final ultimoPorNino = <String, String>{};
-    for (final doc in snap.docs) {
-      final data = doc.data();
-      final fkIdNino = data['fkIdNino'] as String? ?? '';
-      if (fkIdNino.isEmpty) continue;
-      ultimoPorNino[fkIdNino] = data['tipoMovimiento'] as String? ?? '';
-    }
-    final presentesIds = ultimoPorNino.entries
-        .where((e) => e.value == 'Entrada')
-        .map((e) => e.key)
-        .toList();
-
-    if (presentesIds.isEmpty) return 0;
-
-    final batch = _firestore.batch();
-    for (final id in presentesIds) {
-      batch.update(_firestore.collection('ninos').doc(id), {'presente': true});
-    }
-    await batch.commit();
-    return presentesIds.length;
   }
 
   /// Completa el documento de un niño que no lo tenía (el "ajuste

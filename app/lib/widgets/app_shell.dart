@@ -45,40 +45,6 @@ class AppShell extends StatelessWidget {
     ).pushReplacement(MaterialPageRoute(builder: (_) => pantalla));
   }
 
-  Future<void> _reindexar(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(const SnackBar(content: Text('Reindexando...')));
-    try {
-      final total = await AuthService().reindexarBusquedaNinos();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            '$total niños reindexados para la búsqueda por nombre.',
-          ),
-        ),
-      );
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('No se pudo reindexar: $e')),
-      );
-    }
-  }
-
-  Future<void> _migrarRelaciones(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Migrando vínculos...')),
-    );
-    try {
-      final total = await AuthService().migrarRelacionesADeterministico();
-      messenger.showSnackBar(
-        SnackBar(content: Text('$total vínculos niño-acudiente migrados.')),
-      );
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('No se pudo migrar: $e')));
-    }
-  }
-
   /// Cierra la sesión y SIEMPRE cae en la pantalla de login, sin importar
   /// desde qué sección se haya tocado "Cerrar sesión". Necesario porque
   /// `_irA()` navega con `pushReplacement`: la primera vez que se cambia
@@ -95,23 +61,6 @@ class AppShell extends StatelessWidget {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const AuthGate()),
         (route) => false,
-      );
-    }
-  }
-
-  Future<void> _sincronizarPresencia(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Sincronizando presencia...')),
-    );
-    try {
-      final total = await AuthService().sincronizarPresenciaNinos();
-      messenger.showSnackBar(
-        SnackBar(content: Text('$total niños marcados como presentes hoy.')),
-      );
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('No se pudo sincronizar: $e')),
       );
     }
   }
@@ -165,28 +114,12 @@ class AppShell extends StatelessWidget {
           onTap: () =>
               _irA(context, AdminAcudientesNinosScreen(usuario: usuario)),
         ),
-      if (esAdmin) ...[
+      if (esAdmin)
         _ItemMenu(
           icon: Icons.people,
           label: 'Gestión de Servidores',
           onTap: () => _irA(context, AdminUsersListScreen(usuario: usuario)),
         ),
-        _ItemMenu(
-          icon: Icons.sync,
-          label: 'Reindexar búsqueda de niños',
-          onTap: () => _reindexar(context),
-        ),
-        _ItemMenu(
-          icon: Icons.link,
-          label: 'Migrar vínculos niño-acudiente',
-          onTap: () => _migrarRelaciones(context),
-        ),
-        _ItemMenu(
-          icon: Icons.checklist,
-          label: 'Sincronizar presencia de niños',
-          onTap: () => _sincronizarPresencia(context),
-        ),
-      ],
       if (esServidor)
         _ItemMenu(
           icon: Icons.person,
