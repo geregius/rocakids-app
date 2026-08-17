@@ -860,16 +860,24 @@ class AuthService {
     return nino;
   }
 
-  /// Registra un niño NUEVO y lo vincula al acudiente logueado (para
-  /// cuando ya tiene cuenta y quiere agregar otro hijo).
+  /// Registra un niño NUEVO y lo vincula a un acudiente. Por defecto es
+  /// al acudiente logueado (para cuando ya tiene cuenta y quiere agregar
+  /// otro hijo, desde su propio portal) — pero un servidor puede pasar
+  /// [acudienteUid] explícito para hacerlo en nombre de OTRO acudiente
+  /// que ya tiene cuenta (ej. "Registrar familia" cuando el acudiente ya
+  /// existe pero el niño es nuevo). En ese segundo caso hace falta el
+  /// permiso ampliado de `puedeRegistrarAsistencia()` en `nino_acudiente`
+  /// (ver firestore.rules) — el propio acudiente siempre puede para sí
+  /// mismo.
   Future<void> registrarNinoAdicional({
     required Nino nino,
     required String parentescoTipo,
+    String? acudienteUid,
     Uint8List? fotoNinoBytes,
     String? fotoNinoExt,
   }) async {
-    final user = _auth.currentUser;
-    if (user == null) {
+    final uid = acudienteUid ?? _auth.currentUser?.uid;
+    if (uid == null) {
       throw const AuthException('No hay sesión activa.');
     }
 
@@ -902,11 +910,11 @@ class AuthService {
     batch.set(
       _firestore
           .collection('nino_acudiente')
-          .doc('${nino.documentoIdentificacion}_${user.uid}'),
+          .doc('${nino.documentoIdentificacion}_$uid'),
       NinoAcudiente(
         id: '',
         fkIdNino: nino.documentoIdentificacion,
-        fkIdAcudiente: user.uid,
+        fkIdAcudiente: uid,
         parentescoTipo: parentescoTipo,
         autorizacionFormulario: 'Sí',
         autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
@@ -923,6 +931,180 @@ class AuthService {
         );
       }
       throw AuthException('No se pudo registrar al niño: $e');
+    }
+  }
+
+  /// Busca un acudiente que YA tiene cuenta por su número de documento —
+  /// para "Registrar familia" cuando el acudiente ya existe y solo hace
+  /// falta agregarle un niño (nuevo o existente), sin duplicar su
+  /// cuenta. `null` si no se encuentra. No hay búsqueda por nombre para
+  /// acudientes (a propósito, por privacidad — no existe un
+  /// `acudientes_busqueda` como sí existe `ninos_busqueda`).
+  Future<Acudiente?> buscarAcudientePorDocumento(String numeroDocumento) async {
+    final numero = numeroDocumento.trim();
+    if (numero.isEmpty) return null;
+    final refDoc = await _firestore
+        .collection('acudientes_documentos')
+        .doc(numero)
+        .get();
+    if (!refDoc.exists) return null;
+    final uid = refDoc.data()?['uid'] as String?;
+    if (uid == null) return null;
+    final acudienteDoc = await _firestore.collection('acudientes').doc(uid).get();
+    if (!acudienteDoc.exists) return null;
+    return Acudiente.fromFirestore(uid, acudienteDoc.data()!);
+  }
+
+  /// Vincula un acudiente y un niño que YA EXISTEN ambos en el sistema
+  /// (ej. "Registrar familia" cuando ninguno de los dos es nuevo, solo
+  /// faltaba la relación entre ellos). Requiere el permiso ampliado de
+  /// `puedeRegistrarAsistencia()` en `nino_acudiente` (ver
+  /// firestore.rules) para vincular a un acudiente que no es quien llama.
+  Future<void> vincularNinoAcudienteExistentes({
+    required String documentoNino,
+    required String acudienteUid,
+    required String parentescoTipo,
+  }) async {
+    final ninoDoc = await _firestore.collection('ninos').doc(documentoNino).get();
+    if (!ninoDoc.exists) {
+      throw const AuthException('No se encontró el niño.');
+    }
+    final nino = Nino.fromFirestore(ninoDoc.id, ninoDoc.data()!);
+
+    try {
+      await _firestore
+          .collection('nino_acudiente')
+          .doc('${documentoNino}_$acudienteUid')
+          .set(
+            NinoAcudiente(
+              id: '',
+              fkIdNino: documentoNino,
+              fkIdAcudiente: acudienteUid,
+              parentescoTipo: parentescoTipo,
+              autorizacionFormulario: 'Sí',
+              autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
+              esRepresentanteLegalFlag: false,
+            ).toFirestore(),
+          );
+    } catch (e) {
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException(
+          'Este acudiente ya está vinculado a este niño.',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  /// Lo mismo que [registrarAcudienteConNinoDesdeServidor], pero para
+  /// cuando el ACUDIENTE es nuevo y el NIÑO ya existe en el sistema (ej.
+  /// "Registrar familia" cuando el papá quiere su propia cuenta para un
+  /// niño que ya registró la mamá). Mismo truco de la app de Firebase
+  /// secundaria y temporal para no perder la sesión de quien llama.
+  Future<void> vincularAcudienteNuevoANinoExistenteDesdeServidor({
+    required String correo,
+    required String password,
+    required Acudiente acudiente,
+    required String documentoNino,
+    required String parentescoTipo,
+    Uint8List? fotoAcudienteBytes,
+    String? fotoAcudienteExt,
+  }) async {
+    // Se valida ANTES de crear la cuenta nueva, con la sesión propia de
+    // quien llama — así, si el documento del niño está mal escrito, no
+    // queda una cuenta huérfana que haya que borrar después.
+    final ninoDoc = await _firestore.collection('ninos').doc(documentoNino).get();
+    if (!ninoDoc.exists) {
+      throw const AuthException(
+        'No se encontró ningún niño con ese documento.',
+      );
+    }
+    final nino = Nino.fromFirestore(ninoDoc.id, ninoDoc.data()!);
+
+    final app = await Firebase.initializeApp(
+      name: 'registroTemporal-${DateTime.now().microsecondsSinceEpoch}',
+      options: Firebase.app().options,
+    );
+    final auth = FirebaseAuth.instanceFor(app: app);
+    final firestore = FirebaseFirestore.instanceFor(app: app);
+    final storage = FirebaseStorage.instanceFor(app: app);
+
+    UserCredential? credential;
+    try {
+      credential = await auth.createUserWithEmailAndPassword(
+        email: correo.trim(),
+        password: password,
+      );
+      final uid = credential.user!.uid;
+
+      String fotoAcudienteUrl = '';
+      if (fotoAcudienteBytes != null && fotoAcudienteExt != null) {
+        final ref = storage.ref('acudientes_fotos/$uid/foto.$fotoAcudienteExt');
+        await ref.putData(fotoAcudienteBytes);
+        fotoAcudienteUrl = await ref.getDownloadURL();
+      }
+
+      final batch = firestore.batch();
+      batch.set(firestore.collection('usuarios').doc(uid), {
+        'correo': correo.trim(),
+        'nombre': acudiente.nombres,
+        'apellido': acudiente.apellidos,
+        'rol': RolUsuario.usuarioExterno.valorFirestore,
+        'activo': true,
+        'creadoEn': FieldValue.serverTimestamp(),
+      });
+      batch.set(firestore.collection('acudientes').doc(uid), {
+        ...acudiente.toFirestore(),
+        if (fotoAcudienteUrl.isNotEmpty) 'fotoSeguridadUrl': fotoAcudienteUrl,
+      });
+      batch.set(
+        firestore
+            .collection('acudientes_documentos')
+            .doc(acudiente.numeroDocumento),
+        {'uid': uid},
+      );
+      batch.set(
+        firestore.collection('nino_acudiente').doc('${documentoNino}_$uid'),
+        NinoAcudiente(
+          id: '',
+          fkIdNino: documentoNino,
+          fkIdAcudiente: uid,
+          parentescoTipo: parentescoTipo,
+          autorizacionFormulario: 'Sí',
+          autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
+          esRepresentanteLegalFlag: false,
+        ).toFirestore(),
+      );
+      await batch.commit();
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        throw const AuthException(
+          'Ya existe una cuenta con este correo. Pídele a la familia que '
+          'inicie sesión y use "Mis hijos" para vincularse a este niño.',
+        );
+      }
+      throw AuthException(_mensajeDeErrorRegistro(e.code));
+    } catch (e) {
+      if (credential?.user != null) {
+        try {
+          await credential!.user!.delete();
+        } catch (_) {
+          // Nada más que hacer: la app secundaria se elimina igual abajo.
+        }
+      }
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException(
+          'Este número de documento ya se encuentra registrado en el sistema.',
+        );
+      }
+      throw AuthException('No se pudo completar el registro: $e');
+    } finally {
+      try {
+        await auth.signOut();
+      } catch (_) {}
+      try {
+        await app.delete();
+      } catch (_) {}
     }
   }
 

@@ -178,8 +178,15 @@ service cloud.firestore {
       // El admin también puede crear (no solo el propio acudiente) para
       // poder migrar relaciones viejas de ID aleatorio al esquema nuevo
       // determinístico ({ninoId}_{uid}, ver esPadreOMadreDe arriba).
+      // Quien hace check-in/out también puede crear el vínculo en nombre
+      // de OTRO acudiente (2026-08-17) — para "Registrar familia" cuando
+      // el acudiente y/o el niño YA existen, y solo falta relacionarlos.
       allow create: if request.auth != null
-        && (request.resource.data.fk_idAcudiente == request.auth.uid || esAdmin());
+        && (
+          request.resource.data.fk_idAcudiente == request.auth.uid ||
+          esAdmin() ||
+          puedeRegistrarAsistencia()
+        );
 
       // Cualquier autenticado puede leer relaciones (igual que ninos y
       // ninos_busqueda) — hace falta para que quien hace check-in/out
