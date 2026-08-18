@@ -198,6 +198,18 @@ Cada niño cerrado así recibe un nuevo `Registro` de Salida que copia `fkIdAcud
 
 **Deploy:** `firebase deploy --only functions --project rocakidsarmenia-7935b` (desde `/app`, no la raíz del repo — ver `firebase.json`). Se corrió también `firebase functions:artifacts:setpolicy --force` una vez, para que las imágenes de contenedor viejas se borren solas (evita que se acumule un costo pequeño de Artifact Registry).
 
+### `correoCumpleanosDiario` — correo automático de cumpleaños (2026-08-18)
+
+**Tercera función programada** (pedido de Rafael): todos los días a las **7:00am hora de Bogotá**, revisa qué niños `Activo` cumplen años **hoy** (mismo cálculo de mes/día que `cumpleEnUltimaSemana()`/`diasDesdeCumpleanos()` de `lib/models/nino.dart`, sección 6, pero solo el día exacto) y le manda un correo festivo a **todos** los acudientes vinculados de cada uno (decisión explícita de Rafael: no solo Padre/Madre). Un niño sin ningún acudiente con correo real y válido se omite en silencio — no bloquea el resto del envío ni genera alerta.
+
+**Envío real por Gmail SMTP** (`nodemailer`, agregado como dependencia de `functions/`) desde **`rokakidsarmenia@gmail.com`** — ⚠️ **con K, no "roca"** como el nombre del proyecto de Firebase (`rocakidsarmenia-7935b`); confundir esto costó 5 intentos fallidos de prueba antes de detectarlo. La contraseña de aplicación de Gmail vive en Secret Manager como `GMAIL_APP_PASSWORD` (`firebase functions:secrets:set`, la generó y guardó Rafael mismo — Claude nunca vio el valor). Validado con envíos reales de prueba antes de dejar la función programada activa.
+
+**Diseño del correo:** plantilla HTML propia (`plantillaCorreoCumpleanos()`) que replica el diseño exacto que Rafael compartió — encabezado con degradado naranja/rojo y emojis de fiesta, pastilla turquesa con el nombre del niño, recuadro de versículo con borde punteado, bloque de invitación al fin de semana con degradado verde, firma "Tu familia de RocaKids". El versículo se elige al azar entre 8 opciones fijas en el código (`VERSICULOS_CUMPLEANOS`), todas de tono de bendición/alegría/esperanza.
+
+**Costo:** $0 esperado — mismo criterio que las otras dos funciones programadas (nivel gratuito de Cloud Functions/Firestore), y esta es la **3ª y última tarea de Cloud Scheduler que entra gratis** (el nivel gratuito da 3 jobs; una 4ª tarea programada en el futuro sí tendría un costo pequeño, ~$0.10/mes). El envío por Gmail SMTP no tiene costo de Google Cloud — el único límite es el propio de Gmail (500 correos/día en cuenta normal), muy por encima del volumen esperado.
+
+**Pendiente/no implementado a propósito:** no hay mecanismo de "ya se envió este año" (si la función se reintentara el mismo día podría reenviar) — no se consideró necesario para el volumen actual; y no hay forma de probar el envío real sin usar una Cloud Function HTTP temporal (desplegar → invocar con `curl` → borrar) porque `onSchedule` no es invocable directamente por HTTP — patrón ya usado varias veces en este proyecto, ver [[feature-correo-cumpleanos]] en la memoria para el detalle completo de cómo se diagnosticó y probó.
+
 ---
 
 ## 6. Pantallas construidas (`lib/screens/`)
@@ -313,7 +325,7 @@ Todo en la misma sesión, en este orden:
 5. **Módulo 4 — Check-in/Check-out:** ✅ Fase 1 (registro manual con internet) lista, ver `registros/{autoId}` en sección 5. Faltan Fase 2 (escáner QR) y Fase 3 (modo offline con cola de sincronización) — decisión explícita de Rafael de dejarlas para después.
 6. **Módulo 5 — Cierre automático** — ✅ hecho el 2026-08-15, ver sección 5.5 (primera Cloud Function del proyecto: domingo 10:30am + fin de día todos los días, según lo pedido por Rafael).
 7. **Módulo 7 — Campañas de correo (Brevo):** falta confirmar si Rafael ya tiene cuenta/API key de Brevo.
-8. **Módulo 8 — Cumpleaños:** ✅ parcialmente hecho el 2026-08-18 — vista "Cumpleaños" (niños que cumplieron años en los últimos 7 días) y aviso al registrar el ingreso de un niño que está/estuvo de cumpleaños, ver `cumpleanos_screen.dart` en sección 6. **Falta:** cualquier automatización fuera de la app (ej. correo/WhatsApp automático a la familia el día del cumpleaños vía Brevo — depende del punto 7).
+8. **Módulo 8 — Cumpleaños:** ✅ hecho el 2026-08-18 — vista "Cumpleaños" dentro de la app (niños que cumplieron años en los últimos 7 días) y aviso al registrar el ingreso de un niño que está/estuvo de cumpleaños (`cumpleanos_screen.dart`, sección 6), **más** el correo automático diario a los acudientes el mismo día del cumpleaños (`correoCumpleanosDiario`, sección 5.5) — ya no depende de Brevo/Módulo 7, se resolvió directo con Gmail SMTP. **Falta, si se quiere ampliar después:** otros canales (WhatsApp) o campañas más allá del cumpleaños individual (eso sí seguiría dependiendo del punto 7).
 9. Antes de un lanzamiento real: limpiar cuentas/datos de prueba creadas durante el desarrollo (hay al menos un servidor y un par de niños/acudientes de prueba en la base de datos real de Firebase — no es un ambiente de staging separado; ahora hay un botón "Eliminar" para admin, ver sección 9 arriba, así que esta limpieza ya se puede hacer desde la propia app).
 
 ---
