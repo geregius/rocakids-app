@@ -6,6 +6,7 @@ import '../screens/admin/admin_acudientes_ninos_screen.dart';
 import '../screens/admin/admin_users_list_screen.dart';
 import '../screens/admin/user_edit_sheet.dart';
 import '../screens/auth_gate.dart';
+import '../screens/cambiar_password_sheet.dart';
 import '../screens/home_screen.dart';
 import '../screens/modulo_en_construccion_screen.dart';
 import '../screens/ninos_presentes_screen.dart';
@@ -131,10 +132,22 @@ class AppShell extends StatelessWidget {
             builder: (_) => UserEditSheet(usuario: usuario, esAdmin: esAdmin),
           ),
         ),
+      // Cualquier usuario logueado (servidor o acudiente) puede cambiar
+      // su propia contraseña — pedido de Rafael, disponible en todos los
+      // perfiles, no solo el de servidor.
+      _ItemMenu(
+        icon: Icons.lock,
+        label: 'Cambiar contraseña',
+        separadorAntes: !esServidor,
+        onTap: () => showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          builder: (_) => const CambiarPasswordSheet(),
+        ),
+      ),
       _ItemMenu(
         icon: Icons.logout,
         label: 'Cerrar sesión',
-        separadorAntes: !esServidor,
         onTap: () => _cerrarSesion(context),
       ),
     ];

@@ -1107,6 +1107,51 @@ class AuthService {
     }
   }
 
+  /// Cambia la contraseña del usuario LOGUEADO (no se puede cambiar la de
+  /// otro con el SDK de cliente — solo Admin SDK, que este proyecto no
+  /// usa para esto). Pide la contraseña actual para reautenticar primero
+  /// — Firebase Auth exige una sesión "reciente" para operaciones
+  /// sensibles como esta, y a los pocos minutos de haber iniciado sesión
+  /// ya no cuenta como reciente.
+  Future<void> cambiarPassword({
+    required String passwordActual,
+    required String passwordNueva,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null || user.email == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+    try {
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: passwordActual,
+      );
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(passwordNueva);
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'wrong-password':
+        case 'invalid-credential':
+          throw const AuthException('La contraseña actual no es correcta.');
+        case 'weak-password':
+          throw const AuthException(
+            'La contraseña nueva es muy débil (mínimo 6 caracteres).',
+          );
+        case 'requires-recent-login':
+          throw const AuthException(
+            'Por seguridad, cierra sesión y vuelve a entrar antes de '
+            'cambiar tu contraseña.',
+          );
+        case 'too-many-requests':
+          throw const AuthException(
+            'Demasiados intentos. Intenta de nuevo en unos minutos.',
+          );
+        default:
+          throw AuthException('No se pudo cambiar la contraseña: ${e.message}');
+      }
+    }
+  }
+
   Future<void> signOut() => _auth.signOut();
 
   /// Stream reactivo del perfil del usuario logueado: se actualiza solo
