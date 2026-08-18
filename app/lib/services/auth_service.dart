@@ -616,6 +616,37 @@ class AuthService {
         );
   }
 
+  /// Todas las Entradas registradas desde [desde] (inclusive) hasta hoy —
+  /// para el bloque "Histórico" del Dashboard. Consulta directa de una
+  /// sola vez (no reactiva): con el volumen actual de registros es
+  /// suficientemente rápida; si en el futuro se vuelve lenta, resolver
+  /// con una tabla de resúmenes pre-calculados (mismo patrón que el
+  /// cierre automático en `functions/index.js`) — no antes, sería
+  /// sobre-ingeniería para el volumen de hoy (decisión 2026-08-17).
+  Future<List<Registro>> obtenerEntradasDesde(DateTime desde) async {
+    final snap = await _firestore
+        .collection('registros')
+        .where('tipoMovimiento', isEqualTo: 'Entrada')
+        .where(
+          'fechaMovimiento',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(desde),
+        )
+        .orderBy('fechaMovimiento')
+        .get();
+    return snap.docs
+        .map((d) => Registro.fromFirestore(d.id, d.data()))
+        .toList();
+  }
+
+  /// Cuántos niños hay hoy en el sistema (colección `ninos` completa) —
+  /// estadística simple para el Dashboard. No es una tendencia en el
+  /// tiempo porque los documentos de `ninos` no guardan fecha de
+  /// creación; ver docstring de [DashboardScreen] para el detalle.
+  Future<int> contarNinosRegistrados() async {
+    final snap = await _firestore.collection('ninos').count().get();
+    return snap.count ?? 0;
+  }
+
   /// El movimiento (Entrada/Salida) más reciente de un niño, si tiene
   /// alguno. Con esto se decide si el próximo botón de check-in debe
   /// decir "Registrar Entrada" o "Registrar Salida" — un niño cuyo

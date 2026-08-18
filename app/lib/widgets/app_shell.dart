@@ -4,6 +4,7 @@ import '../models/usuario_app.dart';
 import '../screens/acudiente_portal_screen.dart';
 import '../screens/admin/admin_acudientes_ninos_screen.dart';
 import '../screens/admin/admin_users_list_screen.dart';
+import '../screens/admin/dashboard_screen.dart';
 import '../screens/admin/user_edit_sheet.dart';
 import '../screens/auth_gate.dart';
 import '../screens/cambiar_password_sheet.dart';
@@ -105,6 +106,14 @@ class AppShell extends StatelessWidget {
           icon: Icons.group_add,
           label: 'Registrar familia',
           onTap: () => _irA(context, RegistrarFamiliaScreen(usuario: usuario)),
+        ),
+      // Mismo criterio que "Acudientes y Niños": solo administrador,
+      // columna y líder de ministerio (2026-08-18, pedido de Rafael).
+      if (usuario.rol.puedeVerDashboard)
+        _ItemMenu(
+          icon: Icons.bar_chart,
+          label: 'Dashboard',
+          onTap: () => _irA(context, DashboardScreen(usuario: usuario)),
         ),
       // Solo administrador, columna y líder de ministerio (2026-08-17,
       // pedido explícito de Rafael) — NO todos los roles principales.

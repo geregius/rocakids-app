@@ -16,6 +16,14 @@
         { "fieldPath": "tipoMovimiento", "order": "ASCENDING" },
         { "fieldPath": "fechaMovimiento", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "registros",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipoMovimiento", "order": "ASCENDING" },
+        { "fieldPath": "fechaMovimiento", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

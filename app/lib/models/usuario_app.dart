@@ -108,6 +108,14 @@ enum RolUsuario {
       this == RolUsuario.administrador ||
       this == RolUsuario.columna ||
       this == RolUsuario.liderMinisterio;
+
+  /// Quién puede ver el "Dashboard" con gráficas de asistencia
+  /// (2026-08-18, pedido explícito de Rafael) — mismo criterio que
+  /// [puedeVerAcudientesYNinos]: administrador, columna y líder de
+  /// ministerio. No requiere cambios en firestore.rules porque solo
+  /// restringe la entrada de menú: la lectura de `registros` que usa el
+  /// dashboard ya está abierta a cualquier rol de servidor.
+  bool get puedeVerDashboard => puedeVerAcudientesYNinos;
 }
 
 const gruposSanguineos = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
