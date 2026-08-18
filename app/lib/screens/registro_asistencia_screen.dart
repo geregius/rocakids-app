@@ -274,6 +274,82 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
     );
   }
 
+  /// Aviso festivo (2026-08-18) cuando el niño seleccionado cumplió años
+  /// en los últimos 7 días — a propósito bien llamativo (fondo degradado
+  /// con los colores de marca, ícono grande) para que no pase
+  /// desapercibido y el servidor lo felicite en el momento del check-in.
+  Widget _avisoCumpleanos(Nino nino) {
+    final dias = diasDesdeCumpleanos(nino.fechaNacimiento)!;
+    final mensaje = dias == 0
+        ? '¡${nino.nombres} cumple años hoy!'
+        : '¡${nino.nombres} estuvo de cumpleaños esta semana!';
+    final subtitulo = dias == 0
+        ? '¡Es su día especial! Felicítalo/a.'
+        : dias == 1
+              ? 'Cumplió ayer. Felicítalo/a.'
+              : 'Cumplió hace $dias días. Felicítalo/a.';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.purpura, AppColors.rojo, AppColors.amarillo],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.purpura.withValues(alpha: 0.35),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.cake, color: AppColors.purpura, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        mensaje,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                    const Icon(Icons.celebration, color: Colors.white, size: 22),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitulo,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Edita los datos del niño seleccionado ahí mismo, en el momento del
   /// check-in (decisión de Rafael, "para facilitar el proceso") — mismos
   /// campos que ya puede tocar el padre/madre vinculado, ver
@@ -682,33 +758,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
         ),
         if (cumpleEnUltimaSemana(nino.fechaNacimiento)) ...[
           const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.amarillo.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.cake, color: AppColors.azulMarino),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    (diasDesdeCumpleanos(nino.fechaNacimiento) == 0)
-                        ? '¡${nino.nombres} cumple años hoy! Felicítalo/a.'
-                        : '¡${nino.nombres} estuvo de cumpleaños esta semana '
-                              '(hace ${diasDesdeCumpleanos(nino.fechaNacimiento)} días)! '
-                              'Felicítalo/a.',
-                    style: const TextStyle(
-                      color: AppColors.azulMarino,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _avisoCumpleanos(nino),
         ],
         if (nino.alertaMedicaFlag) ...[
           const SizedBox(height: 12),
