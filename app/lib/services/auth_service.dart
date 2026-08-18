@@ -647,6 +647,37 @@ class AuthService {
     return snap.count ?? 0;
   }
 
+  /// Cuántos acudientes hay hoy en el sistema — mismo permiso que
+  /// `listarAcudientes()` (`puedeVerListaAcudientes()` en
+  /// firestore.rules: administrador, columna, líder de ministerio).
+  Future<int> contarAcudientesRegistrados() async {
+    final snap = await _firestore.collection('acudientes').count().get();
+    return snap.count ?? 0;
+  }
+
+  /// Cuántos servidores activos hay (roles operativos del ministerio,
+  /// `activo == true`). A propósito **solo se llama desde la UI si el
+  /// usuario es administrador** (`DashboardScreen`): `usuarios` solo
+  /// permite `list`/`count` a `esAdmin()` en firestore.rules — abrirlo a
+  /// columna/líder de ministerio expondría el listado completo de
+  /// servidores (no solo el conteo), que hoy es admin-only en toda la
+  /// app ("Gestión de Servidores"). Si Rafael pide que columna/líder de
+  /// ministerio también lo vean, la forma segura es una Cloud Function
+  /// que devuelva solo el número, no ampliar la regla de `list`.
+  Future<int> contarServidoresActivos() async {
+    final rolesDeServidor = RolUsuario.values
+        .where((r) => r.esRolDeServidor)
+        .map((r) => r.valorFirestore)
+        .toList();
+    final snap = await _firestore
+        .collection('usuarios')
+        .where('rol', whereIn: rolesDeServidor)
+        .where('activo', isEqualTo: true)
+        .count()
+        .get();
+    return snap.count ?? 0;
+  }
+
   /// El movimiento (Entrada/Salida) más reciente de un niño, si tiene
   /// alguno. Con esto se decide si el próximo botón de check-in debe
   /// decir "Registrar Entrada" o "Registrar Salida" — un niño cuyo

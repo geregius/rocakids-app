@@ -24,6 +24,14 @@
         { "fieldPath": "tipoMovimiento", "order": "ASCENDING" },
         { "fieldPath": "fechaMovimiento", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "usuarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "rol", "order": "ASCENDING" },
+        { "fieldPath": "activo", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
