@@ -638,6 +638,40 @@ class AuthService {
         .toList();
   }
 
+  /// Cuántos niños se han "graduado" del ministerio infantil (más de
+  /// [edadMaximaRegistro] años, `estadoRegistro == 'Graduado'`) — para
+  /// el Dashboard, pedido de Rafael 2026-08-18: "mostrar niños que
+  /// estuvieron en RocaKids y ya se graduaron".
+  Future<int> contarNinosGraduados() async {
+    final snap = await _firestore
+        .collection('ninos')
+        .where('estadoRegistro', isEqualTo: 'Graduado')
+        .count()
+        .get();
+    return snap.count ?? 0;
+  }
+
+  /// Niños todavía "Activo" que cumplen [edadMaximaRegistro] + 1 años
+  /// ESTE MES (es decir, se gradúan este mes) — alerta mensual pedida
+  /// por Rafael 2026-08-18 para poder pasarlos al siguiente nivel de la
+  /// iglesia a tiempo. No hay Cloud Function ni campo pre-calculado: se
+  /// computa al vuelo cada vez que se abre el Dashboard, cruzando todos
+  /// los niños "Activo" contra su fecha de nacimiento (mismo volumen que
+  /// [obtenerTodosLosNinos], barato con el tamaño actual de la base).
+  Future<List<Nino>> obtenerNinosQueGraduanEsteMes() async {
+    final snap = await _firestore
+        .collection('ninos')
+        .where('estadoRegistro', isEqualTo: 'Activo')
+        .get();
+    final hoy = DateTime.now();
+    return snap.docs
+        .map((d) => Nino.fromFirestore(d.id, d.data()))
+        .where((n) =>
+            n.fechaNacimiento.month == hoy.month &&
+            hoy.year - n.fechaNacimiento.year == edadMaximaRegistro + 1)
+        .toList();
+  }
+
   /// Cuántos niños hay hoy en el sistema (colección `ninos` completa) —
   /// estadística simple para el Dashboard. No es una tendencia en el
   /// tiempo porque los documentos de `ninos` no guardan fecha de
@@ -1157,6 +1191,9 @@ class AuthService {
         'apellidos': apellidos,
         'telefonoCelular': telefonoCelular,
         'correoElectronico': correoElectronico,
+        // Se recalcula solo: en cuanto quede un correo escrito, se apaga
+        // la alerta de "correo pendiente de corregir" (ver [Acudiente]).
+        'correoPendienteDeCorregir': correoElectronico.trim().isEmpty,
       });
     } catch (e) {
       if (e.toString().contains('permission-denied')) {

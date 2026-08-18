@@ -105,6 +105,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _TituloBloque('Totales del sistema'),
                 const SizedBox(height: 8),
                 _BloqueTotales(authService: _authService),
+                const SizedBox(height: 20),
+                _BloqueAlertaGraduacion(authService: _authService),
                 const SizedBox(height: 32),
                 _TituloBloque('Hoy'),
                 const SizedBox(height: 8),
@@ -152,6 +154,7 @@ class _BloqueTotales extends StatelessWidget {
         authService.contarNinosRegistrados(),
         authService.contarAcudientesRegistrados(),
         authService.contarServidoresActivos(),
+        authService.contarNinosGraduados(),
       ]),
       builder: (context, snapshot) {
         final valores = snapshot.data;
@@ -174,7 +177,65 @@ class _BloqueTotales extends StatelessWidget {
               valor: valores != null ? '${valores[2]}' : '…',
               icono: Icons.volunteer_activism,
             ),
+            _StatTile(
+              etiqueta: 'Niños graduados',
+              valor: valores != null ? '${valores[3]}' : '…',
+              icono: Icons.school,
+            ),
           ],
+        );
+      },
+    );
+  }
+}
+
+/// Alerta mensual pedida por Rafael (2026-08-18): qué niños cumplen
+/// [edadMaximaRegistro] + 1 años ESTE MES y por lo tanto deben
+/// graduarse del ministerio infantil y pasar al siguiente nivel de la
+/// iglesia. A propósito NO los gradúa solo — es una alerta para que el
+/// liderazgo lo gestione (ceremonia, aviso a la familia, etc.); marcar
+/// a un niño como "Graduado" se sigue haciendo editando su ficha.
+class _BloqueAlertaGraduacion extends StatelessWidget {
+  final AuthService authService;
+  const _BloqueAlertaGraduacion({required this.authService});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Nino>>(
+      future: authService.obtenerNinosQueGraduanEsteMes(),
+      builder: (context, snapshot) {
+        final ninos = snapshot.data;
+        if (ninos == null || ninos.isEmpty) return const SizedBox.shrink();
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.amarillo.withValues(alpha: 0.25),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.school, color: AppColors.textoPrincipal),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${ninos.length} niño${ninos.length == 1 ? '' : 's'} '
+                      'cumple${ninos.length == 1 ? '' : 'n'} '
+                      '${edadMaximaRegistro + 1} años este mes — hay que '
+                      'graduarlo${ninos.length == 1 ? '' : 's'} y pasarlo'
+                      '${ninos.length == 1 ? '' : 's'} al siguiente nivel.',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(ninos.map((n) => n.nombreCompleto).join(', ')),
+                  ],
+                ),
+              ),
+            ],
+          ),
         );
       },
     );

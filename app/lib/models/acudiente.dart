@@ -15,6 +15,11 @@ class Acudiente {
   final String fotoSeguridadUrl;
   final String estadoAutorizacion; // Autorizado | Restringido — solo lo cambia un admin
   final String observacionesRestriccion;
+  // `true` si falta el correo o si venía duplicado con otro acudiente al
+  // migrar los datos históricos (2026-08-18) — dispara el aviso en la
+  // ficha y en el check-in hasta que alguien lo corrija con un correo
+  // real. `editarAcudiente()` lo recalcula solo (correo vacío = true).
+  final bool correoPendienteDeCorregir;
 
   const Acudiente({
     required this.uid,
@@ -27,6 +32,7 @@ class Acudiente {
     this.fotoSeguridadUrl = '',
     this.estadoAutorizacion = 'Autorizado',
     this.observacionesRestriccion = '',
+    this.correoPendienteDeCorregir = false,
   });
 
   String get nombreCompleto => '$nombres $apellidos';
@@ -41,6 +47,7 @@ class Acudiente {
     'fotoSeguridadUrl': fotoSeguridadUrl,
     'estadoAutorizacion': estadoAutorizacion,
     'observacionesRestriccion': observacionesRestriccion,
+    'correoPendienteDeCorregir': correoPendienteDeCorregir,
   };
 
   factory Acudiente.fromFirestore(String uid, Map<String, dynamic> data) {
@@ -55,6 +62,9 @@ class Acudiente {
       fotoSeguridadUrl: data['fotoSeguridadUrl'] as String? ?? '',
       estadoAutorizacion: data['estadoAutorizacion'] as String? ?? 'Autorizado',
       observacionesRestriccion: data['observacionesRestriccion'] as String? ?? '',
+      correoPendienteDeCorregir:
+          data['correoPendienteDeCorregir'] as bool? ??
+          (data['correoElectronico'] as String? ?? '').isEmpty,
     );
   }
 }

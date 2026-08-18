@@ -64,6 +64,34 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
     if (guardado == true && mounted) Navigator.of(context).pop(true);
   }
 
+  /// Aviso de que este acudiente no tiene correo (o llegó duplicado con
+  /// otro al migrar los datos históricos, 2026-08-18) — sin esto no
+  /// puede iniciar sesión con su propia cuenta. Desaparece solo en
+  /// cuanto alguien le guarde un correo real desde "Editar información".
+  Widget _avisoCorreoPendiente() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.amarillo.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: AppColors.textoPrincipal),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Falta el correo real de este acudiente (o coincidía con el '
+              'de otro al migrar los datos). Pídeselo a la familia y '
+              'actualízalo con "Editar información".',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final a = _acudiente;
@@ -116,7 +144,11 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
             const SizedBox(height: 16),
             _FilaDato('Documento', '${a.tipoDocumento}: ${a.numeroDocumento}'),
             _FilaDato('Teléfono', a.telefonoCelular),
-            _FilaDato('Correo', a.correoElectronico),
+            _FilaDato('Correo', a.correoElectronico.isNotEmpty ? a.correoElectronico : 'Sin correo'),
+            if (a.correoPendienteDeCorregir) ...[
+              const SizedBox(height: 8),
+              _avisoCorreoPendiente(),
+            ],
             const SizedBox(height: 16),
             Text('Niños vinculados', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 4),

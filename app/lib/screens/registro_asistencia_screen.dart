@@ -849,6 +849,11 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                   )
+                                : a.correoPendienteDeCorregir
+                                ? const Text(
+                                    'Sin correo real — pídeselo y actualízalo con el lápiz',
+                                    style: TextStyle(color: AppColors.textoPrincipal),
+                                  )
                                 : null,
                           ),
                         ),
