@@ -156,6 +156,12 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
                   ),
                 ),
               const SizedBox(height: 16),
+              TextFormField(
+                initialValue: widget.usuario.correo,
+                enabled: false,
+                decoration: const InputDecoration(labelText: 'Correo electrónico'),
+              ),
+              const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _tipoDocumento,
                 decoration: const InputDecoration(labelText: 'Tipo de documento'),
