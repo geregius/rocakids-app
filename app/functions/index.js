@@ -1,6 +1,8 @@
 const {onSchedule} = require('firebase-functions/v2/scheduler');
+const {defineSecret} = require('firebase-functions/params');
 const {initializeApp} = require('firebase-admin/app');
 const {getFirestore, Timestamp} = require('firebase-admin/firestore');
+const nodemailer = require('nodemailer');
 
 initializeApp();
 const db = getFirestore();
@@ -132,5 +134,192 @@ exports.cierreAutomaticoFinDeDia = onSchedule(
   {schedule: '55 23 * * *', timeZone: 'America/Bogota'},
   async () => {
     await cerrarPresentesDeHoy('fin de día');
+  },
+);
+
+// ---------------------------------------------------------------------
+// Correo automático de cumpleaños (2026-08-18, pedido de Rafael).
+// ---------------------------------------------------------------------
+//
+// Cada mañana revisa qué niños "Activo" cumplen años HOY (mismo
+// criterio de fecha que `cumpleEnUltimaSemana()`/`diasDesdeCumpleanos()`
+// en `lib/models/nino.dart`, pero solo el día exacto) y le manda un
+// correo festivo a CADA acudiente vinculado, en `rokakidsarmenia@gmail.com`
+// (⚠️ con K, no "roca" — ver docs/estado-proyecto.md). Un niño sin
+// ningún acudiente con correo real y válido se omite en silencio, sin
+// bloquear el resto del envío.
+const gmailAppPassword = defineSecret('GMAIL_APP_PASSWORD');
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Versículos de bendición/alegría (elegido uno al azar por correo, para
+// que no sea siempre el mismo) — todos en tono de gozo, bendición o
+// esperanza, apropiados para una felicitación de cumpleaños.
+const VERSICULOS_CUMPLEANOS = [
+  {
+    texto: 'El Señor te bendiga y te guarde; haga resplandecer su rostro sobre ti y te dé mucha paz.',
+    referencia: 'Números 6:24-26',
+  },
+  {
+    texto: 'Este es el día que hizo el Señor; nos gozaremos y alegraremos en él.',
+    referencia: 'Salmos 118:24',
+  },
+  {
+    texto: 'Porque yo sé los planes que tengo para ti —afirma el Señor—, planes de bienestar y no de calamidad, para darte un futuro y una esperanza.',
+    referencia: 'Jeremías 29:11',
+  },
+  {
+    texto: 'El Señor tu Dios está en medio de ti, poderoso, él salvará; se gozará sobre ti con alegría, se regocijará sobre ti con cánticos.',
+    referencia: 'Sofonías 3:17',
+  },
+  {
+    texto: 'Te alabaré, porque formidable y maravillosamente fuiste hecho; estoy maravillado, y mi alma lo sabe muy bien.',
+    referencia: 'Salmos 139:14',
+  },
+  {
+    texto: 'El gozo del Señor es tu fuerza.',
+    referencia: 'Nehemías 8:10',
+  },
+  {
+    texto: 'Por la misericordia de Jehová no hemos sido consumidos... Nuevas son cada mañana; grande es tu fidelidad.',
+    referencia: 'Lamentaciones 3:22-23',
+  },
+  {
+    texto: 'Amado, deseo que seas prosperado en todas las cosas, y que tengas salud, así como prospera tu alma.',
+    referencia: '3 Juan 1:2',
+  },
+];
+
+function elegirVersiculo() {
+  const i = Math.floor(Math.random() * VERSICULOS_CUMPLEANOS.length);
+  return VERSICULOS_CUMPLEANOS[i];
+}
+
+/** {mes, dia} de "hoy" en hora de Bogotá — mismo offset fijo que [rangoDeHoyBogota]. */
+function hoyEnBogota() {
+  const bogota = new Date(Date.now() - OFFSET_BOGOTA_HORAS * 3600 * 1000);
+  return {mes: bogota.getUTCMonth(), dia: bogota.getUTCDate()};
+}
+
+function plantillaCorreoCumpleanos(nombreNino, versiculo) {
+  return `
+  <div style="background:#f2f2f2;padding:24px 12px;font-family:Verdana,Arial,sans-serif;">
+    <div style="max-width:480px;margin:0 auto;background:#ffffff;border:2px solid #ffcc00;border-radius:20px;overflow:hidden;">
+      <div style="background:linear-gradient(135deg,#ff5f6d,#ffb347);padding:24px 20px;text-align:center;">
+        <div style="font-size:28px;line-height:1;margin-bottom:8px;">🎈🥳🎂🎁🎉</div>
+        <div style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:0.5px;">
+          ¡HOY ES UN DÍA SÚPER ESPECIAL!
+        </div>
+      </div>
+      <div style="padding:24px 24px 8px;text-align:center;">
+        <p style="font-size:16px;color:#1A1A2E;margin:0 0 16px;">¡Hola campeón@!</p>
+        <div style="display:inline-block;background:#2dd4bf;color:#ffffff;font-weight:bold;
+                    padding:10px 20px;border-radius:999px;font-size:16px;margin-bottom:20px;">
+          ⭐ ¡¡Feliz Cumpleaños ${nombreNino}!! ⭐
+        </div>
+        <p style="font-size:15px;color:#1A1A2E;text-align:left;line-height:1.5;margin:0 0 14px;">
+          En <b>RocaKids</b> estamos saltando de alegría 🥳🙏 porque hoy Dios te regala un
+          año más de vida lleno de sonrisas, juegos, amigos y bendiciones.
+        </p>
+        <p style="font-size:15px;color:#1A1A2E;text-align:left;line-height:1.5;margin:0 0 18px;">
+          ¡Nos encanta verte brillar, aprender y divertirte cada fin de semana! Eres una
+          persona muy especial e importante para Jesús y para todos nosotros. 💫✨
+        </p>
+        <div style="background:#fff8e1;border:2px dashed #f9a825;border-radius:12px;
+                    padding:16px;text-align:left;margin:0 0 18px;">
+          <p style="margin:0 0 8px;font-size:14px;color:#1A1A2E;">📖 <b>Un mensaje del Cielo para ti hoy:</b></p>
+          <p style="margin:0 0 8px;font-size:14px;font-style:italic;color:#1A1A2E;">"${versiculo.texto}"</p>
+          <p style="margin:0;font-size:13px;font-weight:bold;color:#ef6c00;">— ${versiculo.referencia}</p>
+        </div>
+        <p style="font-size:15px;color:#1A1A2E;text-align:left;line-height:1.5;margin:0 0 20px;">
+          ¡Sigue creciendo con ese corazón tan lindo y esa súper energía! 🚀🍭
+        </p>
+        <div style="background:linear-gradient(135deg,#14b8a6,#10b981);border-radius:14px;
+                    padding:16px;margin:0 0 20px;">
+          <p style="margin:0 0 6px;color:#ffffff;font-weight:bold;font-size:15px;">
+            🎉 ¡TE ESPERAMOS ESTE FIN DE SEMANA!
+          </p>
+          <p style="margin:0;color:#ffffff;font-size:14px;">
+            ❤️ Ven a RocaKids para celebrarte y darte un súper abrazo de cumpleaños 🤗🥹
+          </p>
+        </div>
+      </div>
+      <div style="padding:0 24px 24px;text-align:center;">
+        <p style="font-size:12px;color:#9e9e9e;font-style:italic;margin:0;">
+          Con muchísimo cariño, oraciones y abrazos,<br/>
+          <b style="color:#9e9e9e;">Tu familia de RocaKids ❤️</b>
+        </p>
+      </div>
+    </div>
+  </div>`;
+}
+
+/** Correos (ya sin duplicados) de todos los acudientes vinculados a un niño. */
+async function correosDeAcudientesDe(ninoId) {
+  const relSnap = await db.collection('nino_acudiente').where('fk_idNino', '==', ninoId).get();
+  const correos = new Set();
+  for (const rel of relSnap.docs) {
+    const acudienteId = rel.data().fk_idAcudiente;
+    if (!acudienteId) continue;
+    const acuDoc = await db.collection('acudientes').doc(acudienteId).get();
+    if (!acuDoc.exists) continue;
+    const correo = (acuDoc.data().correoElectronico || '').trim();
+    if (EMAIL_VALIDO.test(correo)) correos.add(correo);
+  }
+  return [...correos];
+}
+
+async function enviarCorreosCumpleanosDeHoy() {
+  const {mes, dia} = hoyEnBogota();
+  const snap = await db.collection('ninos').where('estadoRegistro', '==', 'Activo').get();
+  const cumpleaneros = snap.docs.filter((doc) => {
+    const fecha = doc.data().fechaNacimiento;
+    if (!fecha) return false;
+    const f = fecha.toDate();
+    return f.getUTCMonth() === mes && f.getUTCDate() === dia;
+  });
+
+  if (cumpleaneros.length === 0) {
+    console.log('Correo de cumpleaños: nadie cumple años hoy.');
+    return;
+  }
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {user: 'rokakidsarmenia@gmail.com', pass: gmailAppPassword.value()},
+  });
+
+  let enviados = 0;
+  let omitidos = 0;
+  for (const doc of cumpleaneros) {
+    const nino = doc.data();
+    const correos = await correosDeAcudientesDe(doc.id);
+    if (correos.length === 0) {
+      omitidos++;
+      continue;
+    }
+    const versiculo = elegirVersiculo();
+    const html = plantillaCorreoCumpleanos(nino.nombres, versiculo);
+    for (const correo of correos) {
+      try {
+        await transporter.sendMail({
+          from: '"RocaKids" <rokakidsarmenia@gmail.com>',
+          to: correo,
+          subject: `¡Feliz cumpleaños ${nino.nombres}! 🎂`,
+          html,
+        });
+        enviados++;
+      } catch (e) {
+        console.error(`No se pudo enviar a ${correo} (niño ${doc.id}):`, e.message || e);
+      }
+    }
+  }
+  console.log(`Correo de cumpleaños: ${cumpleaneros.length} niño(s) cumplen hoy, ${enviados} correo(s) enviados, ${omitidos} niño(s) sin acudiente con correo válido.`);
+}
+
+// Todos los días a las 7:00am hora de Bogotá.
+exports.correoCumpleanosDiario = onSchedule(
+  {schedule: '0 7 * * *', timeZone: 'America/Bogota', secrets: [gmailAppPassword]},
+  async () => {
+    await enviarCorreosCumpleanosDeHoy();
   },
 );
