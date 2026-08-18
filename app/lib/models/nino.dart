@@ -62,6 +62,27 @@ String? grupoParaEdad(int edad) {
   return null;
 }
 
+/// true si el cumpleaños de [fechaNacimiento] (comparando solo mes y
+/// día, sin importar el año) cayó en alguno de los últimos 7 días
+/// (incluyendo hoy). Base de la vista "Cumpleaños" y del aviso al
+/// registrar el ingreso de un niño (2026-08-18, pedido de Rafael).
+bool cumpleEnUltimaSemana(DateTime fechaNacimiento, {DateTime? hoy}) =>
+    diasDesdeCumpleanos(fechaNacimiento, hoy: hoy) != null;
+
+/// Cuántos días atrás cayó el cumpleaños de este año (0 = hoy), o `null`
+/// si no cayó en los últimos 7 días. Sirve para mostrar "Cumple hoy" /
+/// "Cumplió hace N días".
+int? diasDesdeCumpleanos(DateTime fechaNacimiento, {DateTime? hoy}) {
+  final ahora = hoy ?? DateTime.now();
+  for (var i = 0; i < 7; i++) {
+    final dia = ahora.subtract(Duration(days: i));
+    if (dia.month == fechaNacimiento.month && dia.day == fechaNacimiento.day) {
+      return i;
+    }
+  }
+  return null;
+}
+
 /// Genera la llave interna del SOP (§3.2) cuando el menor no tiene
 /// número de documento: fechaNacimiento-PRIMERNOMBRE-PRIMERAPELLIDO.
 String generarLlaveInterna({

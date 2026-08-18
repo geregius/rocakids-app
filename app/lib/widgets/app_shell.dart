@@ -8,6 +8,7 @@ import '../screens/admin/dashboard_screen.dart';
 import '../screens/admin/user_edit_sheet.dart';
 import '../screens/auth_gate.dart';
 import '../screens/cambiar_password_sheet.dart';
+import '../screens/cumpleanos_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/modulo_en_construccion_screen.dart';
 import '../screens/ninos_presentes_screen.dart';
@@ -106,6 +107,12 @@ class AppShell extends StatelessWidget {
           icon: Icons.group_add,
           label: 'Registrar familia',
           onTap: () => _irA(context, RegistrarFamiliaScreen(usuario: usuario)),
+        ),
+      if (esServidor)
+        _ItemMenu(
+          icon: Icons.cake,
+          label: 'Cumpleaños',
+          onTap: () => _irA(context, CumpleanosScreen(usuario: usuario)),
         ),
       // Mismo criterio que "Acudientes y Niños": solo administrador,
       // columna y líder de ministerio (2026-08-18, pedido de Rafael).

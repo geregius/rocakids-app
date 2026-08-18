@@ -680,6 +680,36 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
             ),
           ),
         ),
+        if (cumpleEnUltimaSemana(nino.fechaNacimiento)) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.amarillo.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.cake, color: AppColors.azulMarino),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    (diasDesdeCumpleanos(nino.fechaNacimiento) == 0)
+                        ? '¡${nino.nombres} cumple años hoy! Felicítalo/a.'
+                        : '¡${nino.nombres} estuvo de cumpleaños esta semana '
+                              '(hace ${diasDesdeCumpleanos(nino.fechaNacimiento)} días)! '
+                              'Felicítalo/a.',
+                    style: const TextStyle(
+                      color: AppColors.azulMarino,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         if (nino.alertaMedicaFlag) ...[
           const SizedBox(height: 12),
           Container(

@@ -750,6 +750,22 @@ class AuthService {
         .toList();
   }
 
+  /// Niños "Activo" que cumplieron años en los últimos 7 días (o cumplen
+  /// hoy) — vista "Cumpleaños" (2026-08-18, pedido de Rafael) y aviso al
+  /// registrar su ingreso. Mismo criterio y volumen que
+  /// [obtenerNinosQueGraduanEsteMes]: se computa al vuelo comparando mes
+  /// y día contra hoy, sin importar el año.
+  Future<List<Nino>> obtenerNinosQueCumplieronEstaSemana() async {
+    final snap = await _firestore
+        .collection('ninos')
+        .where('estadoRegistro', isEqualTo: 'Activo')
+        .get();
+    return snap.docs
+        .map((d) => Nino.fromFirestore(d.id, d.data()))
+        .where((n) => cumpleEnUltimaSemana(n.fechaNacimiento))
+        .toList();
+  }
+
   /// Cuántos niños hay hoy en el sistema (colección `ninos` completa) —
   /// estadística simple para el Dashboard. No es una tendencia en el
   /// tiempo porque los documentos de `ninos` no guardan fecha de
