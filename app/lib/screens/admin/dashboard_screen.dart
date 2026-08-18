@@ -109,7 +109,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 8),
                 _BloqueTotales(authService: _authService),
                 const SizedBox(height: 20),
-                _BloqueAlertaGraduacion(authService: _authService),
+                _BloqueAlertaGraduacion(
+                  authService: _authService,
+                  usuario: widget.usuario,
+                ),
                 const SizedBox(height: 32),
                 _TituloBloque('Pendientes'),
                 const SizedBox(height: 8),
@@ -205,46 +208,35 @@ class _BloqueTotales extends StatelessWidget {
 /// iglesia. A propósito NO los gradúa solo — es una alerta para que el
 /// liderazgo lo gestione (ceremonia, aviso a la familia, etc.); marcar
 /// a un niño como "Graduado" se sigue haciendo editando su ficha.
+/// Tarjeta tocable (2026-08-18, pedido de Rafael) — igual que el bloque
+/// "Pendientes": toca para ver exactamente quiénes son.
 class _BloqueAlertaGraduacion extends StatelessWidget {
   final AuthService authService;
-  const _BloqueAlertaGraduacion({required this.authService});
+  final UsuarioApp usuario;
+  const _BloqueAlertaGraduacion({required this.authService, required this.usuario});
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Nino>>(
-      future: authService.obtenerNinosQueGraduanEsteMes(),
+    return FutureBuilder<int>(
+      future: authService.obtenerNinosQueGraduanEsteMes().then((l) => l.length),
       builder: (context, snapshot) {
-        final ninos = snapshot.data;
-        if (ninos == null || ninos.isEmpty) return const SizedBox.shrink();
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.amarillo.withValues(alpha: 0.25),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.school, color: AppColors.textoPrincipal),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${ninos.length} niño${ninos.length == 1 ? '' : 's'} '
-                      'cumple${ninos.length == 1 ? '' : 'n'} '
-                      '${edadMaximaRegistro + 1} años este mes — hay que '
-                      'graduarlo${ninos.length == 1 ? '' : 's'} y pasarlo'
-                      '${ninos.length == 1 ? '' : 's'} al siguiente nivel.',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(ninos.map((n) => n.nombreCompleto).join(', ')),
-                  ],
-                ),
-              ),
-            ],
+        final total = snapshot.data;
+        if (total == 0) return const SizedBox.shrink();
+        return _TarjetaPendiente(
+          etiqueta: total == 1
+              ? 'Niño que cumple ${edadMaximaRegistro + 1} años este mes'
+              : 'Niños que cumplen ${edadMaximaRegistro + 1} años este mes',
+          valor: total,
+          icono: Icons.school,
+          onTap: () => showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            builder: (_) => _ListaPendientesSheet(
+              titulo: 'Cumplen ${edadMaximaRegistro + 1} años este mes',
+              cargar: authService.obtenerNinosQueGraduanEsteMes,
+              esNino: true,
+              usuario: usuario,
+            ),
           ),
         );
       },

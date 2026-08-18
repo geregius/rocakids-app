@@ -4,6 +4,7 @@ import '../models/nino.dart';
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/confirmar_eliminar.dart';
 import 'editar_nino_sheet.dart';
 
 /// Hoja inferior con la ficha completa de un niño: foto, documento, edad
@@ -25,6 +26,9 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
   late Nino _nino;
   bool _cargandoPermiso = true;
   bool _puedeEditar = false;
+  bool _eliminando = false;
+
+  bool get _esAdmin => widget.usuario.rol == RolUsuario.administrador;
 
   @override
   void initState() {
@@ -55,6 +59,23 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
       builder: (_) => EditarNinoSheet(nino: _nino),
     );
     if (guardado == true && mounted) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _eliminar() async {
+    final confirmado = await confirmarEliminar(context, nombre: _nino.nombreCompleto);
+    if (!confirmado) return;
+    setState(() => _eliminando = true);
+    try {
+      await AuthService().eliminarNino(_nino.documentoIdentificacion);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _eliminando = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo eliminar: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -139,6 +160,21 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
                 onPressed: _abrirEdicion,
                 icon: const Icon(Icons.edit),
                 label: const Text('Editar información'),
+              ),
+            ],
+            if (_esAdmin) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _eliminando ? null : _eliminar,
+                style: OutlinedButton.styleFrom(foregroundColor: AppColors.rojo),
+                icon: _eliminando
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.delete_outline),
+                label: const Text('Eliminar niño'),
               ),
             ],
           ],

@@ -1385,6 +1385,64 @@ class AuthService {
     });
   }
 
+  /// Elimina la cuenta de un servidor (2026-08-18, pedido de Rafael) —
+  /// **solo admin** (impuesto también en `firestore.rules`, `usuarios`
+  /// ya tenía `allow delete: if esAdmin()`). Solo borra su documento en
+  /// `usuarios` (quita su acceso a la app de inmediato); su cuenta de
+  /// Firebase Auth NO se borra — el SDK de cliente no puede borrar la
+  /// cuenta de OTRO usuario, solo la propia. Si esa misma persona
+  /// también es acudiente (`acudientes/{uid}`), eso NO se toca — son
+  /// registros independientes.
+  Future<void> eliminarServidor(String uid) {
+    return _firestore.collection('usuarios').doc(uid).delete();
+  }
+
+  /// Elimina a un niño y todo lo que depende directamente de su
+  /// identidad: sus relaciones con acudientes (`nino_acudiente`) y su
+  /// entrada en el índice de búsqueda (`ninos_busqueda`). A propósito
+  /// NO borra sus `registros` históricos de asistencia — quedan como
+  /// dato histórico aunque el niño ya no exista. **Solo admin**.
+  Future<void> eliminarNino(String documentoIdentificacion) async {
+    final relaciones = await _firestore
+        .collection('nino_acudiente')
+        .where('fk_idNino', isEqualTo: documentoIdentificacion)
+        .get();
+    final batch = _firestore.batch();
+    for (final doc in relaciones.docs) {
+      batch.delete(doc.reference);
+    }
+    batch.delete(_firestore.collection('ninos_busqueda').doc(documentoIdentificacion));
+    batch.delete(_firestore.collection('ninos').doc(documentoIdentificacion));
+    await batch.commit();
+  }
+
+  /// Elimina a un acudiente y todo lo que depende directamente de su
+  /// identidad: sus relaciones con niños (`nino_acudiente`) y la reserva
+  /// de unicidad de su documento (`acudientes_documentos`). A propósito
+  /// NO borra `usuarios/{uid}` ni su cuenta de Firebase Auth — si esa
+  /// misma persona también es servidor, no debe perder su acceso por
+  /// esto; si es un acudiente puro, el documento de `usuarios` queda
+  /// huérfano pero inofensivo (sin `acudientes/{uid}`, "Mis hijos" le
+  /// pediría llenar el formulario de nuevo si volviera a entrar).
+  /// **Solo admin**.
+  Future<void> eliminarAcudiente(String uid) async {
+    final doc = await _firestore.collection('acudientes').doc(uid).get();
+    final numeroDocumento = doc.data()?['numeroDocumento'] as String?;
+    final relaciones = await _firestore
+        .collection('nino_acudiente')
+        .where('fk_idAcudiente', isEqualTo: uid)
+        .get();
+    final batch = _firestore.batch();
+    for (final rel in relaciones.docs) {
+      batch.delete(rel.reference);
+    }
+    if (numeroDocumento != null && numeroDocumento.isNotEmpty) {
+      batch.delete(_firestore.collection('acudientes_documentos').doc(numeroDocumento));
+    }
+    batch.delete(_firestore.collection('acudientes').doc(uid));
+    await batch.commit();
+  }
+
   /// Completa/edita el perfil de un servidor (documento, EPS, contacto de
   /// emergencia, foto). Sirve tanto para que el propio servidor llene su
   /// perfil por primera vez, como para que un admin corrija los datos de

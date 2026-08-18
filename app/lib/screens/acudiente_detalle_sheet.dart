@@ -5,6 +5,7 @@ import '../models/nino.dart';
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/confirmar_eliminar.dart';
 import 'editar_acudiente_sheet.dart';
 
 /// Hoja inferior con la ficha completa de un acudiente: documento,
@@ -31,8 +32,10 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
   late Acudiente _acudiente;
   bool _cargandoHijos = true;
   List<Nino> _hijos = [];
+  bool _eliminando = false;
 
   bool get _puedeEditar => widget.usuario.rol.esRolDeServidor;
+  bool get _esAdmin => widget.usuario.rol == RolUsuario.administrador;
 
   @override
   void initState() {
@@ -62,6 +65,23 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
       builder: (_) => EditarAcudienteSheet(acudiente: _acudiente),
     );
     if (guardado == true && mounted) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _eliminar() async {
+    final confirmado = await confirmarEliminar(context, nombre: _acudiente.nombreCompleto);
+    if (!confirmado) return;
+    setState(() => _eliminando = true);
+    try {
+      await AuthService().eliminarAcudiente(_acudiente.uid);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _eliminando = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo eliminar: $e')),
+        );
+      }
+    }
   }
 
   /// Aviso de que este acudiente no tiene correo (o llegó duplicado con
@@ -181,6 +201,21 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
                 onPressed: _abrirEdicion,
                 icon: const Icon(Icons.edit),
                 label: const Text('Editar información'),
+              ),
+            ],
+            if (_esAdmin) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _eliminando ? null : _eliminar,
+                style: OutlinedButton.styleFrom(foregroundColor: AppColors.rojo),
+                icon: _eliminando
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.delete_outline),
+                label: const Text('Eliminar acudiente'),
               ),
             ],
           ],

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../models/usuario_app.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/confirmar_eliminar.dart';
 import 'edit_perfil_servidor_sheet.dart';
 
 /// Hoja inferior con la ficha de un usuario. Quién la abre determina qué
@@ -25,6 +26,7 @@ class _UserEditSheetState extends State<UserEditSheet> {
   late bool _activo;
   DateTime? _fechaVerificacionAntecedentes;
   bool _guardando = false;
+  bool _eliminando = false;
 
   @override
   void initState() {
@@ -68,6 +70,28 @@ class _UserEditSheetState extends State<UserEditSheet> {
 
   bool get _esPropio => FirebaseAuth.instance.currentUser?.uid == widget.usuario.uid;
   bool get _puedeEditarPerfil => widget.esAdmin || _esPropio;
+
+  Future<void> _eliminar() async {
+    final confirmado = await confirmarEliminar(
+      context,
+      nombre: widget.usuario.nombreCompleto.isNotEmpty
+          ? widget.usuario.nombreCompleto
+          : widget.usuario.correo,
+    );
+    if (!confirmado) return;
+    setState(() => _eliminando = true);
+    try {
+      await AuthService().eliminarServidor(widget.usuario.uid);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _eliminando = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo eliminar: $e')),
+        );
+      }
+    }
+  }
 
   Future<void> _abrirEdicionPerfil() async {
     await showModalBottomSheet<void>(
@@ -180,6 +204,21 @@ class _UserEditSheetState extends State<UserEditSheet> {
                       )
                     : const Text('Guardar cambios'),
               ),
+              if (!_esPropio) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _eliminando ? null : _eliminar,
+                  style: OutlinedButton.styleFrom(foregroundColor: AppColors.rojo),
+                  icon: _eliminando
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.delete_outline),
+                  label: const Text('Eliminar servidor'),
+                ),
+              ],
             ],
           ],
         ),

@@ -278,6 +278,17 @@ Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `
 
 ## 9. Qué falta (pendiente, en orden sugerido)
 
+### ✅ Resuelto 2026-08-18: Eliminar niño/acudiente/servidor (solo admin)
+
+Botón "Eliminar" en las tres fichas (`nino_detalle_sheet.dart`, `acudiente_detalle_sheet.dart`, `admin/user_edit_sheet.dart`), visible **solo si `usuario.rol == RolUsuario.administrador`** — con confirmación (`widgets/confirmar_eliminar.dart`, reusado en las tres). `firestore.rules` ya tenía `allow delete: if esAdmin()` en las 6 colecciones que hacía falta tocar (`usuarios`, `acudientes`, `acudientes_documentos`, `ninos`, `ninos_busqueda`, `nino_acudiente`) — no hizo falta cambiar reglas.
+
+- **Eliminar niño** (`AuthService.eliminarNino`): borra `ninos`, `ninos_busqueda`, y sus relaciones en `nino_acudiente`. Los `registros` históricos de asistencia NO se tocan (quedan como dato histórico).
+- **Eliminar acudiente** (`eliminarAcudiente`): borra `acudientes`, `acudientes_documentos`, y sus relaciones en `nino_acudiente`. A propósito NO borra `usuarios/{uid}` (por si esa misma persona también es servidor).
+- **Eliminar servidor** (`eliminarServidor`): borra solo `usuarios/{uid}` (le quita el acceso de inmediato). **No puede eliminarse a sí mismo** (botón oculto si `_esPropio`). Su `acudientes/{uid}` (si tiene) no se toca.
+- **Límite conocido:** ninguno de los tres borra la cuenta de Firebase Auth de la persona — el SDK de cliente no puede borrar la cuenta de OTRO usuario, solo la propia. Queda un login "fantasma" sin acceso a nada útil (sin documento en Firestore). Si hace falta borrar la cuenta de verdad, tocaría hacerlo a mano desde la consola de Firebase o con una Cloud Function con Admin SDK (no existe todavía).
+
+También se convirtió la alerta de "niños que cumplen 11 este mes" en una tarjeta tocable (mismo patrón que "Pendientes", ver abajo) — pedido de Rafael tras ver la primera versión (banner con nombres en texto plano).
+
 ### ✅ Resuelto 2026-08-18: Migración de datos reales (niños + acudientes + relaciones + servidores)
 
 Dos tandas del Módulo 2, mismo día — migrados **460 niños**, **456 acudientes** (con cuenta de Firebase Auth real, contraseña = su número de documento), **626 relaciones niño↔acudiente**, y **30 servidores** (contraseña = documento, rol `'pendiente'` salvo Rafael que ya era admin) desde `DB RocaKids V2 (15).xlsx` a producción. Detalle completo, decisiones de diseño, y cómo restaurar si algo sale mal: ver [[feature-migracion-modulo2-datos-reales]] en la memoria del proyecto — vale la pena leerla completa antes de tocar esto de nuevo. Cubre también un **incidente real ya corregido**: un bug en el script de servidores sobreescribió brevemente el rol de administrador de Rafael a `maestro_principal` — se detectó al auditar el resultado y se corrigió al instante; ningún otro de los 30 servidores resultó afectado.
