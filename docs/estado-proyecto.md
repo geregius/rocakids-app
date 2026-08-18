@@ -277,6 +277,19 @@ Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `
 
 ## 9. Qué falta (pendiente, en orden sugerido)
 
+### ⚠️ Pendiente inmediato — diseñado pero NO implementado (2026-08-17), retomar aquí primero
+
+**Dashboard con gráficas** — pedido de Rafael para líder de ministerio y columna (Rafael confirmó que **admin también debe tener acceso a todo**, así que el gate de rol probablemente deba ser algo como `admin || columna || lider_ministerio`, a confirmar contra el mismo patrón ya usado en `RolUsuario.puedeVerAcudientesYNinos`). Se discutió el diseño con Rafael (preguntó "qué se te ocurre" antes de programar) pero **no se escribió código todavía** — queda para la próxima sesión. Propuesta acordada en la conversación:
+
+1. **Bloque "Hoy" (en vivo, consultas baratas):** total de niños recibidos, desglose por grupo de edad y por servicio (clave los domingos con 2 servicios), presentes vs. ya salieron, visitantes, y cuántos entraron sin documento (dato ya disponible desde [[feature-advertencia-sin-documento]]). Reutiliza casi toda la lógica que ya existe en `ninos_presentes_screen.dart` ("Menores Recibidos").
+2. **Bloque "Histórico" (tendencias en el tiempo):** asistencia por semana/mes, comparación entre servicios, crecimiento de niños registrados.
+3. **⚠️ Decisión de arquitectura pendiente de validar en la próxima sesión:** el histórico calculado leyendo TODOS los `registros` cada vez que se abre el dashboard funciona bien con el volumen actual, pero se puede volver lento/costoso en lecturas de Firestore cuando entren los ~3873 registros históricos del Módulo 2 (sección 9, punto 4) o pasen meses de uso real. Se acordó **empezar simple** (consultas directas) y resolverlo con una tabla de resúmenes pre-calculados (otra Cloud Function, mismo patrón que el cierre automático de sección 5.5) **solo si se vuelve un problema real** — no construir la agregación de una vez, sería sobre-ingeniería para el volumen actual.
+4. **Falta agregar una librería de gráficas a Flutter** — se sugirió `fl_chart` (gratis, la más usada en el ecosistema Flutter). Ninguna dependencia de charts existe todavía en `pubspec.yaml`.
+
+Empezar por aquí en la próxima sesión — confirmar el gate de rol exacto y el detalle de qué métricas van en cada bloque antes de programar.
+
+---
+
 **Resueltos el 2026-08-14** los 3 puntos que Rafael reportó tras probar "Registrar familia" (bug de acudientes mezclados en "Gestión de Servidores", pantalla admin de acudientes/niños, y edición de acudiente/niño desde el check-in) — ver la tabla de pantallas en sección 6 y el resumen de reglas en sección 7 para el detalle de cada uno. Alcance confirmado con Rafael antes de programar: el niño se edita con los mismos campos que ya podía tocar el padre/madre (`editarNino`); el acudiente se edita con "ficha completa" excepto `estadoAutorizacion`/`observacionesRestriccion` y la foto (esos quedan admin-only, mismo patrón ya usado en el resto del proyecto).
 
 1. **Administración de Niños** — ✅ hecho el 2026-08-14 como parte de lo anterior, ver `admin/admin_acudientes_ninos_screen.dart` en sección 6 (incluye también acudientes, no solo niños).
