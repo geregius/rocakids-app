@@ -15,7 +15,7 @@ import '../nino_detalle_sheet.dart';
 /// Nació accesible a cualquier rol de servidor (2026-08-14), pero
 /// Rafael pidió acotarlo (2026-08-17) a solo administrador, columna y
 /// líder de ministerio — ver `RolUsuario.puedeVerAcudientesYNinos` y
-/// `puedeVerListaAcudientes()` en firestore.rules.
+/// `puedeVerInfoLiderazgo()` en firestore.rules.
 class AdminAcudientesNinosScreen extends StatefulWidget {
   final UsuarioApp usuario;
 

@@ -94,7 +94,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final esAdmin = widget.usuario.rol == RolUsuario.administrador;
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Dashboard',
@@ -105,7 +104,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 _TituloBloque('Totales del sistema'),
                 const SizedBox(height: 8),
-                _BloqueTotales(authService: _authService, esAdmin: esAdmin),
+                _BloqueTotales(authService: _authService),
                 const SizedBox(height: 32),
                 _TituloBloque('Hoy'),
                 const SizedBox(height: 8),
@@ -137,14 +136,14 @@ class _TituloBloque extends StatelessWidget {
 }
 
 /// Conteos simples de "ahora mismo" — no dependen del filtro de fecha
-/// del bloque Histórico. "Servidores activos" solo se pide (y se
-/// muestra) si [esAdmin]: ver docstring de
-/// [AuthService.contarServidoresActivos].
+/// del bloque Histórico. Las tres estadísticas usan el mismo permiso
+/// (`puedeVerInfoLiderazgo()` en firestore.rules: administrador, columna,
+/// líder de ministerio — el mismo conjunto que da acceso al Dashboard),
+/// así que todo quien vea esta pantalla ve las tres.
 class _BloqueTotales extends StatelessWidget {
   final AuthService authService;
-  final bool esAdmin;
 
-  const _BloqueTotales({required this.authService, required this.esAdmin});
+  const _BloqueTotales({required this.authService});
 
   @override
   Widget build(BuildContext context) {
@@ -152,7 +151,7 @@ class _BloqueTotales extends StatelessWidget {
       future: Future.wait([
         authService.contarNinosRegistrados(),
         authService.contarAcudientesRegistrados(),
-        if (esAdmin) authService.contarServidoresActivos(),
+        authService.contarServidoresActivos(),
       ]),
       builder: (context, snapshot) {
         final valores = snapshot.data;
@@ -170,12 +169,11 @@ class _BloqueTotales extends StatelessWidget {
               valor: valores != null ? '${valores[1]}' : '…',
               icono: Icons.family_restroom,
             ),
-            if (esAdmin)
-              _StatTile(
-                etiqueta: 'Servidores activos',
-                valor: valores != null ? '${valores[2]}' : '…',
-                icono: Icons.volunteer_activism,
-              ),
+            _StatTile(
+              etiqueta: 'Servidores activos',
+              valor: valores != null ? '${valores[2]}' : '…',
+              icono: Icons.volunteer_activism,
+            ),
           ],
         );
       },
