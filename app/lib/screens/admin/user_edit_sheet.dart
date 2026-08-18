@@ -143,6 +143,7 @@ class _UserEditSheetState extends State<UserEditSheet> {
             ),
             if (u.perfilCompleto) ...[
               const SizedBox(height: 16),
+              _FilaDato('Correo electrónico', u.correo),
               _FilaDato('Documento', '${u.tipoDocumento} ${u.numeroDocumento}'),
               _FilaDato('Teléfono', u.telefono),
               _FilaDato('EPS', u.epsNombre),
