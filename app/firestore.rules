@@ -219,25 +219,18 @@ service cloud.firestore {
       // pueden crear o consultar el historial — es información operativa
       // de seguridad, no algo que cualquier acudiente deba poder ver.
       //
-      // Bloqueo explícito (decisión de Rafael, importante para la
-      // migración del Módulo 2: muchos niños migrados no van a tener
-      // número de documento): TODO movimiento debe tener un documento de
-      // identidad asociado — el del niño YA REGISTRADO (`ninos.
-      // identificacionMenor`), o el capturado en el momento para un niño
-      // VISITANTE (`documentoNinoVisitante`). Ningún caso puede quedar
-      // sin documento.
-      // Bloqueo explícito adicional (pedido de Rafael, 2026-08-17): no se
-      // puede registrar una Entrada para un niño que YA está presente —
-      // evita duplicados. No aplica a niños visitante (no tienen doc en
+      // El bloqueo por falta de documento (2026-08-14) se QUITÓ el
+      // 2026-08-17 — Rafael pidió permitir el registro igual, mostrando
+      // una advertencia en la UI en su lugar (no todos los niños
+      // migrados del Módulo 2 van a tener documento, y en la práctica no
+      // siempre se puede conseguir en el momento).
+      //
+      // Bloqueo explícito (pedido de Rafael, 2026-08-17): no se puede
+      // registrar una Entrada para un niño que YA está presente — evita
+      // duplicados. No aplica a niños visitante (no tienen doc en
       // `ninos`) ni a movimientos de Salida.
       allow create: if puedeRegistrarAsistencia()
         && request.resource.data.fkIdServidor == request.auth.uid
-        && (
-          request.resource.data.fkIdNino != ''
-            ? get(/databases/$(database)/documents/ninos/$(request.resource.data.fkIdNino))
-                .data.identificacionMenor != ''
-            : request.resource.data.documentoNinoVisitante != ''
-        )
         && (
           request.resource.data.tipoMovimiento != 'Entrada'
             || request.resource.data.fkIdNino == ''

@@ -632,6 +632,22 @@ class AuthService {
     return Registro.fromFirestore(snap.docs.first.id, snap.docs.first.data());
   }
 
+  /// Cuántas veces un niño ha tenido Entrada en los últimos 30 días —
+  /// para la alerta reforzada en `registro_asistencia_screen.dart`
+  /// cuando el niño sigue sin documento (2026-08-17, pedido de Rafael:
+  /// ya no se bloquea el registro sin documento, pero si se repite
+  /// mucho hay que insistir más en conseguirlo).
+  Future<int> contarEntradasUltimoMes(String fkIdNino) async {
+    final desde = DateTime.now().subtract(const Duration(days: 30));
+    final snap = await _firestore
+        .collection('registros')
+        .where('fkIdNino', isEqualTo: fkIdNino)
+        .where('tipoMovimiento', isEqualTo: 'Entrada')
+        .where('fechaMovimiento', isGreaterThanOrEqualTo: Timestamp.fromDate(desde))
+        .get();
+    return snap.docs.length;
+  }
+
   /// Los acudientes autorizados a entregar/retirar a un niño (vía
   /// `nino_acudiente`) — para que quien hace el check-in/check-out
   /// verifique visualmente (foto de seguridad) quién está presente, en

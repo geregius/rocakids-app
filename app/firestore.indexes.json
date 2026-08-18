@@ -7,6 +7,15 @@
         { "fieldPath": "fkIdNino", "order": "ASCENDING" },
         { "fieldPath": "fechaMovimiento", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "registros",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fkIdNino", "order": "ASCENDING" },
+        { "fieldPath": "tipoMovimiento", "order": "ASCENDING" },
+        { "fieldPath": "fechaMovimiento", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -47,10 +47,13 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   bool _otroAcudiente = false;
   final _otroNombreController = TextEditingController();
 
-  // Completar documento de un niño ya registrado que no lo tenía.
+  // Completar documento de un niño ya registrado que no lo tenía. Ya no
+  // es obligatorio (2026-08-17) — es una advertencia + formulario
+  // opcional, no un bloqueo.
   String? _tipoIdentificacionCompletar;
   final _documentoCompletarController = TextEditingController();
   bool _guardandoDocumento = false;
+  int? _entradasRecientesSinDocumento;
 
   // Compartidos entre el formulario de niño registrado y el de visitante.
   String? _servicio;
@@ -129,6 +132,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       _otroNombreController.clear();
       _tipoIdentificacionCompletar = null;
       _documentoCompletarController.clear();
+      _entradasRecientesSinDocumento = null;
     });
     try {
       final nino = await _authService.obtenerNinoPorDocumento(
@@ -152,11 +156,17 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       final acudientes = await _authService.obtenerAcudientesDeNino(
         nino.documentoIdentificacion,
       );
+      // Solo hace falta este conteo si sigue sin documento — es lo que
+      // decide si la advertencia es normal o reforzada.
+      final entradasRecientes = nino.identificacionMenor.isEmpty
+          ? await _authService.contarEntradasUltimoMes(nino.documentoIdentificacion)
+          : null;
       if (!mounted) return;
       setState(() {
         _nino = nino;
         _ultimoMovimiento = ultimoMovimiento;
         _acudientes = acudientes;
+        _entradasRecientesSinDocumento = entradasRecientes;
         _cargandoDetalle = false;
       });
     } catch (e) {
@@ -216,6 +226,52 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
         _guardandoDocumento = false;
       });
     }
+  }
+
+  /// Advertencia (no bloqueo, desde 2026-08-17) cuando el niño seleccionado
+  /// no tiene documento — se refuerza si ya ha entrado más de 2 veces en
+  /// el último mes sin él (`_entradasRecientesSinDocumento`, `null`
+  /// mientras se está calculando).
+  Widget _avisoSinDocumento() {
+    final entradas = _entradasRecientesSinDocumento;
+    final alertaFuerte = entradas != null && entradas > 2;
+    final color = alertaFuerte ? AppColors.rojo : AppColors.amarillo;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: alertaFuerte ? 0.15 : 0.25),
+        borderRadius: BorderRadius.circular(8),
+        border: alertaFuerte
+            ? Border.all(color: AppColors.rojo, width: 1.5)
+            : null,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            alertaFuerte ? Icons.block : Icons.info_outline,
+            color: alertaFuerte ? AppColors.rojo : AppColors.textoPrincipal,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              alertaFuerte
+                  ? 'Este niño no tiene documento y ya ha entrado $entradas '
+                        'veces en el último mes sin él. Por favor solicita el '
+                        'documento a la familia antes de continuar.'
+                  : 'Este niño no tiene número de documento registrado. Se '
+                        'recomienda solicitarlo a la familia, pero puedes '
+                        'continuar el registro sin él.',
+              style: TextStyle(
+                color: alertaFuerte ? AppColors.rojo : AppColors.textoPrincipal,
+                fontWeight: alertaFuerte ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Edita los datos del niño seleccionado ahí mismo, en el momento del
@@ -299,14 +355,6 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
 
   Future<void> _registrarMovimientoNino() async {
     if (_nino == null) return;
-    if (_nino!.identificacionMenor.isEmpty) {
-      setState(
-        () => _error =
-            'Este niño no tiene número de documento — complétalo primero arriba '
-            'para poder registrar su entrada o salida.',
-      );
-      return;
-    }
     if (_servicio == null) {
       setState(() => _error = 'Selecciona el servicio.');
       return;
@@ -374,14 +422,6 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       setState(() => _error = 'Selecciona el grupo aproximado del niño.');
       return;
     }
-    if (_tipoIdentificacionVisitante == null) {
-      setState(() => _error = 'Selecciona el tipo de documento del niño.');
-      return;
-    }
-    if (_documentoVisitanteController.text.trim().isEmpty) {
-      setState(() => _error = 'Ingresa el número de documento del niño.');
-      return;
-    }
     if (_acudienteVisitanteController.text.trim().isEmpty) {
       setState(() => _error = 'Ingresa el nombre del adulto que lo trae.');
       return;
@@ -409,7 +449,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       fkIdServidor: '',
       nombreServidor: widget.usuario.nombreCompleto,
       nombreAcudienteContacto: _acudienteVisitanteController.text.trim(),
-      tipoIdentificacionVisitante: _tipoIdentificacionVisitante!,
+      tipoIdentificacionVisitante: _tipoIdentificacionVisitante ?? '',
       documentoNinoVisitante: _documentoVisitanteController.text.trim(),
       telefonoAcudienteVisitante: _telefonoVisitanteController.text.trim(),
       alertaMedicaVisitante: _alertaMedicaVisitante,
@@ -667,40 +707,30 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
         ],
         if (nino.identificacionMenor.isEmpty) ...[
           const SizedBox(height: 16),
+          _avisoSinDocumento(),
+          const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.rojo.withValues(alpha: 0.1),
+              color: AppColors.superficie,
               borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: AppColors.azulClaro.withValues(alpha: 0.4),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.block, color: AppColors.rojo),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Este niño no tiene número de documento registrado. No se '
-                        'puede registrar su entrada ni salida hasta completarlo. '
-                        'Complétalo aquí mismo:',
-                        style: TextStyle(
-                          color: AppColors.rojo,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
+                const Text(
+                  'Si la familia tiene el documento a la mano, complétalo aquí '
+                  '(opcional):',
+                  style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _tipoIdentificacionCompletar,
                   decoration: const InputDecoration(
                     labelText: 'Tipo de documento',
-                    filled: true,
-                    fillColor: AppColors.superficie,
                   ),
                   items: tiposIdentificacionMenor
                       .where((t) => t != 'No tiene documento')
@@ -714,8 +744,6 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
                   controller: _documentoCompletarController,
                   decoration: const InputDecoration(
                     labelText: 'Número de documento',
-                    filled: true,
-                    fillColor: AppColors.superficie,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -735,7 +763,8 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
               ],
             ),
           ),
-        ] else if (_accion == 'Salida') ...[
+        ],
+        if (_accion == 'Salida') ...[
           // Este niño ya tiene una Entrada de hoy sin Salida — esta
           // pantalla es solo para registrar ENTRADAS (pedido de Rafael,
           // 2026-08-17). Para darle salida, se hace desde "Menores
@@ -953,7 +982,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
         DropdownButtonFormField<String>(
           initialValue: _tipoIdentificacionVisitante,
           decoration: const InputDecoration(
-            labelText: 'Tipo de documento del niño',
+            labelText: 'Tipo de documento del niño (opcional)',
           ),
           items: tiposIdentificacionMenor
               .where((t) => t != 'No tiene documento')
@@ -965,8 +994,14 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
         TextFormField(
           controller: _documentoVisitanteController,
           decoration: const InputDecoration(
-            labelText: 'Número de documento del niño',
+            labelText: 'Número de documento del niño (opcional)',
           ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Si no tiene documento, puedes continuar sin llenar este campo — '
+          'recomiéndale a la familia completarlo pronto.',
+          style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 16),
         TextFormField(
