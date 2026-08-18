@@ -638,6 +638,84 @@ class AuthService {
         .toList();
   }
 
+  /// Niños/acudientes con algún dato pendiente — para el bloque
+  /// "Pendientes" del Dashboard (2026-08-18, pedido de Rafael): un dato
+  /// interactivo por categoría, que al tocarlo muestra la lista exacta
+  /// de quiénes son. Mismo permiso que el resto de conteos del
+  /// Dashboard (`puedeVerInfoLiderazgo()` para acudientes; `ninos` es
+  /// más abierto pero el Dashboard igual acota quién ve esta pantalla).
+  Future<int> contarNinosSinFoto() async {
+    final snap = await _firestore
+        .collection('ninos')
+        .where('fotoUrl', isEqualTo: '')
+        .count()
+        .get();
+    return snap.count ?? 0;
+  }
+
+  Future<List<Nino>> obtenerNinosSinFoto() async {
+    final snap = await _firestore
+        .collection('ninos')
+        .where('fotoUrl', isEqualTo: '')
+        .get();
+    return snap.docs.map((d) => Nino.fromFirestore(d.id, d.data())).toList()
+      ..sort((a, b) => a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase()));
+  }
+
+  Future<int> contarNinosSinDocumento() async {
+    final snap = await _firestore
+        .collection('ninos')
+        .where('identificacionMenor', isEqualTo: '')
+        .count()
+        .get();
+    return snap.count ?? 0;
+  }
+
+  Future<List<Nino>> obtenerNinosSinDocumento() async {
+    final snap = await _firestore
+        .collection('ninos')
+        .where('identificacionMenor', isEqualTo: '')
+        .get();
+    return snap.docs.map((d) => Nino.fromFirestore(d.id, d.data())).toList()
+      ..sort((a, b) => a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase()));
+  }
+
+  Future<int> contarAcudientesSinFoto() async {
+    final snap = await _firestore
+        .collection('acudientes')
+        .where('fotoSeguridadUrl', isEqualTo: '')
+        .count()
+        .get();
+    return snap.count ?? 0;
+  }
+
+  Future<List<Acudiente>> obtenerAcudientesSinFoto() async {
+    final snap = await _firestore
+        .collection('acudientes')
+        .where('fotoSeguridadUrl', isEqualTo: '')
+        .get();
+    return snap.docs.map((d) => Acudiente.fromFirestore(d.id, d.data())).toList()
+      ..sort((a, b) => a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase()));
+  }
+
+  Future<int> contarAcudientesConCorreoPendiente() async {
+    final snap = await _firestore
+        .collection('acudientes')
+        .where('correoPendienteDeCorregir', isEqualTo: true)
+        .count()
+        .get();
+    return snap.count ?? 0;
+  }
+
+  Future<List<Acudiente>> obtenerAcudientesConCorreoPendiente() async {
+    final snap = await _firestore
+        .collection('acudientes')
+        .where('correoPendienteDeCorregir', isEqualTo: true)
+        .get();
+    return snap.docs.map((d) => Acudiente.fromFirestore(d.id, d.data())).toList()
+      ..sort((a, b) => a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase()));
+  }
+
   /// Cuántos niños se han "graduado" del ministerio infantil (más de
   /// [edadMaximaRegistro] años, `estadoRegistro == 'Graduado'`) — para
   /// el Dashboard, pedido de Rafael 2026-08-18: "mostrar niños que

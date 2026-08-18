@@ -1,12 +1,15 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/acudiente.dart';
 import '../../models/nino.dart';
 import '../../models/registro.dart';
 import '../../models/usuario_app.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_shell.dart';
+import '../acudiente_detalle_sheet.dart';
+import '../nino_detalle_sheet.dart';
 
 /// Nombres cortos de cada servicio para que quepan como etiqueta de eje
 /// en las gráficas (los nombres completos de [serviciosDisponibles] son
@@ -107,6 +110,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _BloqueTotales(authService: _authService),
                 const SizedBox(height: 20),
                 _BloqueAlertaGraduacion(authService: _authService),
+                const SizedBox(height: 32),
+                _TituloBloque('Pendientes'),
+                const SizedBox(height: 8),
+                _BloquePendientes(
+                  authService: _authService,
+                  usuario: widget.usuario,
+                ),
                 const SizedBox(height: 32),
                 _TituloBloque('Hoy'),
                 const SizedBox(height: 8),
@@ -236,6 +246,248 @@ class _BloqueAlertaGraduacion extends StatelessWidget {
               ),
             ],
           ),
+        );
+      },
+    );
+  }
+}
+
+/// Bloque "Pendientes" (2026-08-18, pedido de Rafael): un dato
+/// interactivo por categoría de dato faltante — al tocar una tarjeta se
+/// abre la lista exacta de quiénes son (`_ListaPendientesSheet`), y
+/// tocar a alguien de esa lista abre su ficha completa para poder
+/// corregirlo ahí mismo. Cada conteo es una consulta acotada
+/// (`where` + `count()`), no trae toda la colección salvo que se abra
+/// la lista.
+class _BloquePendientes extends StatelessWidget {
+  final AuthService authService;
+  final UsuarioApp usuario;
+
+  const _BloquePendientes({required this.authService, required this.usuario});
+
+  void _abrirLista(
+    BuildContext context, {
+    required String titulo,
+    required Future<List<dynamic>> Function() cargar,
+    required bool esNino,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _ListaPendientesSheet(
+        titulo: titulo,
+        cargar: cargar,
+        esNino: esNino,
+        usuario: usuario,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<int>>(
+      future: Future.wait([
+        authService.contarNinosSinFoto(),
+        authService.contarNinosSinDocumento(),
+        authService.contarAcudientesSinFoto(),
+        authService.contarAcudientesConCorreoPendiente(),
+      ]),
+      builder: (context, snapshot) {
+        final valores = snapshot.data;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _TarjetaPendiente(
+              etiqueta: 'Niños sin foto',
+              valor: valores != null ? valores[0] : null,
+              icono: Icons.no_photography,
+              onTap: () => _abrirLista(
+                context,
+                titulo: 'Niños sin foto',
+                cargar: authService.obtenerNinosSinFoto,
+                esNino: true,
+              ),
+            ),
+            _TarjetaPendiente(
+              etiqueta: 'Niños sin documento',
+              valor: valores != null ? valores[1] : null,
+              icono: Icons.badge_outlined,
+              onTap: () => _abrirLista(
+                context,
+                titulo: 'Niños sin documento',
+                cargar: authService.obtenerNinosSinDocumento,
+                esNino: true,
+              ),
+            ),
+            _TarjetaPendiente(
+              etiqueta: 'Acudientes sin foto',
+              valor: valores != null ? valores[2] : null,
+              icono: Icons.no_photography,
+              onTap: () => _abrirLista(
+                context,
+                titulo: 'Acudientes sin foto',
+                cargar: authService.obtenerAcudientesSinFoto,
+                esNino: false,
+              ),
+            ),
+            _TarjetaPendiente(
+              etiqueta: 'Acudientes con correo pendiente',
+              valor: valores != null ? valores[3] : null,
+              icono: Icons.mail_outline,
+              onTap: () => _abrirLista(
+                context,
+                titulo: 'Acudientes con correo pendiente',
+                cargar: authService.obtenerAcudientesConCorreoPendiente,
+                esNino: false,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Tarjeta de estadística tocable — como [_StatTile] pero interactiva:
+/// se deshabilita mientras el conteo sigue en 0 (nada que mostrar) y
+/// muestra un ícono de flecha cuando sí hay algo que ver.
+class _TarjetaPendiente extends StatelessWidget {
+  final String etiqueta;
+  final int? valor;
+  final IconData icono;
+  final VoidCallback onTap;
+
+  const _TarjetaPendiente({
+    required this.etiqueta,
+    required this.valor,
+    required this.icono,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hayAlgo = (valor ?? 0) > 0;
+    return InkWell(
+      onTap: hayAlgo ? onTap : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 190,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: hayAlgo
+              ? AppColors.amarillo.withValues(alpha: 0.12)
+              : AppColors.superficie,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: hayAlgo
+                ? AppColors.amarillo.withValues(alpha: 0.5)
+                : AppColors.azulMarino.withValues(alpha: 0.15),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icono, color: AppColors.azulMarino),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    valor != null ? '$valor' : '…',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textoPrincipal,
+                    ),
+                  ),
+                  Text(etiqueta, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+            if (hayAlgo)
+              const Icon(Icons.chevron_right, color: AppColors.textoPrincipal),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Hoja inferior con la lista exacta de niños o acudientes de una
+/// categoría de "Pendientes". Tocar a alguien abre su ficha completa
+/// (misma que usan el resto de pantallas) para poder corregirlo ahí.
+class _ListaPendientesSheet extends StatelessWidget {
+  final String titulo;
+  final Future<List<dynamic>> Function() cargar;
+  final bool esNino;
+  final UsuarioApp usuario;
+
+  const _ListaPendientesSheet({
+    required this.titulo,
+    required this.cargar,
+    required this.esNino,
+    required this.usuario,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        return FutureBuilder<List<dynamic>>(
+          future: cargar(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final items = snapshot.data!;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                  child: Text(
+                    '$titulo (${items.length})',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemCount: items.length,
+                    itemBuilder: (context, i) {
+                      final item = items[i];
+                      final nombre = esNino
+                          ? (item as Nino).nombreCompleto
+                          : (item as Acudiente).nombreCompleto;
+                      return ListTile(
+                        leading: Icon(
+                          esNino ? Icons.child_care : Icons.person,
+                          color: AppColors.azulMarino,
+                        ),
+                        title: Text(nombre),
+                        onTap: () => showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          builder: (_) => esNino
+                              ? NinoDetalleSheet(nino: item as Nino, usuario: usuario)
+                              : AcudienteDetalleSheet(
+                                  acudiente: item as Acudiente,
+                                  usuario: usuario,
+                                ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     );
