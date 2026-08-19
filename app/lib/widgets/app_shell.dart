@@ -8,7 +8,8 @@ import '../screens/admin/dashboard_screen.dart';
 import '../screens/admin/user_edit_sheet.dart';
 import '../screens/auth_gate.dart';
 import '../screens/cambiar_password_sheet.dart';
-import '../screens/cumpleanos_screen.dart';
+import '../screens/cumpleanos_ninos_screen.dart';
+import '../screens/cumpleanos_servidores_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/modulo_en_construccion_screen.dart';
 import '../screens/ninos_presentes_screen.dart';
@@ -111,8 +112,20 @@ class AppShell extends StatelessWidget {
       if (esServidor)
         _ItemMenu(
           icon: Icons.cake,
-          label: 'Cumpleaños',
-          onTap: () => _irA(context, CumpleanosScreen(usuario: usuario)),
+          label: 'Cumpleaños niños',
+          onTap: () => _irA(context, CumpleanosNinosScreen(usuario: usuario)),
+        ),
+      // Solo administrador, columna y líder de ministerio (2026-08-19,
+      // mismo criterio que "Acudientes y Niños"/"Dashboard") — a
+      // diferencia de "Cumpleaños niños", `usuarios` guarda datos
+      // sensibles del servidor ya acotados a liderazgo en el resto de
+      // la app.
+      if (usuario.rol.puedeVerAcudientesYNinos)
+        _ItemMenu(
+          icon: Icons.celebration,
+          label: 'Cumpleaños Servidores',
+          onTap: () =>
+              _irA(context, CumpleanosServidoresScreen(usuario: usuario)),
         ),
       // Mismo criterio que "Acudientes y Niños": solo administrador,
       // columna y líder de ministerio (2026-08-18, pedido de Rafael).

@@ -96,7 +96,8 @@ enum RolUsuario {
   /// Roles operativos del ministerio: una vez asignados, la persona debe
   /// completar su perfil de servidor (documento, EPS, contacto de
   /// emergencia, foto) antes de poder usar la app.
-  bool get esRolDeServidor => this != RolUsuario.usuarioExterno &&
+  bool get esRolDeServidor =>
+      this != RolUsuario.usuarioExterno &&
       this != RolUsuario.pendiente &&
       this != RolUsuario.desconocido;
 
@@ -149,6 +150,12 @@ class UsuarioApp {
   // Solo lo edita un administrador (verificación externa a la app).
   final DateTime? fechaVerificacionAntecedentes;
 
+  // Fecha de nacimiento del servidor (2026-08-19, para "Cumpleaños
+  // Servidores") — opcional, la llena el propio servidor (o un admin)
+  // desde "Editar información"; no existía ningún dato de esto en la
+  // base vieja, así que empieza vacía para todos los ya migrados.
+  final DateTime? fechaNacimiento;
+
   const UsuarioApp({
     required this.uid,
     required this.correo,
@@ -165,9 +172,11 @@ class UsuarioApp {
     this.contactoEmergenciaTelefono = '',
     this.fotoUrl = '',
     this.fechaVerificacionAntecedentes,
+    this.fechaNacimiento,
   });
 
-  String get nombreCompleto => [nombre, apellido].where((s) => s.isNotEmpty).join(' ');
+  String get nombreCompleto =>
+      [nombre, apellido].where((s) => s.isNotEmpty).join(' ');
 
   /// Todos los campos del perfil de servidor (no el rol/activo, que
   /// controla el admin) están llenos.
@@ -181,11 +190,9 @@ class UsuarioApp {
       contactoEmergenciaTelefono.isNotEmpty &&
       fotoUrl.isNotEmpty;
 
-  factory UsuarioApp.fromFirestore(
-    String uid,
-    Map<String, dynamic> data,
-  ) {
+  factory UsuarioApp.fromFirestore(String uid, Map<String, dynamic> data) {
     final antecedentes = data['fechaVerificacionAntecedentes'];
+    final nacimiento = data['fechaNacimiento'];
     return UsuarioApp(
       uid: uid,
       correo: data['correo'] as String? ?? '',
@@ -198,11 +205,15 @@ class UsuarioApp {
       telefono: data['telefono'] as String? ?? '',
       epsNombre: data['epsNombre'] as String? ?? '',
       grupoSanguineo: data['grupoSanguineo'] as String? ?? '',
-      contactoEmergenciaNombre: data['contactoEmergenciaNombre'] as String? ?? '',
-      contactoEmergenciaTelefono: data['contactoEmergenciaTelefono'] as String? ?? '',
+      contactoEmergenciaNombre:
+          data['contactoEmergenciaNombre'] as String? ?? '',
+      contactoEmergenciaTelefono:
+          data['contactoEmergenciaTelefono'] as String? ?? '',
       fotoUrl: data['fotoUrl'] as String? ?? '',
-      fechaVerificacionAntecedentes:
-          antecedentes is Timestamp ? antecedentes.toDate() : null,
+      fechaVerificacionAntecedentes: antecedentes is Timestamp
+          ? antecedentes.toDate()
+          : null,
+      fechaNacimiento: nacimiento is Timestamp ? nacimiento.toDate() : null,
     );
   }
 }

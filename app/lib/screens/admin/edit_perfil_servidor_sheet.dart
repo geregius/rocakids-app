@@ -21,7 +21,8 @@ class EditPerfilServidorSheet extends StatefulWidget {
   });
 
   @override
-  State<EditPerfilServidorSheet> createState() => _EditPerfilServidorSheetState();
+  State<EditPerfilServidorSheet> createState() =>
+      _EditPerfilServidorSheetState();
 }
 
 class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
@@ -37,6 +38,9 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
   String? _tipoDocumento;
   String? _grupoSanguineo;
   late String _fotoUrl;
+  int? _diaNacimiento;
+  int? _mesNacimiento;
+  int? _anioNacimiento;
 
   bool _subiendoFoto = false;
   bool _guardando = false;
@@ -49,11 +53,27 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
     _numeroDocumentoController = TextEditingController(text: u.numeroDocumento);
     _telefonoController = TextEditingController(text: u.telefono);
     _epsController = TextEditingController(text: u.epsNombre);
-    _contactoNombreController = TextEditingController(text: u.contactoEmergenciaNombre);
-    _contactoTelefonoController = TextEditingController(text: u.contactoEmergenciaTelefono);
+    _contactoNombreController = TextEditingController(
+      text: u.contactoEmergenciaNombre,
+    );
+    _contactoTelefonoController = TextEditingController(
+      text: u.contactoEmergenciaTelefono,
+    );
     _tipoDocumento = u.tipoDocumento.isNotEmpty ? u.tipoDocumento : null;
     _grupoSanguineo = u.grupoSanguineo.isNotEmpty ? u.grupoSanguineo : null;
     _fotoUrl = u.fotoUrl;
+    _diaNacimiento = u.fechaNacimiento?.day;
+    _mesNacimiento = u.fechaNacimiento?.month;
+    _anioNacimiento = u.fechaNacimiento?.year;
+  }
+
+  DateTime? get _fechaNacimientoElegida {
+    if (_diaNacimiento == null ||
+        _mesNacimiento == null ||
+        _anioNacimiento == null) {
+      return null;
+    }
+    return DateTime(_anioNacimiento!, _mesNacimiento!, _diaNacimiento!);
   }
 
   @override
@@ -73,14 +93,16 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
 
       setState(() => _subiendoFoto = true);
       final bytes = await archivo.readAsBytes();
-      final extension = archivo.name.contains('.') ? archivo.name.split('.').last : 'jpg';
+      final extension = archivo.name.contains('.')
+          ? archivo.name.split('.').last
+          : 'jpg';
       final url = await _authService.subirFotoServidor(bytes, extension);
       setState(() => _fotoUrl = url);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo subir la foto: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No se pudo subir la foto: $e')));
       }
     } finally {
       if (mounted) setState(() => _subiendoFoto = false);
@@ -106,6 +128,7 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
         contactoEmergenciaNombre: _contactoNombreController.text.trim(),
         contactoEmergenciaTelefono: _contactoTelefonoController.text.trim(),
         fotoUrl: _fotoUrl,
+        fechaNacimiento: _fechaNacimientoElegida,
       );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -115,7 +138,8 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
     }
   }
 
-  String? _requerido(String? v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null;
+  String? _requerido(String? v) =>
+      (v == null || v.trim().isEmpty) ? 'Requerido' : null;
 
   @override
   Widget build(BuildContext context) {
@@ -133,7 +157,10 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Editar información', style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                'Editar información',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: 16),
               if (widget.esPropio)
                 Center(
@@ -143,15 +170,24 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
                         onTap: _subiendoFoto ? null : _elegirFoto,
                         child: CircleAvatar(
                           radius: 40,
-                          backgroundColor: AppColors.azulClaro.withValues(alpha: 0.2),
-                          backgroundImage: _fotoUrl.isNotEmpty ? NetworkImage(_fotoUrl) : null,
+                          backgroundColor: AppColors.azulClaro.withValues(
+                            alpha: 0.2,
+                          ),
+                          backgroundImage: _fotoUrl.isNotEmpty
+                              ? NetworkImage(_fotoUrl)
+                              : null,
                           child: _subiendoFoto
                               ? const CircularProgressIndicator()
-                              : (_fotoUrl.isEmpty ? const Icon(Icons.add_a_photo) : null),
+                              : (_fotoUrl.isEmpty
+                                    ? const Icon(Icons.add_a_photo)
+                                    : null),
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text('Toca para cambiar tu foto', style: Theme.of(context).textTheme.bodySmall),
+                      Text(
+                        'Toca para cambiar tu foto',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ],
                   ),
                 ),
@@ -159,13 +195,19 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
               TextFormField(
                 initialValue: widget.usuario.correo,
                 enabled: false,
-                decoration: const InputDecoration(labelText: 'Correo electrónico'),
+                decoration: const InputDecoration(
+                  labelText: 'Correo electrónico',
+                ),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _tipoDocumento,
-                decoration: const InputDecoration(labelText: 'Tipo de documento'),
-                items: tiposDocumento.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                decoration: const InputDecoration(
+                  labelText: 'Tipo de documento',
+                ),
+                items: tiposDocumento
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                    .toList(),
                 onChanged: (v) => setState(() => _tipoDocumento = v),
                 validator: (v) => v == null ? 'Requerido' : null,
               ),
@@ -173,7 +215,9 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
               TextFormField(
                 controller: _numeroDocumentoController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Número de documento'),
+                decoration: const InputDecoration(
+                  labelText: 'Número de documento',
+                ),
                 validator: _requerido,
               ),
               const SizedBox(height: 16),
@@ -193,12 +237,81 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
               DropdownButtonFormField<String>(
                 initialValue: _grupoSanguineo,
                 decoration: const InputDecoration(labelText: 'Grupo sanguíneo'),
-                items: gruposSanguineos.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                items: gruposSanguineos
+                    .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                    .toList(),
                 onChanged: (v) => setState(() => _grupoSanguineo = v),
                 validator: (v) => v == null ? 'Requerido' : null,
               ),
               const SizedBox(height: 20),
-              Text('Contacto de emergencia', style: Theme.of(context).textTheme.titleSmall),
+              Text(
+                'Fecha de nacimiento (opcional)',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: DropdownButtonFormField<int>(
+                      initialValue: _diaNacimiento,
+                      decoration: const InputDecoration(labelText: 'Día'),
+                      items: List.generate(
+                        31,
+                        (i) => DropdownMenuItem(
+                          value: i + 1,
+                          child: Text('${i + 1}'),
+                        ),
+                      ),
+                      onChanged: (v) => setState(() => _diaNacimiento = v),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 3,
+                    child: DropdownButtonFormField<int>(
+                      initialValue: _mesNacimiento,
+                      decoration: const InputDecoration(labelText: 'Mes'),
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text('Enero')),
+                        DropdownMenuItem(value: 2, child: Text('Febrero')),
+                        DropdownMenuItem(value: 3, child: Text('Marzo')),
+                        DropdownMenuItem(value: 4, child: Text('Abril')),
+                        DropdownMenuItem(value: 5, child: Text('Mayo')),
+                        DropdownMenuItem(value: 6, child: Text('Junio')),
+                        DropdownMenuItem(value: 7, child: Text('Julio')),
+                        DropdownMenuItem(value: 8, child: Text('Agosto')),
+                        DropdownMenuItem(value: 9, child: Text('Septiembre')),
+                        DropdownMenuItem(value: 10, child: Text('Octubre')),
+                        DropdownMenuItem(value: 11, child: Text('Noviembre')),
+                        DropdownMenuItem(value: 12, child: Text('Diciembre')),
+                      ],
+                      onChanged: (v) => setState(() => _mesNacimiento = v),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: DropdownButtonFormField<int>(
+                      initialValue: _anioNacimiento,
+                      decoration: const InputDecoration(labelText: 'Año'),
+                      items: List.generate(
+                        76,
+                        (i) => DropdownMenuItem(
+                          value: DateTime.now().year - 15 - i,
+                          child: Text('${DateTime.now().year - 15 - i}'),
+                        ),
+                      ),
+                      onChanged: (v) => setState(() => _anioNacimiento = v),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Contacto de emergencia',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _contactoNombreController,
@@ -214,7 +327,11 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
               ),
               if (_error != null) ...[
                 const SizedBox(height: 16),
-                Text(_error!, style: const TextStyle(color: AppColors.rojo), textAlign: TextAlign.center),
+                Text(
+                  _error!,
+                  style: const TextStyle(color: AppColors.rojo),
+                  textAlign: TextAlign.center,
+                ),
               ],
               const SizedBox(height: 20),
               ElevatedButton(
@@ -223,7 +340,10 @@ class _EditPerfilServidorSheetState extends State<EditPerfilServidorSheet> {
                     ? const SizedBox(
                         height: 20,
                         width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Text('Guardar cambios'),
               ),

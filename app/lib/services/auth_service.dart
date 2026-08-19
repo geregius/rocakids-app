@@ -659,7 +659,11 @@ class AuthService {
         .where('fotoUrl', isEqualTo: '')
         .get();
     return snap.docs.map((d) => Nino.fromFirestore(d.id, d.data())).toList()
-      ..sort((a, b) => a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase()));
+      ..sort(
+        (a, b) => a.nombreCompleto.toLowerCase().compareTo(
+          b.nombreCompleto.toLowerCase(),
+        ),
+      );
   }
 
   Future<int> contarNinosSinDocumento() async {
@@ -677,7 +681,11 @@ class AuthService {
         .where('identificacionMenor', isEqualTo: '')
         .get();
     return snap.docs.map((d) => Nino.fromFirestore(d.id, d.data())).toList()
-      ..sort((a, b) => a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase()));
+      ..sort(
+        (a, b) => a.nombreCompleto.toLowerCase().compareTo(
+          b.nombreCompleto.toLowerCase(),
+        ),
+      );
   }
 
   Future<int> contarAcudientesSinFoto() async {
@@ -694,8 +702,14 @@ class AuthService {
         .collection('acudientes')
         .where('fotoSeguridadUrl', isEqualTo: '')
         .get();
-    return snap.docs.map((d) => Acudiente.fromFirestore(d.id, d.data())).toList()
-      ..sort((a, b) => a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase()));
+    return snap.docs
+        .map((d) => Acudiente.fromFirestore(d.id, d.data()))
+        .toList()
+      ..sort(
+        (a, b) => a.nombreCompleto.toLowerCase().compareTo(
+          b.nombreCompleto.toLowerCase(),
+        ),
+      );
   }
 
   Future<int> contarAcudientesConCorreoPendiente() async {
@@ -712,8 +726,14 @@ class AuthService {
         .collection('acudientes')
         .where('correoPendienteDeCorregir', isEqualTo: true)
         .get();
-    return snap.docs.map((d) => Acudiente.fromFirestore(d.id, d.data())).toList()
-      ..sort((a, b) => a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase()));
+    return snap.docs
+        .map((d) => Acudiente.fromFirestore(d.id, d.data()))
+        .toList()
+      ..sort(
+        (a, b) => a.nombreCompleto.toLowerCase().compareTo(
+          b.nombreCompleto.toLowerCase(),
+        ),
+      );
   }
 
   /// Cuántos niños se han "graduado" del ministerio infantil (más de
@@ -744,9 +764,11 @@ class AuthService {
     final hoy = DateTime.now();
     return snap.docs
         .map((d) => Nino.fromFirestore(d.id, d.data()))
-        .where((n) =>
-            n.fechaNacimiento.month == hoy.month &&
-            hoy.year - n.fechaNacimiento.year == edadMaximaRegistro + 1)
+        .where(
+          (n) =>
+              n.fechaNacimiento.month == hoy.month &&
+              hoy.year - n.fechaNacimiento.year == edadMaximaRegistro + 1,
+        )
         .toList();
   }
 
@@ -805,6 +827,35 @@ class AuthService {
     return snap.count ?? 0;
   }
 
+  /// Servidores activos que cumplieron años en los últimos 7 días (o
+  /// cumplen hoy) — "Cumpleaños Servidores" (2026-08-19), mismo criterio
+  /// que [obtenerNinosQueCumplieronEstaSemana] pero sobre `usuarios`.
+  /// Mismo permiso que [contarServidoresActivos] (`puedeVerInfoLiderazgo()`
+  /// en firestore.rules: administrador, columna, líder de ministerio) —
+  /// a propósito NO abierto a todos los roles de servidor como la versión
+  /// de niños, porque `usuarios` guarda datos sensibles (documento,
+  /// teléfono, EPS) que ya están acotados a liderazgo en el resto de la
+  /// app (ver Dashboard/Acudientes y Niños).
+  Future<List<UsuarioApp>> obtenerServidoresQueCumplieronEstaSemana() async {
+    final rolesDeServidor = RolUsuario.values
+        .where((r) => r.esRolDeServidor)
+        .map((r) => r.valorFirestore)
+        .toList();
+    final snap = await _firestore
+        .collection('usuarios')
+        .where('rol', whereIn: rolesDeServidor)
+        .where('activo', isEqualTo: true)
+        .get();
+    return snap.docs
+        .map((d) => UsuarioApp.fromFirestore(d.id, d.data()))
+        .where(
+          (u) =>
+              u.fechaNacimiento != null &&
+              cumpleEnUltimaSemana(u.fechaNacimiento!),
+        )
+        .toList();
+  }
+
   /// El movimiento (Entrada/Salida) más reciente de un niño, si tiene
   /// alguno. Con esto se decide si el próximo botón de check-in debe
   /// decir "Registrar Entrada" o "Registrar Salida" — un niño cuyo
@@ -832,7 +883,10 @@ class AuthService {
         .collection('registros')
         .where('fkIdNino', isEqualTo: fkIdNino)
         .where('tipoMovimiento', isEqualTo: 'Entrada')
-        .where('fechaMovimiento', isGreaterThanOrEqualTo: Timestamp.fromDate(desde))
+        .where(
+          'fechaMovimiento',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(desde),
+        )
         .get();
     return snap.docs.length;
   }
@@ -843,12 +897,17 @@ class AuthService {
   /// (2026-08-18, pedido de Rafael). Como cada manilla física es única,
   /// basta con mirar cuál fue el último movimiento de hoy con ese
   /// código: si fue una Entrada, la manilla sigue en uso.
-  Future<Registro?> _ultimoMovimientoDeHoyPorManilla(String numeroManilla) async {
+  Future<Registro?> _ultimoMovimientoDeHoyPorManilla(
+    String numeroManilla,
+  ) async {
     final ahora = DateTime.now();
     final inicio = DateTime(ahora.year, ahora.month, ahora.day);
     final snap = await _firestore
         .collection('registros')
-        .where('fechaMovimiento', isGreaterThanOrEqualTo: Timestamp.fromDate(inicio))
+        .where(
+          'fechaMovimiento',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(inicio),
+        )
         .where('numeroManilla', isEqualTo: numeroManilla)
         .orderBy('fechaMovimiento', descending: true)
         .limit(1)
@@ -1081,7 +1140,10 @@ class AuthService {
     if (!refDoc.exists) return null;
     final uid = refDoc.data()?['uid'] as String?;
     if (uid == null) return null;
-    final acudienteDoc = await _firestore.collection('acudientes').doc(uid).get();
+    final acudienteDoc = await _firestore
+        .collection('acudientes')
+        .doc(uid)
+        .get();
     if (!acudienteDoc.exists) return null;
     return Acudiente.fromFirestore(uid, acudienteDoc.data()!);
   }
@@ -1096,7 +1158,10 @@ class AuthService {
     required String acudienteUid,
     required String parentescoTipo,
   }) async {
-    final ninoDoc = await _firestore.collection('ninos').doc(documentoNino).get();
+    final ninoDoc = await _firestore
+        .collection('ninos')
+        .doc(documentoNino)
+        .get();
     if (!ninoDoc.exists) {
       throw const AuthException('No se encontró el niño.');
     }
@@ -1144,7 +1209,10 @@ class AuthService {
     // Se valida ANTES de crear la cuenta nueva, con la sesión propia de
     // quien llama — así, si el documento del niño está mal escrito, no
     // queda una cuenta huérfana que haya que borrar después.
-    final ninoDoc = await _firestore.collection('ninos').doc(documentoNino).get();
+    final ninoDoc = await _firestore
+        .collection('ninos')
+        .doc(documentoNino)
+        .get();
     if (!ninoDoc.exists) {
       throw const AuthException(
         'No se encontró ningún niño con ese documento.',
@@ -1465,7 +1533,9 @@ class AuthService {
     for (final doc in relaciones.docs) {
       batch.delete(doc.reference);
     }
-    batch.delete(_firestore.collection('ninos_busqueda').doc(documentoIdentificacion));
+    batch.delete(
+      _firestore.collection('ninos_busqueda').doc(documentoIdentificacion),
+    );
     batch.delete(_firestore.collection('ninos').doc(documentoIdentificacion));
     await batch.commit();
   }
@@ -1491,7 +1561,9 @@ class AuthService {
       batch.delete(rel.reference);
     }
     if (numeroDocumento != null && numeroDocumento.isNotEmpty) {
-      batch.delete(_firestore.collection('acudientes_documentos').doc(numeroDocumento));
+      batch.delete(
+        _firestore.collection('acudientes_documentos').doc(numeroDocumento),
+      );
     }
     batch.delete(_firestore.collection('acudientes').doc(uid));
     await batch.commit();
@@ -1513,6 +1585,7 @@ class AuthService {
     required String contactoEmergenciaNombre,
     required String contactoEmergenciaTelefono,
     required String fotoUrl,
+    DateTime? fechaNacimiento,
   }) {
     final destinoUid = uid ?? _auth.currentUser?.uid;
     if (destinoUid == null) {
@@ -1527,6 +1600,9 @@ class AuthService {
       'contactoEmergenciaNombre': contactoEmergenciaNombre,
       'contactoEmergenciaTelefono': contactoEmergenciaTelefono,
       'fotoUrl': fotoUrl,
+      'fechaNacimiento': fechaNacimiento != null
+          ? Timestamp.fromDate(fechaNacimiento)
+          : null,
     });
   }
 
