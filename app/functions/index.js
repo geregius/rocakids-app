@@ -1,7 +1,9 @@
 const {onSchedule} = require('firebase-functions/v2/scheduler');
+const {onCall} = require('firebase-functions/v2/https');
 const {defineSecret} = require('firebase-functions/params');
 const {initializeApp} = require('firebase-admin/app');
 const {getFirestore, Timestamp} = require('firebase-admin/firestore');
+const {getAuth} = require('firebase-admin/auth');
 const nodemailer = require('nodemailer');
 
 initializeApp();
@@ -321,5 +323,102 @@ exports.correoCumpleanosDiario = onSchedule(
   {schedule: '0 7 * * *', timeZone: 'America/Bogota', secrets: [gmailAppPassword]},
   async () => {
     await enviarCorreosCumpleanosDeHoy();
+  },
+);
+
+// ---------------------------------------------------------------------
+// Recuperar contraseña — correo personalizado en español (2026-08-19).
+// ---------------------------------------------------------------------
+//
+// Firebase Auth ya sabe generar el enlace de restablecimiento real
+// (`generatePasswordResetLink`, Admin SDK — es el mismo mecanismo
+// seguro de siempre, con el mismo enlace de un solo uso). Lo único que
+// reemplaza esta función es QUIÉN entrega ese enlace: en vez del correo
+// genérico de Firebase (en inglés, remitente "noreply@..."), se manda
+// un correo propio desde `rokakidsarmenia@gmail.com`, con la misma
+// plantilla visual y remitente "RocaKids" que ya usa el correo de
+// cumpleaños. Llamada desde `AuthService.resetPassword()` en la app
+// (paquete `cloud_functions`, función invocable/`onCall`).
+function plantillaCorreoRecuperacion(link) {
+  return `
+  <div style="background:#f2f2f2;padding:24px 12px;font-family:Verdana,Arial,sans-serif;">
+    <div style="max-width:480px;margin:0 auto;background:#ffffff;border:2px solid #003399;border-radius:20px;overflow:hidden;">
+      <div style="background:linear-gradient(135deg,#003399,#2c5bb8);padding:24px 20px;text-align:center;">
+        <div style="font-size:28px;line-height:1;margin-bottom:8px;">🔑</div>
+        <div style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:0.5px;">
+          Restablece tu contraseña
+        </div>
+      </div>
+      <div style="padding:24px;">
+        <p style="font-size:15px;color:#1A1A2E;line-height:1.5;margin:0 0 16px;">¡Hola!</p>
+        <p style="font-size:15px;color:#1A1A2E;line-height:1.5;margin:0 0 20px;">
+          Recibimos una solicitud para restablecer la contraseña de tu cuenta en
+          <b>RocaKids</b>. Toca el siguiente botón para elegir una nueva contraseña:
+        </p>
+        <div style="text-align:center;margin:0 0 20px;">
+          <a href="${link}" style="display:inline-block;background:#ffcc00;color:#003399;
+                    font-weight:bold;padding:12px 28px;border-radius:999px;font-size:15px;
+                    text-decoration:none;">
+            Restablecer contraseña
+          </a>
+        </div>
+        <p style="font-size:13px;color:#666666;line-height:1.5;margin:0 0 8px;">
+          Si tú no pediste este cambio, puedes ignorar este correo — tu contraseña
+          actual seguirá funcionando sin ningún cambio.
+        </p>
+        <p style="font-size:13px;color:#666666;line-height:1.5;margin:0;">
+          Este enlace vence en 1 hora por seguridad.
+        </p>
+      </div>
+      <div style="padding:0 24px 24px;text-align:center;">
+        <p style="font-size:12px;color:#9e9e9e;font-style:italic;margin:0;">
+          Con cariño,<br/>
+          <b style="color:#9e9e9e;">Tu familia de RocaKids ❤️</b>
+        </p>
+      </div>
+    </div>
+  </div>`;
+}
+
+// No lanza error al cliente en ningún caso (correo inválido, cuenta
+// inexistente, o falla de envío) — mismo criterio de privacidad que ya
+// tenía el cliente: nunca se revela si un correo está o no registrado
+// en el sistema. `request.data` no requiere sesión iniciada (quien
+// pide esto, por definición, no puede entrar).
+exports.enviarCorreoRecuperacion = onCall(
+  {secrets: [gmailAppPassword]},
+  async (request) => {
+    const correo = String(request.data?.correo || '').trim();
+    if (!EMAIL_VALIDO.test(correo)) {
+      return {enviado: false};
+    }
+
+    let link;
+    try {
+      link = await getAuth().generatePasswordResetLink(correo, {
+        url: 'https://rocakidsarmenia-7935b.web.app',
+      });
+    } catch (e) {
+      console.log(`Recuperación de contraseña: ${correo} sin cuenta válida (${e.code || e.message}).`);
+      return {enviado: false};
+    }
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {user: 'rokakidsarmenia@gmail.com', pass: gmailAppPassword.value()},
+    });
+    try {
+      await transporter.sendMail({
+        from: '"RocaKids" <rokakidsarmenia@gmail.com>',
+        to: correo,
+        subject: 'Restablece tu contraseña de RocaKids',
+        html: plantillaCorreoRecuperacion(link),
+      });
+      console.log(`Recuperación de contraseña: correo enviado a ${correo}.`);
+      return {enviado: true};
+    } catch (e) {
+      console.error(`No se pudo enviar correo de recuperación a ${correo}:`, e.message || e);
+      return {enviado: false};
+    }
   },
 );

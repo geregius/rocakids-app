@@ -212,6 +212,14 @@ Cada niño cerrado así recibe un nuevo `Registro` de Salida que copia `fkIdAcud
 
 **Pendiente/no implementado a propósito:** no hay mecanismo de "ya se envió este año" (si la función se reintentara el mismo día podría reenviar) — no se consideró necesario para el volumen actual; y no hay forma de probar el envío real sin usar una Cloud Function HTTP temporal (desplegar → invocar con `curl` → borrar) porque `onSchedule` no es invocable directamente por HTTP — patrón ya usado varias veces en este proyecto, ver [[feature-correo-cumpleanos]] en la memoria para el detalle completo de cómo se diagnosticó y probó.
 
+### `enviarCorreoRecuperacion` — correo de recuperación de contraseña personalizado (2026-08-19)
+
+**Función invocable (`onCall`, no programada)** — llamada desde `AuthService.resetPassword()` en la app (paquete Flutter `cloud_functions`) cuando alguien toca "¿Olvidaste tu contraseña?" en el login. Firebase Auth sigue generando el enlace real de restablecimiento (`getAuth().generatePasswordResetLink()`, Admin SDK — mismo mecanismo seguro de un solo uso de siempre); lo único que cambia es **quién entrega ese enlace**: en vez del correo genérico de Firebase (inglés, remitente `noreply@...`), se manda un correo propio desde `rokakidsarmenia@gmail.com` con el mismo estilo visual (colores de marca, mismo secreto `GMAIL_APP_PASSWORD`) que el correo de cumpleaños de arriba.
+
+**Nunca lanza error al cliente** (correo con formato inválido, cuenta inexistente, o falla de envío) — siempre responde `{enviado: bool}` sin distinguir el motivo real, mismo criterio de privacidad que ya tenía el cliente antes de esta función (no revelar si un correo está o no registrado). Probado con un envío real a la cuenta admin de Rafael el mismo día — confirmado ("Quedo perfecto").
+
+**No implementado a propósito:** la página donde se termina de escribir la nueva contraseña sigue siendo la página default alojada por Firebase (no una pantalla propia de la app) — solo el correo en sí quedó personalizado, no el flujo completo de principio a fin.
+
 ---
 
 ## 6. Pantallas construidas (`lib/screens/`)
@@ -231,7 +239,7 @@ Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `
 
 | Pantalla | Qué hace |
 |---|---|
-| `login_screen.dart` | Correo/contraseña + botones "Soy Acudiente" / "Soy Servidor". Selector mostrar/ocultar contraseña. **Desde 2026-08-19:** botón "¿Olvidaste tu contraseña?" bajo el campo de contraseña — abre un diálogo, pide el correo (pre-llenado si ya se escribió) y envía el correo de restablecimiento de Firebase Auth (`AuthService.resetPassword()`). Pensado para los acudientes migrados cuya contraseña inicial es su número de documento (ver sección 9) y no lo saben. No revela si el correo existe o no en el sistema (mismo mensaje de éxito en ambos casos). |
+| `login_screen.dart` | Correo/contraseña + botones "Soy Acudiente" / "Soy Servidor". Selector mostrar/ocultar contraseña. **Desde 2026-08-19:** botón "¿Olvidaste tu contraseña?" bajo el campo de contraseña — abre un diálogo, pide el correo (pre-llenado si ya se escribió) y pide el correo de recuperación vía `AuthService.resetPassword()`. Pensado para los acudientes migrados cuya contraseña inicial es su número de documento (ver sección 9) y no lo saben. No revela si el correo existe o no en el sistema (mismo mensaje de éxito en ambos casos). **El correo en sí es personalizado** (español, marca RocaKids) — ver `enviarCorreoRecuperacion` en sección 5.5, no es la plantilla genérica de Firebase. |
 | `sign_up_servidor_screen.dart` | Registro de servidor → queda en rol `pendiente`, cierra sesión, muestra diálogo de confirmación. |
 | `sign_up_acudiente_screen.dart` | Registro de acudiente + su primer niño + relación, en un solo formulario. Fotos opcionales (acudiente y niño) con selector cámara/galería. Acceso inmediato al guardar. |
 | `pending_approval_screen.dart` | Para rol `pendiente` (servidor esperando aprobación) o roles sin sentido (`desconocido`). Sin menú — todavía no hay nada que navegar. |

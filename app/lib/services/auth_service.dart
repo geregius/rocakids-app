@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -23,14 +24,17 @@ class AuthService {
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
   final FirebaseStorage _storage;
+  final FirebaseFunctions _functions;
 
   AuthService({
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
     FirebaseStorage? storage,
+    FirebaseFunctions? functions,
   }) : _auth = auth ?? FirebaseAuth.instance,
        _firestore = firestore ?? FirebaseFirestore.instance,
-       _storage = storage ?? FirebaseStorage.instance;
+       _storage = storage ?? FirebaseStorage.instance,
+       _functions = functions ?? FirebaseFunctions.instance;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
@@ -48,15 +52,21 @@ class AuthService {
     }
   }
 
-  /// Envía el correo de restablecimiento de contraseña de Firebase Auth.
-  /// Si el correo no corresponde a ninguna cuenta, no se avisa (no
-  /// revelamos si un correo está o no registrado en el sistema).
+  /// Pide el correo de recuperación de contraseña — personalizado en
+  /// español con la marca de RocaKids (Cloud Function
+  /// `enviarCorreoRecuperacion`, mismo Gmail que el correo de
+  /// cumpleaños) en vez del correo genérico de Firebase Auth. Nunca
+  /// lanza error por "correo no encontrado": no revelamos si un correo
+  /// está o no registrado en el sistema.
   Future<void> resetPassword({required String correo}) async {
     try {
-      await _auth.sendPasswordResetEmail(email: correo.trim());
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'user-not-found') return;
-      throw AuthException(_mensajeDeErrorReset(e.code));
+      await _functions.httpsCallable('enviarCorreoRecuperacion').call({
+        'correo': correo.trim(),
+      });
+    } on FirebaseFunctionsException {
+      throw const AuthException(
+        'No se pudo enviar el correo de recuperación. Intenta de nuevo.',
+      );
     }
   }
 
@@ -1673,17 +1683,6 @@ class AuthService {
         return 'Demasiados intentos. Intenta de nuevo en unos minutos.';
       default:
         return 'No se pudo iniciar sesión. Intenta de nuevo.';
-    }
-  }
-
-  String _mensajeDeErrorReset(String codigo) {
-    switch (codigo) {
-      case 'invalid-email':
-        return 'El correo ingresado no es válido.';
-      case 'too-many-requests':
-        return 'Demasiados intentos. Intenta de nuevo en unos minutos.';
-      default:
-        return 'No se pudo enviar el correo de recuperación. Intenta de nuevo.';
     }
   }
 
