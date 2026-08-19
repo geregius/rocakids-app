@@ -395,8 +395,14 @@ exports.enviarCorreoRecuperacion = onCall(
 
     let link;
     try {
+      // handleCodeInApp: true hace que el enlace abra DIRECTO la app
+      // (en vez de la página genérica alojada por Firebase) con
+      // ?mode=resetPassword&oobCode=... en la URL — la propia app lee
+      // esos parámetros (ver main.dart) y muestra una pantalla propia
+      // para escribir la nueva contraseña, con la marca de RocaKids.
       link = await getAuth().generatePasswordResetLink(correo, {
         url: 'https://rocakidsarmenia-7935b.web.app',
+        handleCodeInApp: true,
       });
     } catch (e) {
       console.log(`Recuperación de contraseña: ${correo} sin cuenta válida (${e.code || e.message}).`);

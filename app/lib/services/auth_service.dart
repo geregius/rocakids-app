@@ -70,6 +70,31 @@ class AuthService {
     }
   }
 
+  /// Valida un código de restablecimiento (`oobCode` del enlace del
+  /// correo de recuperación) y devuelve el correo asociado, o lanza si
+  /// el enlace ya venció o ya se usó.
+  Future<String> verificarCodigoRecuperacion(String oobCode) async {
+    try {
+      return await _auth.verifyPasswordResetCode(oobCode);
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_mensajeDeErrorCodigoReset(e.code));
+    }
+  }
+
+  /// Completa el restablecimiento: fija `nuevaPassword` para la cuenta
+  /// asociada a `oobCode`. Se usa desde `ResetPasswordScreen`, la
+  /// pantalla propia que reemplaza la página genérica de Firebase.
+  Future<void> confirmarNuevaPassword({
+    required String oobCode,
+    required String nuevaPassword,
+  }) async {
+    try {
+      await _auth.confirmPasswordReset(code: oobCode, newPassword: nuevaPassword);
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_mensajeDeErrorCodigoReset(e.code));
+    }
+  }
+
   /// Auto-registro de un SERVIDOR (voluntario/líder). Queda con rol
   /// "pendiente" — fijado también por las reglas de seguridad, así que
   /// aunque alguien manipule la app no puede autoasignarse un rol con
@@ -1683,6 +1708,23 @@ class AuthService {
         return 'Demasiados intentos. Intenta de nuevo en unos minutos.';
       default:
         return 'No se pudo iniciar sesión. Intenta de nuevo.';
+    }
+  }
+
+  String _mensajeDeErrorCodigoReset(String codigo) {
+    switch (codigo) {
+      case 'expired-action-code':
+        return 'Este enlace ya venció. Solicita uno nuevo desde "¿Olvidaste tu contraseña?" en el login.';
+      case 'invalid-action-code':
+        return 'Este enlace ya se usó o no es válido. Solicita uno nuevo.';
+      case 'user-disabled':
+        return 'Esta cuenta está deshabilitada.';
+      case 'user-not-found':
+        return 'No se encontró la cuenta asociada a este enlace.';
+      case 'weak-password':
+        return 'La contraseña es muy débil (mínimo 6 caracteres).';
+      default:
+        return 'No se pudo completar el proceso. Intenta de nuevo.';
     }
   }
 

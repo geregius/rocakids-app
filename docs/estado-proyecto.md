@@ -218,7 +218,7 @@ Cada niño cerrado así recibe un nuevo `Registro` de Salida que copia `fkIdAcud
 
 **Nunca lanza error al cliente** (correo con formato inválido, cuenta inexistente, o falla de envío) — siempre responde `{enviado: bool}` sin distinguir el motivo real, mismo criterio de privacidad que ya tenía el cliente antes de esta función (no revelar si un correo está o no registrado). Probado con un envío real a la cuenta admin de Rafael el mismo día — confirmado ("Quedo perfecto").
 
-**No implementado a propósito:** la página donde se termina de escribir la nueva contraseña sigue siendo la página default alojada por Firebase (no una pantalla propia de la app) — solo el correo en sí quedó personalizado, no el flujo completo de principio a fin.
+**Flujo completo ahora en la app, sin páginas genéricas de Firebase:** el enlace se pide con `actionCodeSettings.handleCodeInApp: true`, así que en vez de abrir la página alojada por Firebase, abre la propia app con `?mode=resetPassword&oobCode=...` en la URL — `main.dart` lo detecta (`Uri.base.queryParameters`) y muestra `ResetPasswordScreen` (sección 6) en vez del login normal.
 
 ---
 
@@ -240,6 +240,7 @@ Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `
 | Pantalla | Qué hace |
 |---|---|
 | `login_screen.dart` | Correo/contraseña + botones "Soy Acudiente" / "Soy Servidor". Selector mostrar/ocultar contraseña. **Desde 2026-08-19:** botón "¿Olvidaste tu contraseña?" bajo el campo de contraseña — abre un diálogo, pide el correo (pre-llenado si ya se escribió) y pide el correo de recuperación vía `AuthService.resetPassword()`. Pensado para los acudientes migrados cuya contraseña inicial es su número de documento (ver sección 9) y no lo saben. No revela si el correo existe o no en el sistema (mismo mensaje de éxito en ambos casos). **El correo en sí es personalizado** (español, marca RocaKids) — ver `enviarCorreoRecuperacion` en sección 5.5, no es la plantilla genérica de Firebase. |
+| `reset_password_screen.dart` | Pantalla propia de "nueva contraseña" (2026-08-19), abierta directamente por el enlace del correo de recuperación (`main.dart` detecta `?mode=resetPassword&oobCode=...` en la URL, ver sección 5.5) — reemplaza la página genérica alojada por Firebase. Valida el código (`AuthService.verificarCodigoRecuperacion()`) y muestra el correo asociado; si venció o ya se usó, muestra el error con un botón para volver al login en vez del formulario. Formulario de dos campos (nueva contraseña + confirmar, mínimo 6 caracteres) → `AuthService.confirmarNuevaPassword()` → pantalla de éxito con botón "Ir a iniciar sesión". |
 | `sign_up_servidor_screen.dart` | Registro de servidor → queda en rol `pendiente`, cierra sesión, muestra diálogo de confirmación. |
 | `sign_up_acudiente_screen.dart` | Registro de acudiente + su primer niño + relación, en un solo formulario. Fotos opcionales (acudiente y niño) con selector cámara/galería. Acceso inmediato al guardar. |
 | `pending_approval_screen.dart` | Para rol `pendiente` (servidor esperando aprobación) o roles sin sentido (`desconocido`). Sin menú — todavía no hay nada que navegar. |
