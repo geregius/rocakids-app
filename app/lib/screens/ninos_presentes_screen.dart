@@ -147,7 +147,17 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
     final codigo = await escanearCodigoManilla(context);
     if (codigo == null || codigo.isEmpty || !mounted) return;
 
-    final registro = await _authService.buscarPresentePorManilla(codigo);
+    final Registro? registro;
+    try {
+      registro = await _authService.buscarPresentePorManilla(codigo);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo buscar la manilla: $e')),
+        );
+      }
+      return;
+    }
     if (!mounted) return;
     if (registro == null) {
       ScaffoldMessenger.of(context).showSnackBar(

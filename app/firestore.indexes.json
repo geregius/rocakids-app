@@ -26,6 +26,14 @@
       ]
     },
     {
+      "collectionGroup": "registros",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "numeroManilla", "order": "ASCENDING" },
+        { "fieldPath": "fechaMovimiento", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "usuarios",
       "queryScope": "COLLECTION",
       "fields": [

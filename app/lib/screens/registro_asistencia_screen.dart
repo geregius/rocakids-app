@@ -193,17 +193,25 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   Future<void> _escanearManilla() async {
     final codigo = await escanearCodigoManilla(context);
     if (codigo == null || codigo.isEmpty || !mounted) return;
-    final enUso = await _authService.manillaEnUsoHoy(codigo);
-    if (!mounted) return;
-    if (enUso) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Esta manilla ya está en uso por otro niño presente.'),
-        ),
-      );
-      return;
+    try {
+      final enUso = await _authService.manillaEnUsoHoy(codigo);
+      if (!mounted) return;
+      if (enUso) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Esta manilla ya está en uso por otro niño presente.'),
+          ),
+        );
+        return;
+      }
+      setState(() => _manillaController.text = codigo);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo verificar la manilla: $e')),
+        );
+      }
     }
-    setState(() => _manillaController.text = codigo);
   }
 
   /// Campo de manilla compartido entre el formulario de niño registrado
@@ -221,7 +229,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
         ),
         IconButton(
           onPressed: _escanearManilla,
-          icon: const Icon(Icons.photo_camera),
+          icon: const Icon(Icons.photo_camera, color: AppColors.azulMarino),
           tooltip: 'Escanear manilla',
         ),
       ],
