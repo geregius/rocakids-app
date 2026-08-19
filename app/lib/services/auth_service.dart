@@ -837,6 +837,44 @@ class AuthService {
     return snap.docs.length;
   }
 
+  /// El registro más reciente de HOY con este número de manilla (que
+  /// puede venir de un QR escaneado), sin importar si es de un niño
+  /// registrado o un visitante — para el escaneo de manillas
+  /// (2026-08-18, pedido de Rafael). Como cada manilla física es única,
+  /// basta con mirar cuál fue el último movimiento de hoy con ese
+  /// código: si fue una Entrada, la manilla sigue en uso.
+  Future<Registro?> _ultimoMovimientoDeHoyPorManilla(String numeroManilla) async {
+    final ahora = DateTime.now();
+    final inicio = DateTime(ahora.year, ahora.month, ahora.day);
+    final snap = await _firestore
+        .collection('registros')
+        .where('fechaMovimiento', isGreaterThanOrEqualTo: Timestamp.fromDate(inicio))
+        .where('numeroManilla', isEqualTo: numeroManilla)
+        .orderBy('fechaMovimiento', descending: true)
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) return null;
+    return Registro.fromFirestore(snap.docs.first.id, snap.docs.first.data());
+  }
+
+  /// true si esta manilla ya está puesta en alguien presente ahora mismo
+  /// — para avisar al escanearla en una Entrada nueva y evitar usar una
+  /// manilla que ya estaba en uso.
+  Future<bool> manillaEnUsoHoy(String numeroManilla) async {
+    final ultimo = await _ultimoMovimientoDeHoyPorManilla(numeroManilla);
+    return ultimo != null && ultimo.tipoMovimiento == 'Entrada';
+  }
+
+  /// El registro de Entrada de quien está presente ahora mismo con esta
+  /// manilla, o `null` si ninguna manilla de hoy coincide o si ya salió
+  /// — para dar Salida escaneando directamente la manilla gemela, sin
+  /// tener que buscar al niño por nombre.
+  Future<Registro?> buscarPresentePorManilla(String numeroManilla) async {
+    final ultimo = await _ultimoMovimientoDeHoyPorManilla(numeroManilla);
+    if (ultimo == null || ultimo.tipoMovimiento != 'Entrada') return null;
+    return ultimo;
+  }
+
   /// Los acudientes autorizados a entregar/retirar a un niño (vía
   /// `nino_acudiente`) — para que quien hace el check-in/check-out
   /// verifique visualmente (foto de seguridad) quién está presente, en

@@ -5,6 +5,7 @@ import '../models/registro.dart';
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/escaner_qr.dart';
 import '../widgets/app_shell.dart';
 import 'nino_detalle_sheet.dart';
 
@@ -97,8 +98,13 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
 
   /// Registra la salida de `entrada` con la fecha/hora actual, copiando
   /// quién lo retira desde su propia entrada (mismo criterio que pidió
-  /// Rafael: "solo se entrega a la misma persona que lo recibió").
-  Future<void> _darSalida(Registro entrada) async {
+  /// Rafael: "solo se entrega a la misma persona que lo recibió"). Usa
+  /// [observacion] para distinguir cómo se disparó (deslizar la tarjeta
+  /// o escanear la manilla, 2026-08-18).
+  Future<void> _darSalida(
+    Registro entrada, {
+    String observacion = 'Salida registrada deslizando la tarjeta en Menores Recibidos.',
+  }) async {
     setState(() => _ocultosOptimista.add(entrada.id));
     final salida = Registro(
       id: '',
@@ -118,7 +124,7 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
       condicionMedicaVisitante: entrada.condicionMedicaVisitante,
       servicio: entrada.servicio,
       grupoEdad: entrada.grupoEdad,
-      observacion: 'Salida registrada deslizando la tarjeta en Menores Recibidos.',
+      observacion: observacion,
     );
     try {
       await _authService.registrarMovimiento(salida);
@@ -129,6 +135,71 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
           SnackBar(content: Text('No se pudo registrar la salida: $e')),
         );
       }
+    }
+  }
+
+  /// Escanea la manilla gemela del acudiente y da salida al instante al
+  /// niño que tenga esa manilla puesta ahora mismo (2026-08-18, pedido
+  /// de Rafael) — alternativa al deslizar la tarjeta, para cuando ya
+  /// haya manillas físicas con QR. Muestra al niño antes de confirmar,
+  /// para verificar de un vistazo que es el correcto.
+  Future<void> _escanearYDarSalida() async {
+    final codigo = await escanearCodigoManilla(context);
+    if (codigo == null || codigo.isEmpty || !mounted) return;
+
+    final registro = await _authService.buscarPresentePorManilla(codigo);
+    if (!mounted) return;
+    if (registro == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se encontró ningún niño presente con esa manilla.'),
+        ),
+      );
+      return;
+    }
+
+    final nino = registro.esVisitante ? null : _ninosPorId[registro.fkIdNino];
+    final nombre = registro.esVisitante
+        ? registro.nombreNinoVisitante
+        : (nino?.nombreCompleto ?? '(sin datos)');
+    final fotoUrl = nino?.fotoUrl ?? '';
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Dar salida a este niño?'),
+        content: Row(
+          children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: AppColors.amarillo,
+              backgroundImage: fotoUrl.isNotEmpty ? NetworkImage(fotoUrl) : null,
+              child: fotoUrl.isEmpty
+                  ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(nombre, style: const TextStyle(fontSize: 16))),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Confirmar salida'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      await _darSalida(
+        registro,
+        observacion: 'Salida registrada escaneando la manilla en Menores Recibidos.',
+      );
     }
   }
 
@@ -154,6 +225,11 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Menores Recibidos',
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _escanearYDarSalida,
+        icon: const Icon(Icons.qr_code_scanner),
+        label: const Text('Salida por manilla'),
+      ),
       body: _cargandoNinos
           ? const Center(child: CircularProgressIndicator())
           : StreamBuilder<List<Registro>>(

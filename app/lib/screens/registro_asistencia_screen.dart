@@ -6,6 +6,7 @@ import '../models/registro.dart';
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/escaner_qr.dart';
 import '../widgets/app_shell.dart';
 import 'editar_acudiente_sheet.dart';
 import 'editar_nino_sheet.dart';
@@ -183,6 +184,48 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
     final ultimo = _ultimoMovimiento;
     if (ultimo == null || ultimo.tipoMovimiento == 'Salida') return 'Entrada';
     return 'Salida';
+  }
+
+  /// Escanea el QR de una manilla y llena el campo con el código leído
+  /// (2026-08-18, pedido de Rafael) — mismo campo/validación de siempre,
+  /// solo cambia cómo se llena. Antes de aceptarlo, revisa que esa
+  /// manilla no esté ya puesta en otro niño presente ahora mismo.
+  Future<void> _escanearManilla() async {
+    final codigo = await escanearCodigoManilla(context);
+    if (codigo == null || codigo.isEmpty || !mounted) return;
+    final enUso = await _authService.manillaEnUsoHoy(codigo);
+    if (!mounted) return;
+    if (enUso) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Esta manilla ya está en uso por otro niño presente.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _manillaController.text = codigo);
+  }
+
+  /// Campo de manilla compartido entre el formulario de niño registrado
+  /// y el de visitante — con botón de escanear QR junto al texto.
+  Widget _campoManilla() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: TextFormField(
+            controller: _manillaController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Número de manilla'),
+          ),
+        ),
+        IconButton(
+          onPressed: _escanearManilla,
+          icon: const Icon(Icons.qr_code_scanner),
+          tooltip: 'Escanear manilla',
+        ),
+      ],
+    );
   }
 
   Future<void> _completarDocumento() async {
@@ -975,11 +1018,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
             onChanged: (v) => setState(() => _servicio = v),
           ),
           const SizedBox(height: 16),
-          TextFormField(
-            controller: _manillaController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Número de manilla'),
-          ),
+          _campoManilla(),
           const SizedBox(height: 16),
           TextFormField(
             controller: _observacionController,
@@ -1131,11 +1170,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
           onChanged: (v) => setState(() => _servicio = v),
         ),
         const SizedBox(height: 16),
-        TextFormField(
-          controller: _manillaController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Número de manilla'),
-        ),
+        _campoManilla(),
         const SizedBox(height: 16),
         TextFormField(
           controller: _observacionController,
