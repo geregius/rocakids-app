@@ -221,7 +221,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
         ),
         IconButton(
           onPressed: _escanearManilla,
-          icon: const Icon(Icons.qr_code_scanner),
+          icon: const Icon(Icons.photo_camera),
           tooltip: 'Escanear manilla',
         ),
       ],

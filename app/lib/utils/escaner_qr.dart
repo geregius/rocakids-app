@@ -79,7 +79,7 @@ class _PantallaEscanerManillaState extends State<_PantallaEscanerManilla> {
                 padding: const EdgeInsets.all(16),
                 child: TextButton.icon(
                   onPressed: _ingresarManualmente,
-                  icon: const Icon(Icons.keyboard, color: Colors.white),
+                  icon: const Icon(Icons.edit, color: Colors.white),
                   label: const Text(
                     'Ingresar código manualmente',
                     style: TextStyle(color: Colors.white),

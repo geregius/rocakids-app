@@ -227,7 +227,7 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
       seccionActiva: 'Menores Recibidos',
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _escanearYDarSalida,
-        icon: const Icon(Icons.qr_code_scanner),
+        icon: const Icon(Icons.photo_camera),
         label: const Text('Salida por manilla'),
       ),
       body: _cargandoNinos
