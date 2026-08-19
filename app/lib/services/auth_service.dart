@@ -1,10 +1,11 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:http/http.dart' as http;
 
 import '../models/acudiente.dart';
 import '../models/nino.dart';
@@ -24,17 +25,14 @@ class AuthService {
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
   final FirebaseStorage _storage;
-  final FirebaseFunctions _functions;
 
   AuthService({
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
     FirebaseStorage? storage,
-    FirebaseFunctions? functions,
   }) : _auth = auth ?? FirebaseAuth.instance,
        _firestore = firestore ?? FirebaseFirestore.instance,
-       _storage = storage ?? FirebaseStorage.instance,
-       _functions = functions ?? FirebaseFunctions.instance;
+       _storage = storage ?? FirebaseStorage.instance;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
@@ -52,18 +50,33 @@ class AuthService {
     }
   }
 
+  /// URL de la Cloud Function invocable `enviarCorreoRecuperacion`
+  /// (`app/functions/index.js`, región `us-central1` por defecto).
+  static const _urlCorreoRecuperacion =
+      'https://us-central1-rocakidsarmenia-7935b.cloudfunctions.net/enviarCorreoRecuperacion';
+
   /// Pide el correo de recuperación de contraseña — personalizado en
   /// español con la marca de RocaKids (Cloud Function
   /// `enviarCorreoRecuperacion`, mismo Gmail que el correo de
   /// cumpleaños) en vez del correo genérico de Firebase Auth. Nunca
   /// lanza error por "correo no encontrado": no revelamos si un correo
   /// está o no registrado en el sistema.
+  ///
+  /// Se llama por HTTP directo (protocolo de "función invocable" de
+  /// Firebase: `POST {"data": {...}}` → `{"result": {...}}`) en vez de
+  /// con el paquete `cloud_functions` — ese paquete tiene un bug
+  /// conocido y sin resolver en Flutter Web (falla antes de intentar
+  /// la llamada de red, ver firebase/flutterfire#17632).
   Future<void> resetPassword({required String correo}) async {
     try {
-      await _functions.httpsCallable('enviarCorreoRecuperacion').call({
-        'correo': correo.trim(),
-      });
-    } on FirebaseFunctionsException {
+      await http.post(
+        Uri.parse(_urlCorreoRecuperacion),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'data': {'correo': correo.trim()},
+        }),
+      );
+    } catch (_) {
       throw const AuthException(
         'No se pudo enviar el correo de recuperación. Intenta de nuevo.',
       );

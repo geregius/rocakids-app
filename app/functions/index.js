@@ -395,15 +395,20 @@ exports.enviarCorreoRecuperacion = onCall(
 
     let link;
     try {
-      // handleCodeInApp: true hace que el enlace abra DIRECTO la app
-      // (en vez de la página genérica alojada por Firebase) con
-      // ?mode=resetPassword&oobCode=... en la URL — la propia app lee
-      // esos parámetros (ver main.dart) y muestra una pantalla propia
-      // para escribir la nueva contraseña, con la marca de RocaKids.
-      link = await getAuth().generatePasswordResetLink(correo, {
+      // `generatePasswordResetLink` sigue siendo quien genera el
+      // `oobCode` real (mecanismo de seguridad de Firebase, sin
+      // cambios) — pero el LINK que devuelve apunta a la página
+      // genérica alojada por Firebase (`handleCodeInApp` solo afecta
+      // apps móviles con Dynamic Links, no cambia nada en Web). Por
+      // eso se extrae el `oobCode` de ese enlace y se arma uno propio
+      // hacia la app: `main.dart` ya sabe leer
+      // `?mode=resetPassword&oobCode=...` de la URL y mostrar
+      // `ResetPasswordScreen` en vez del login normal.
+      const generado = await getAuth().generatePasswordResetLink(correo, {
         url: 'https://rocakidsarmenia-7935b.web.app',
-        handleCodeInApp: true,
       });
+      const oobCode = new URL(generado).searchParams.get('oobCode');
+      link = `https://rocakidsarmenia-7935b.web.app/?mode=resetPassword&oobCode=${encodeURIComponent(oobCode)}`;
     } catch (e) {
       console.log(`Recuperación de contraseña: ${correo} sin cuenta válida (${e.code || e.message}).`);
       return {enviado: false};
