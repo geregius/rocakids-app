@@ -231,7 +231,7 @@ Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `
 
 | Pantalla | Qué hace |
 |---|---|
-| `login_screen.dart` | Correo/contraseña + botones "Soy Acudiente" / "Soy Servidor". Selector mostrar/ocultar contraseña. |
+| `login_screen.dart` | Correo/contraseña + botones "Soy Acudiente" / "Soy Servidor". Selector mostrar/ocultar contraseña. **Desde 2026-08-19:** botón "¿Olvidaste tu contraseña?" bajo el campo de contraseña — abre un diálogo, pide el correo (pre-llenado si ya se escribió) y envía el correo de restablecimiento de Firebase Auth (`AuthService.resetPassword()`). Pensado para los acudientes migrados cuya contraseña inicial es su número de documento (ver sección 9) y no lo saben. No revela si el correo existe o no en el sistema (mismo mensaje de éxito en ambos casos). |
 | `sign_up_servidor_screen.dart` | Registro de servidor → queda en rol `pendiente`, cierra sesión, muestra diálogo de confirmación. |
 | `sign_up_acudiente_screen.dart` | Registro de acudiente + su primer niño + relación, en un solo formulario. Fotos opcionales (acudiente y niño) con selector cámara/galería. Acceso inmediato al guardar. |
 | `pending_approval_screen.dart` | Para rol `pendiente` (servidor esperando aprobación) o roles sin sentido (`desconocido`). Sin menú — todavía no hay nada que navegar. |

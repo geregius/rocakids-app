@@ -48,6 +48,18 @@ class AuthService {
     }
   }
 
+  /// Envía el correo de restablecimiento de contraseña de Firebase Auth.
+  /// Si el correo no corresponde a ninguna cuenta, no se avisa (no
+  /// revelamos si un correo está o no registrado en el sistema).
+  Future<void> resetPassword({required String correo}) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: correo.trim());
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found') return;
+      throw AuthException(_mensajeDeErrorReset(e.code));
+    }
+  }
+
   /// Auto-registro de un SERVIDOR (voluntario/líder). Queda con rol
   /// "pendiente" — fijado también por las reglas de seguridad, así que
   /// aunque alguien manipule la app no puede autoasignarse un rol con
@@ -1661,6 +1673,17 @@ class AuthService {
         return 'Demasiados intentos. Intenta de nuevo en unos minutos.';
       default:
         return 'No se pudo iniciar sesión. Intenta de nuevo.';
+    }
+  }
+
+  String _mensajeDeErrorReset(String codigo) {
+    switch (codigo) {
+      case 'invalid-email':
+        return 'El correo ingresado no es válido.';
+      case 'too-many-requests':
+        return 'Demasiados intentos. Intenta de nuevo en unos minutos.';
+      default:
+        return 'No se pudo enviar el correo de recuperación. Intenta de nuevo.';
     }
   }
 

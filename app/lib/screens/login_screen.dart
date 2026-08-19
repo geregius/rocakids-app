@@ -20,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _cargando = false;
   bool _mostrarPassword = false;
+  bool _enviandoRecuperacion = false;
   String? _error;
 
   @override
@@ -48,6 +49,78 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _error = e.mensaje);
     } finally {
       if (mounted) setState(() => _cargando = false);
+    }
+  }
+
+  Future<void> _olvidePassword() async {
+    final correoController = TextEditingController(
+      text: _correoController.text.trim(),
+    );
+    final formKey = GlobalKey<FormState>();
+
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Recuperar contraseña'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: correoController,
+            keyboardType: TextInputType.emailAddress,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Correo electrónico',
+              prefixIcon: Icon(Icons.mail_outline),
+            ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Ingresa tu correo';
+              }
+              if (!value.contains('@')) {
+                return 'Correo inválido';
+              }
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.of(context).pop(true);
+              }
+            },
+            child: const Text('Enviar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmado != true || !mounted) return;
+
+    setState(() => _enviandoRecuperacion = true);
+    try {
+      await _authService.resetPassword(correo: correoController.text);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Si el correo está registrado, te enviamos un enlace para '
+            'restablecer tu contraseña.',
+          ),
+        ),
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.mensaje)));
+    } finally {
+      if (mounted) setState(() => _enviandoRecuperacion = false);
     }
   }
 
@@ -116,6 +189,19 @@ class _LoginScreenState extends State<LoginScreen> {
                         return null;
                       },
                       onFieldSubmitted: (_) => _iniciarSesion(),
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _enviandoRecuperacion ? null : _olvidePassword,
+                        child: _enviandoRecuperacion
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('¿Olvidaste tu contraseña?'),
+                      ),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 16),
