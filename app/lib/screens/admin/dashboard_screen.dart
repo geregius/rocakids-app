@@ -940,8 +940,9 @@ class _GraficasResponsivas extends StatelessWidget {
 /// mismo orden en que se insertaron. Un solo color de marca — no hace
 /// falta codificar identidad por color porque cada barra ya lleva su
 /// propia etiqueta en el eje X. Interactiva: tocar (o pasar el mouse en
-/// escritorio/web) una barra muestra su valor exacto en un tooltip.
-class _GraficaBarras extends StatelessWidget {
+/// escritorio/web) una barra muestra su valor exacto en un tooltip y
+/// resalta esa barra en amarillo (2026-08-19, pedido de Rafael).
+class _GraficaBarras extends StatefulWidget {
   final String titulo;
   final Map<String, int> datos;
   final String Function(String llave)? etiquetaCorta;
@@ -953,17 +954,26 @@ class _GraficaBarras extends StatelessWidget {
   });
 
   @override
+  State<_GraficaBarras> createState() => _GraficaBarrasState();
+}
+
+class _GraficaBarrasState extends State<_GraficaBarras> {
+  int? _indiceResaltado;
+
+  @override
   Widget build(BuildContext context) {
-    final llaves = datos.keys.toList();
-    final maxValor = datos.values.isEmpty
+    final llaves = widget.datos.keys.toList();
+    final maxValor = widget.datos.values.isEmpty
         ? 0
-        : datos.values.reduce((a, b) => a > b ? a : b);
+        : widget.datos.values.reduce((a, b) => a > b ? a : b);
     final techo = maxValor == 0 ? 1.0 : (maxValor * 1.2);
-    final etiquetasX = [for (final k in llaves) etiquetaCorta?.call(k) ?? k];
+    final etiquetasX = [
+      for (final k in llaves) widget.etiquetaCorta?.call(k) ?? k,
+    ];
 
     return _tarjetaGrafica(
       context,
-      titulo: titulo,
+      titulo: widget.titulo,
       grafica: LayoutBuilder(
         builder: (context, constraints) => BarChart(
           BarChartData(
@@ -984,6 +994,15 @@ class _GraficaBarras extends StatelessWidget {
               paso: _pasoEtiquetas(constraints.maxWidth, etiquetasX.length),
             ),
             barTouchData: BarTouchData(
+              touchCallback: (evento, respuesta) {
+                final indice = respuesta?.spot?.touchedBarGroupIndex;
+                final nuevoIndice = (indice != null && indice >= 0)
+                    ? indice
+                    : null;
+                if (nuevoIndice != _indiceResaltado) {
+                  setState(() => _indiceResaltado = nuevoIndice);
+                }
+              },
               touchTooltipData: BarTouchTooltipData(
                 getTooltipColor: (_) => AppColors.azulOscuro,
                 getTooltipItem: (group, groupIndex, rod, rodIndex) =>
@@ -1002,8 +1021,10 @@ class _GraficaBarras extends StatelessWidget {
                   x: i,
                   barRods: [
                     BarChartRodData(
-                      toY: (datos[llaves[i]] ?? 0).toDouble(),
-                      color: AppColors.azulMarino,
+                      toY: (widget.datos[llaves[i]] ?? 0).toDouble(),
+                      color: i == _indiceResaltado
+                          ? AppColors.amarillo
+                          : AppColors.azulMarino,
                       width: 18,
                       borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(4),
@@ -1075,10 +1096,10 @@ class _GraficaLinea extends StatelessWidget {
                       FlDotData(
                         getDotPainter: (spot, percent, bar, index) =>
                             FlDotCirclePainter(
-                              radius: 5,
-                              color: AppColors.azulMarino,
+                              radius: 6,
+                              color: AppColors.amarillo,
                               strokeWidth: 2,
-                              strokeColor: Colors.white,
+                              strokeColor: AppColors.azulMarino,
                             ),
                       ),
                     ),
