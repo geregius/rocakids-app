@@ -8,6 +8,7 @@ import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/escaner_qr.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/foto_avatar.dart';
 import 'editar_acudiente_sheet.dart';
 import 'editar_nino_sheet.dart';
 
@@ -961,14 +962,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
                         Expanded(
                           child: RadioListTile<String>(
                             value: a.uid,
-                            secondary: CircleAvatar(
-                              backgroundImage: a.fotoSeguridadUrl.isNotEmpty
-                                  ? NetworkImage(a.fotoSeguridadUrl)
-                                  : null,
-                              child: a.fotoSeguridadUrl.isEmpty
-                                  ? const Icon(Icons.person)
-                                  : null,
-                            ),
+                            secondary: FotoAvatar(url: a.fotoSeguridadUrl),
                             title: Text(a.nombreCompleto),
                             subtitle: a.estadoAutorizacion == 'Restringido'
                                 ? Text(

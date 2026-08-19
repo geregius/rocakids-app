@@ -312,7 +312,7 @@ class AuthService {
       String fotoAcudienteUrl = '';
       if (fotoAcudienteBytes != null && fotoAcudienteExt != null) {
         final ref = storage.ref('acudientes_fotos/$uid/foto.$fotoAcudienteExt');
-        await ref.putData(fotoAcudienteBytes);
+        await ref.putData(fotoAcudienteBytes, _metadataDeFoto(fotoAcudienteExt));
         fotoAcudienteUrl = await ref.getDownloadURL();
       }
       String fotoNinoUrl = '';
@@ -320,7 +320,7 @@ class AuthService {
         final ref = storage.ref(
           'ninos_fotos/${nino.documentoIdentificacion}/foto.$fotoNinoExt',
         );
-        await ref.putData(fotoNinoBytes);
+        await ref.putData(fotoNinoBytes, _metadataDeFoto(fotoNinoExt));
         fotoNinoUrl = await ref.getDownloadURL();
       }
 
@@ -1299,7 +1299,7 @@ class AuthService {
       String fotoAcudienteUrl = '';
       if (fotoAcudienteBytes != null && fotoAcudienteExt != null) {
         final ref = storage.ref('acudientes_fotos/$uid/foto.$fotoAcudienteExt');
-        await ref.putData(fotoAcudienteBytes);
+        await ref.putData(fotoAcudienteBytes, _metadataDeFoto(fotoAcudienteExt));
         fotoAcudienteUrl = await ref.getDownloadURL();
       }
 
@@ -1676,7 +1676,7 @@ class AuthService {
       throw const AuthException('No hay sesión activa.');
     }
     final ref = _storage.ref('servidores_fotos/${user.uid}/foto.$extension');
-    await ref.putData(bytes);
+    await ref.putData(bytes, _metadataDeFoto(extension));
     return ref.getDownloadURL();
   }
 
@@ -1688,7 +1688,7 @@ class AuthService {
       throw const AuthException('No hay sesión activa.');
     }
     final ref = _storage.ref('acudientes_fotos/${user.uid}/foto.$extension');
-    await ref.putData(bytes);
+    await ref.putData(bytes, _metadataDeFoto(extension));
     return ref.getDownloadURL();
   }
 
@@ -1703,8 +1703,22 @@ class AuthService {
       throw const AuthException('No hay sesión activa.');
     }
     final ref = _storage.ref('ninos_fotos/$ninoDocId/foto.$extension');
-    await ref.putData(bytes);
+    await ref.putData(bytes, _metadataDeFoto(extension));
     return ref.getDownloadURL();
+  }
+
+  /// Sin esto, Storage guarda el archivo como `application/octet-stream`
+  /// — Safari/iOS es estricto con el `Content-Type` real al decodificar
+  /// una imagen y la muestra en blanco (encontrado 2026-08-19: fotos
+  /// que sí cargaban en escritorio no cargaban en celular).
+  SettableMetadata _metadataDeFoto(String extension) {
+    final tipo = switch (extension.toLowerCase()) {
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      'heic' => 'image/heic',
+      _ => 'image/jpeg',
+    };
+    return SettableMetadata(contentType: tipo);
   }
 
   String _mensajeDeError(String codigo) {
