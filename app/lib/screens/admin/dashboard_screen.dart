@@ -23,8 +23,18 @@ const _servicioCorto = {
 };
 
 const _mesesAbrev = [
-  'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-  'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic',
 ];
 
 String _etiquetaMes(DateTime mes) =>
@@ -213,7 +223,10 @@ class _BloqueTotales extends StatelessWidget {
 class _BloqueAlertaGraduacion extends StatelessWidget {
   final AuthService authService;
   final UsuarioApp usuario;
-  const _BloqueAlertaGraduacion({required this.authService, required this.usuario});
+  const _BloqueAlertaGraduacion({
+    required this.authService,
+    required this.usuario,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -467,7 +480,10 @@ class _ListaPendientesSheet extends StatelessWidget {
                           context: context,
                           isScrollControlled: true,
                           builder: (_) => esNino
-                              ? NinoDetalleSheet(nino: item as Nino, usuario: usuario)
+                              ? NinoDetalleSheet(
+                                  nino: item as Nino,
+                                  usuario: usuario,
+                                )
                               : AcudienteDetalleSheet(
                                   acudiente: item as Acudiente,
                                   usuario: usuario,
@@ -536,9 +552,7 @@ class _BloqueHoy extends StatelessWidget {
         final visitantes = entradasHoy.where((r) => r.esVisitante).length;
         final sinDocumento = entradasHoy.where(_sinDocumento).length;
 
-        final porGrupo = <String, int>{
-          for (final g in gruposEdad) g: 0,
-        };
+        final porGrupo = <String, int>{for (final g in gruposEdad) g: 0};
         final porServicio = <String, int>{
           for (final s in serviciosDisponibles) s: 0,
         };
@@ -591,18 +605,17 @@ class _BloqueHoy extends StatelessWidget {
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Center(child: Text('Todavía no hay registros hoy.')),
               )
-            else ...[
-              _GraficaBarras(
-                titulo: 'Por grupo de edad',
-                datos: porGrupo,
+            else
+              _GraficasResponsivas(
+                graficas: [
+                  _GraficaBarras(titulo: 'Por grupo de edad', datos: porGrupo),
+                  _GraficaBarras(
+                    titulo: 'Por servicio',
+                    datos: porServicio,
+                    etiquetaCorta: (k) => _servicioCorto[k] ?? k,
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-              _GraficaBarras(
-                titulo: 'Por servicio',
-                datos: porServicio,
-                etiquetaCorta: (k) => _servicioCorto[k] ?? k,
-              ),
-            ],
           ],
         );
       },
@@ -708,13 +721,10 @@ class _BloqueHistoricoState extends State<_BloqueHistorico> {
                 primeraAsistenciaPorNino[r.fkIdNino] = r.fechaMovimiento;
               }
             }
-            final primerasAsistencias = primeraAsistenciaPorNino.values
-                .toList()
+            final primerasAsistencias = primeraAsistenciaPorNino.values.toList()
               ..sort();
             final crecimientoAcumulado = <double>[
-              for (final finDeMes in mesesEnRango.map(
-                (m) => _sumarMeses(m, 1),
-              ))
+              for (final finDeMes in mesesEnRango.map((m) => _sumarMeses(m, 1)))
                 primerasAsistencias
                     .where((f) => f.isBefore(finDeMes))
                     .length
@@ -731,20 +741,17 @@ class _BloqueHistoricoState extends State<_BloqueHistorico> {
               }
             }
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+            return _GraficasResponsivas(
+              graficas: [
                 _GraficaLinea(
                   titulo: 'Crecimiento de niños registrados (acumulado)',
                   etiquetasX: mesesEnRango.map(_etiquetaMes).toList(),
                   valores: crecimientoAcumulado,
                 ),
-                const SizedBox(height: 20),
                 _GraficaBarras(
                   titulo: 'Asistencia por mes',
                   datos: asistenciaPorMes,
                 ),
-                const SizedBox(height: 20),
                 _GraficaBarras(
                   titulo: 'Comparación entre servicios',
                   datos: porServicio,
@@ -791,10 +798,7 @@ class _StatTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            icono,
-            color: destacar ? AppColors.rojo : AppColors.azulMarino,
-          ),
+          Icon(icono, color: destacar ? AppColors.rojo : AppColors.azulMarino),
           const SizedBox(height: 8),
           Text(
             valor,
@@ -840,11 +844,23 @@ Widget _tarjetaGrafica(
   );
 }
 
+/// Cada cuántas etiquetas mostrar una en el eje X, para que no se
+/// encimen sin importar cuántos meses/categorías haya ni el ancho de
+/// pantalla (2026-08-19, pedido de Rafael) — en vez de mostrarlas
+/// TODAS siempre. Estima ~45px por etiqueta (abreviaciones cortas tipo
+/// "ene" o "Dom 1°" a `bodySmall`) y salta las que no quepan.
+int _pasoEtiquetas(double anchoDisponible, int totalEtiquetas) {
+  if (totalEtiquetas <= 1) return 1;
+  final maxVisibles = (anchoDisponible / 45).floor().clamp(2, totalEtiquetas);
+  return (totalEtiquetas / maxVisibles).ceil().clamp(1, totalEtiquetas);
+}
+
 FlTitlesData _ejesConEtiquetas(
   BuildContext context,
   List<String> etiquetasX,
-  double techo,
-) {
+  double techo, {
+  int paso = 1,
+}) {
   final intervaloY = techo / 4 == 0 ? 1.0 : techo / 4;
   return FlTitlesData(
     topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -867,6 +883,7 @@ FlTitlesData _ejesConEtiquetas(
         getTitlesWidget: (value, meta) {
           final i = value.toInt();
           if (i < 0 || i >= etiquetasX.length) return const SizedBox.shrink();
+          if (paso > 1 && i % paso != 0) return const SizedBox.shrink();
           return Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
@@ -878,6 +895,45 @@ FlTitlesData _ejesConEtiquetas(
       ),
     ),
   );
+}
+
+/// Acomoda una lista de tarjetas de gráfica en 2 columnas cuando hay
+/// espacio de sobra (escritorio/tablet ancho) y en una sola columna
+/// apiladas en pantallas angostas (celular) — 2026-08-19, pedido de
+/// Rafael de que las gráficas se vean bien "en cualquier dispositivo".
+class _GraficasResponsivas extends StatelessWidget {
+  final List<Widget> graficas;
+  const _GraficasResponsivas({required this.graficas});
+
+  static const _espaciado = 20.0;
+  static const _anchoMinParaDosColumnas = 700.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < _anchoMinParaDosColumnas) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < graficas.length; i++) ...[
+                if (i > 0) const SizedBox(height: _espaciado),
+                graficas[i],
+              ],
+            ],
+          );
+        }
+        final anchoColumna = (constraints.maxWidth - _espaciado) / 2;
+        return Wrap(
+          spacing: _espaciado,
+          runSpacing: _espaciado,
+          children: [
+            for (final g in graficas) SizedBox(width: anchoColumna, child: g),
+          ],
+        );
+      },
+    );
+  }
 }
 
 /// Gráfica de barras genérica: una barra por cada llave de [datos], en el
@@ -903,55 +959,60 @@ class _GraficaBarras extends StatelessWidget {
         ? 0
         : datos.values.reduce((a, b) => a > b ? a : b);
     final techo = maxValor == 0 ? 1.0 : (maxValor * 1.2);
-    final etiquetasX = [
-      for (final k in llaves) etiquetaCorta?.call(k) ?? k,
-    ];
+    final etiquetasX = [for (final k in llaves) etiquetaCorta?.call(k) ?? k];
 
     return _tarjetaGrafica(
       context,
       titulo: titulo,
-      grafica: BarChart(
-        BarChartData(
-          maxY: techo,
-          gridData: FlGridData(
-            drawVerticalLine: false,
-            horizontalInterval: techo / 4,
-            getDrawingHorizontalLine: (_) => FlLine(
-              color: AppColors.textoPrincipal.withValues(alpha: 0.08),
-              strokeWidth: 1,
-            ),
-          ),
-          borderData: FlBorderData(show: false),
-          titlesData: _ejesConEtiquetas(context, etiquetasX, techo),
-          barTouchData: BarTouchData(
-            touchTooltipData: BarTouchTooltipData(
-              getTooltipColor: (_) => AppColors.azulOscuro,
-              getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                  BarTooltipItem(
-                '${rod.toY.toInt()}',
-                const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
+      grafica: LayoutBuilder(
+        builder: (context, constraints) => BarChart(
+          BarChartData(
+            maxY: techo,
+            gridData: FlGridData(
+              drawVerticalLine: false,
+              horizontalInterval: techo / 4,
+              getDrawingHorizontalLine: (_) => FlLine(
+                color: AppColors.textoPrincipal.withValues(alpha: 0.08),
+                strokeWidth: 1,
               ),
             ),
-          ),
-          barGroups: [
-            for (var i = 0; i < llaves.length; i++)
-              BarChartGroupData(
-                x: i,
-                barRods: [
-                  BarChartRodData(
-                    toY: (datos[llaves[i]] ?? 0).toDouble(),
-                    color: AppColors.azulMarino,
-                    width: 18,
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(4),
+            borderData: FlBorderData(show: false),
+            titlesData: _ejesConEtiquetas(
+              context,
+              etiquetasX,
+              techo,
+              paso: _pasoEtiquetas(constraints.maxWidth, etiquetasX.length),
+            ),
+            barTouchData: BarTouchData(
+              touchTooltipData: BarTouchTooltipData(
+                getTooltipColor: (_) => AppColors.azulOscuro,
+                getTooltipItem: (group, groupIndex, rod, rodIndex) =>
+                    BarTooltipItem(
+                      '${rod.toY.toInt()}',
+                      const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
               ),
-          ],
+            ),
+            barGroups: [
+              for (var i = 0; i < llaves.length; i++)
+                BarChartGroupData(
+                  x: i,
+                  barRods: [
+                    BarChartRodData(
+                      toY: (datos[llaves[i]] ?? 0).toDouble(),
+                      color: AppColors.azulMarino,
+                      width: 18,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -983,71 +1044,78 @@ class _GraficaLinea extends StatelessWidget {
     return _tarjetaGrafica(
       context,
       titulo: titulo,
-      grafica: LineChart(
-        LineChartData(
-          minY: 0,
-          maxY: techo,
-          gridData: FlGridData(
-            drawVerticalLine: false,
-            horizontalInterval: techo / 4,
-            getDrawingHorizontalLine: (_) => FlLine(
-              color: AppColors.textoPrincipal.withValues(alpha: 0.08),
-              strokeWidth: 1,
+      grafica: LayoutBuilder(
+        builder: (context, constraints) => LineChart(
+          LineChartData(
+            minY: 0,
+            maxY: techo,
+            gridData: FlGridData(
+              drawVerticalLine: false,
+              horizontalInterval: techo / 4,
+              getDrawingHorizontalLine: (_) => FlLine(
+                color: AppColors.textoPrincipal.withValues(alpha: 0.08),
+                strokeWidth: 1,
+              ),
             ),
-          ),
-          borderData: FlBorderData(show: false),
-          titlesData: _ejesConEtiquetas(context, etiquetasX, techo),
-          lineTouchData: LineTouchData(
-            getTouchedSpotIndicator: (barData, indexes) => indexes
-                .map(
-                  (_) => TouchedSpotIndicatorData(
-                    FlLine(
-                      color: AppColors.azulMarino.withValues(alpha: 0.3),
-                      strokeWidth: 2,
-                    ),
-                    FlDotData(
-                      getDotPainter: (spot, percent, bar, index) =>
-                          FlDotCirclePainter(
-                        radius: 5,
-                        color: AppColors.azulMarino,
-                        strokeWidth: 2,
-                        strokeColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                )
-                .toList(),
-            touchTooltipData: LineTouchTooltipData(
-              getTooltipColor: (_) => AppColors.azulOscuro,
-              getTooltipItems: (spots) => spots
+            borderData: FlBorderData(show: false),
+            titlesData: _ejesConEtiquetas(
+              context,
+              etiquetasX,
+              techo,
+              paso: _pasoEtiquetas(constraints.maxWidth, etiquetasX.length),
+            ),
+            lineTouchData: LineTouchData(
+              getTouchedSpotIndicator: (barData, indexes) => indexes
                   .map(
-                    (s) => LineTooltipItem(
-                      '${s.y.toInt()}',
-                      const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+                    (_) => TouchedSpotIndicatorData(
+                      FlLine(
+                        color: AppColors.azulMarino.withValues(alpha: 0.3),
+                        strokeWidth: 2,
+                      ),
+                      FlDotData(
+                        getDotPainter: (spot, percent, bar, index) =>
+                            FlDotCirclePainter(
+                              radius: 5,
+                              color: AppColors.azulMarino,
+                              strokeWidth: 2,
+                              strokeColor: Colors.white,
+                            ),
                       ),
                     ),
                   )
                   .toList(),
-            ),
-          ),
-          lineBarsData: [
-            LineChartBarData(
-              spots: [
-                for (var i = 0; i < valores.length; i++)
-                  FlSpot(i.toDouble(), valores[i]),
-              ],
-              isCurved: false,
-              color: AppColors.azulMarino,
-              barWidth: 2,
-              dotData: const FlDotData(show: true),
-              belowBarData: BarAreaData(
-                show: true,
-                color: AppColors.azulMarino.withValues(alpha: 0.08),
+              touchTooltipData: LineTouchTooltipData(
+                getTooltipColor: (_) => AppColors.azulOscuro,
+                getTooltipItems: (spots) => spots
+                    .map(
+                      (s) => LineTooltipItem(
+                        '${s.y.toInt()}',
+                        const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    )
+                    .toList(),
               ),
             ),
-          ],
+            lineBarsData: [
+              LineChartBarData(
+                spots: [
+                  for (var i = 0; i < valores.length; i++)
+                    FlSpot(i.toDouble(), valores[i]),
+                ],
+                isCurved: false,
+                color: AppColors.azulMarino,
+                barWidth: 2,
+                dotData: const FlDotData(show: true),
+                belowBarData: BarAreaData(
+                  show: true,
+                  color: AppColors.azulMarino.withValues(alpha: 0.08),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
