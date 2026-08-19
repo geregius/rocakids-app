@@ -244,6 +244,16 @@ service cloud.firestore {
       allow update, delete: if esAdmin();
     }
 
+    // Resumen mensual de asistencia (2026-08-19) — solo lo escribe la
+    // Cloud Function `actualizarResumenMensual` (Admin SDK, no pasa por
+    // estas reglas). El cliente solo necesita leerlo, para el bloque
+    // "Histórico" del Dashboard — mismo permiso que el resto de datos
+    // agregados del Dashboard (`puedeVerInfoLiderazgo()`).
+    match /resumenes_mensuales/{mesId} {
+      allow get, list: if puedeVerInfoLiderazgo();
+      allow write: if false;
+    }
+
     // Todo lo demás queda cerrado por defecto hasta que se definan
     // las reglas de cada módulo (campañas, etc).
     match /{document=**} {

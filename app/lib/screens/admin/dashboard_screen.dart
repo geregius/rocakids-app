@@ -55,22 +55,24 @@ DateTime _sumarMeses(DateTime d, int n) {
 /// misma lógica de "presentes ahora" que `ninos_presentes_screen.dart`)
 /// y una vista histórica de tendencias con filtros de 1/3/6/9/12 meses.
 ///
-/// El histórico trae TODAS las Entradas alguna vez registradas en una
-/// sola consulta (ver [_BloqueHistoricoState._futuroTodasLasEntradas])
-/// y agrega todo del lado del cliente — así cambiar de filtro (1 a 12
-/// meses) no dispara una consulta nueva, y calcular el crecimiento
-/// acumulado de niños necesita conocer la primera asistencia de cada
-/// uno aunque haya sido antes de la ventana seleccionada. Funciona bien
-/// con el volumen de datos de hoy; si en el futuro (ej. tras importar
-/// los ~3873 registros históricos del Módulo 2) se vuelve lento, se
-/// resuelve con una tabla de resúmenes pre-calculados, no antes
-/// (decisión 2026-08-17, ver memoria del proyecto).
+/// El histórico lee `resumenes_mensuales` (2026-08-19) — un documento
+/// por mes con los totales ya agregados, mantenido incrementalmente por
+/// la Cloud Function `actualizarResumenMensual` cada vez que se crea
+/// una Entrada. Antes traía TODAS las Entradas alguna vez registradas
+/// en una sola consulta (~3738+ tras la migración del Módulo 2) y
+/// agregaba todo del lado del cliente — se sentía lento, sobre todo en
+/// celular. Con los resúmenes, cambiar de filtro (1 a 12 meses) sigue
+/// sin disparar una consulta nueva (se trae la colección completa de
+/// resúmenes UNA vez, que es chiquita — un doc por mes transcurrido,
+/// no por registro) y el crecimiento acumulado sigue pudiendo arrancar
+/// con la base correcta de meses anteriores a la ventana seleccionada.
 ///
-/// El "crecimiento de niños registrados" se mide por la fecha de su
-/// PRIMERA asistencia (mínimo `fechaMovimiento` de sus Entradas), no por
-/// una fecha de creación del documento `ninos` — ese documento no
-/// guarda cuándo se creó, así que no hay forma de reconstruir esa
-/// tendencia para los niños que ya existen en el sistema.
+/// El "crecimiento de niños registrados" se mide por la fecha de la
+/// PRIMERA Entrada de cada niño (`ninos/{id}.primeraAsistencia`, fijado
+/// una sola vez por la misma Cloud Function), no por una fecha de
+/// creación del documento `ninos` — ese documento no guarda cuándo se
+/// creó, así que no hay forma de reconstruir esa tendencia de otra
+/// forma para los niños que ya existen en el sistema.
 class DashboardScreen extends StatefulWidget {
   final UsuarioApp usuario;
 
@@ -82,64 +84,37 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final _authService = AuthService();
-  bool _cargandoNinos = true;
-  Map<String, Nino> _ninosPorId = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _cargarNinos();
-  }
-
-  Future<void> _cargarNinos() async {
-    try {
-      final ninos = await _authService.obtenerTodosLosNinos();
-      if (mounted) {
-        setState(() {
-          _ninosPorId = {for (final n in ninos) n.documentoIdentificacion: n};
-          _cargandoNinos = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _cargandoNinos = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Dashboard',
-      body: _cargandoNinos
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _TituloBloque('Totales del sistema'),
-                const SizedBox(height: 8),
-                _BloqueTotales(authService: _authService),
-                const SizedBox(height: 20),
-                _BloqueAlertaGraduacion(
-                  authService: _authService,
-                  usuario: widget.usuario,
-                ),
-                const SizedBox(height: 32),
-                _TituloBloque('Pendientes'),
-                const SizedBox(height: 8),
-                _BloquePendientes(
-                  authService: _authService,
-                  usuario: widget.usuario,
-                ),
-                const SizedBox(height: 32),
-                _TituloBloque('Hoy'),
-                const SizedBox(height: 8),
-                _BloqueHoy(authService: _authService, ninosPorId: _ninosPorId),
-                const SizedBox(height: 32),
-                _TituloBloque('Histórico'),
-                const SizedBox(height: 8),
-                _BloqueHistorico(authService: _authService),
-              ],
-            ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _TituloBloque('Totales del sistema'),
+          const SizedBox(height: 8),
+          _BloqueTotales(authService: _authService),
+          const SizedBox(height: 20),
+          _BloqueAlertaGraduacion(
+            authService: _authService,
+            usuario: widget.usuario,
+          ),
+          const SizedBox(height: 32),
+          _TituloBloque('Pendientes'),
+          const SizedBox(height: 8),
+          _BloquePendientes(authService: _authService, usuario: widget.usuario),
+          const SizedBox(height: 32),
+          _TituloBloque('Hoy'),
+          const SizedBox(height: 8),
+          _BloqueHoy(authService: _authService),
+          const SizedBox(height: 32),
+          _TituloBloque('Histórico'),
+          const SizedBox(height: 8),
+          _BloqueHistorico(authService: _authService),
+        ],
+      ),
     );
   }
 }
@@ -502,11 +477,35 @@ class _ListaPendientesSheet extends StatelessWidget {
   }
 }
 
-class _BloqueHoy extends StatelessWidget {
+/// Antes recibía `ninosPorId` ya cargado por `DashboardScreen`, que
+/// bloqueaba TODA la pantalla (incluidos los conteos baratos de
+/// `_BloqueTotales`) esperando `obtenerTodosLosNinos()` — un dato
+/// pesado (~460 documentos completos) solo para un dato secundario
+/// ("sin documento" de hoy). Ahora este bloque carga esos niños por su
+/// cuenta (2026-08-19): el resto del Dashboard ya no espera por esto.
+class _BloqueHoy extends StatefulWidget {
   final AuthService authService;
-  final Map<String, Nino> ninosPorId;
 
-  const _BloqueHoy({required this.authService, required this.ninosPorId});
+  const _BloqueHoy({required this.authService});
+
+  @override
+  State<_BloqueHoy> createState() => _BloqueHoyState();
+}
+
+class _BloqueHoyState extends State<_BloqueHoy> {
+  Map<String, Nino> _ninosPorId = {};
+
+  @override
+  void initState() {
+    super.initState();
+    widget.authService.obtenerTodosLosNinos().then((ninos) {
+      if (mounted) {
+        setState(() {
+          _ninosPorId = {for (final n in ninos) n.documentoIdentificacion: n};
+        });
+      }
+    });
+  }
 
   /// Igual criterio que `ninos_presentes_screen.dart`: el último
   /// movimiento de HOY de un niño registrado decide si sigue presente;
@@ -530,12 +529,12 @@ class _BloqueHoy extends StatelessWidget {
 
   bool _sinDocumento(Registro r) => r.esVisitante
       ? r.documentoNinoVisitante.isEmpty
-      : (ninosPorId[r.fkIdNino]?.identificacionMenor.isEmpty ?? false);
+      : (_ninosPorId[r.fkIdNino]?.identificacionMenor.isEmpty ?? false);
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Registro>>(
-      stream: authService.registrosDeHoy(),
+      stream: widget.authService.registrosDeHoy(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -635,19 +634,16 @@ class _BloqueHistorico extends StatefulWidget {
 
 class _BloqueHistoricoState extends State<_BloqueHistorico> {
   int _meses = 3;
-  late final Future<List<Registro>> _futuroTodasLasEntradas;
+  late final Future<List<ResumenMensual>> _futuroResumenes;
 
   @override
   void initState() {
     super.initState();
-    // Todas las Entradas desde siempre, en una sola consulta — ver
-    // docstring de [DashboardScreen] sobre por qué hace falta el
-    // historial completo (no solo la ventana seleccionada) para el
-    // crecimiento acumulado, y por qué cambiar el filtro no vuelve a
-    // consultar Firestore.
-    _futuroTodasLasEntradas = widget.authService.obtenerEntradasDesde(
-      DateTime(2000),
-    );
+    // Trae la colección de resúmenes completa UNA vez — es chiquita (un
+    // documento por mes transcurrido desde que existe la app, no por
+    // registro), así que cambiar el filtro (1 a 12 meses) sigue sin
+    // disparar una consulta nueva. Ver docstring de [DashboardScreen].
+    _futuroResumenes = widget.authService.obtenerResumenesMensuales();
   }
 
   @override
@@ -666,8 +662,8 @@ class _BloqueHistoricoState extends State<_BloqueHistorico> {
           }).toList(),
         ),
         const SizedBox(height: 16),
-        FutureBuilder<List<Registro>>(
-          future: _futuroTodasLasEntradas,
+        FutureBuilder<List<ResumenMensual>>(
+          future: _futuroResumenes,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Padding(
@@ -678,13 +674,16 @@ class _BloqueHistoricoState extends State<_BloqueHistorico> {
             if (snapshot.hasError) {
               return Text('Error: ${snapshot.error}');
             }
-            final todasLasEntradas = snapshot.data ?? [];
-            if (todasLasEntradas.isEmpty) {
+            final resumenes = snapshot.data ?? [];
+            if (resumenes.isEmpty) {
               return const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Center(child: Text('Todavía no hay registros.')),
               );
             }
+            final resumenPorMes = {
+              for (final r in resumenes) DateTime(r.mes.year, r.mes.month, 1): r,
+            };
 
             final hoy = DateTime.now();
             final mesesEnRango = [
@@ -692,53 +691,45 @@ class _BloqueHistoricoState extends State<_BloqueHistorico> {
                 _sumarMeses(_inicioMes(hoy), -i),
             ];
             final inicioVentana = mesesEnRango.first;
-            final entradasEnVentana = todasLasEntradas
-                .where((r) => !r.fechaMovimiento.isBefore(inicioVentana))
-                .toList();
 
             // Asistencia por mes (todas las Entradas, visitantes
             // incluidos — mide volumen de asistencia, no niños únicos).
             final asistenciaPorMes = <String, int>{
-              for (final m in mesesEnRango) _etiquetaMes(m): 0,
+              for (final m in mesesEnRango)
+                _etiquetaMes(m): resumenPorMes[m]?.totalEntradas ?? 0,
             };
-            for (final r in entradasEnVentana) {
-              final llave = _etiquetaMes(_inicioMes(r.fechaMovimiento));
-              if (asistenciaPorMes.containsKey(llave)) {
-                asistenciaPorMes[llave] = (asistenciaPorMes[llave] ?? 0) + 1;
-              }
-            }
 
-            // Crecimiento acumulado de niños registrados: primera
-            // Entrada de cada niño (fkIdNino no vacío) en TODA la
-            // historia, para que el acumulado dentro de la ventana ya
-            // arranque con la base correcta de niños que empezaron a
-            // asistir antes del filtro seleccionado.
-            final primeraAsistenciaPorNino = <String, DateTime>{};
-            for (final r in todasLasEntradas) {
-              if (r.esVisitante) continue;
-              final actual = primeraAsistenciaPorNino[r.fkIdNino];
-              if (actual == null || r.fechaMovimiento.isBefore(actual)) {
-                primeraAsistenciaPorNino[r.fkIdNino] = r.fechaMovimiento;
-              }
-            }
-            final primerasAsistencias = primeraAsistenciaPorNino.values.toList()
-              ..sort();
-            final crecimientoAcumulado = <double>[
-              for (final finDeMes in mesesEnRango.map((m) => _sumarMeses(m, 1)))
-                primerasAsistencias
-                    .where((f) => f.isBefore(finDeMes))
-                    .length
-                    .toDouble(),
-            ];
-
-            // Comparación entre servicios, dentro de la ventana.
+            // Comparación entre servicios, dentro de la ventana: suma de
+            // cada mes en rango (cada resumen ya trae su propio desglose
+            // por servicio).
             final porServicio = <String, int>{
               for (final s in serviciosDisponibles) s: 0,
             };
-            for (final r in entradasEnVentana) {
-              if (porServicio.containsKey(r.servicio)) {
-                porServicio[r.servicio] = (porServicio[r.servicio] ?? 0) + 1;
+            for (final m in mesesEnRango) {
+              final resumen = resumenPorMes[m];
+              if (resumen == null) continue;
+              for (final entry in resumen.porServicio.entries) {
+                if (porServicio.containsKey(entry.key)) {
+                  porServicio[entry.key] = (porServicio[entry.key] ?? 0) + entry.value;
+                }
               }
+            }
+
+            // Crecimiento acumulado de niños registrados: arranca con
+            // la base de todos los `ninosNuevos` de meses ANTERIORES a
+            // la ventana seleccionada (para que el acumulado no vuelva
+            // a cero al cambiar a un filtro corto), y va sumando mes a
+            // mes dentro de la ventana.
+            var acumulado = 0.0;
+            for (final r in resumenes) {
+              if (DateTime(r.mes.year, r.mes.month, 1).isBefore(inicioVentana)) {
+                acumulado += r.ninosNuevos;
+              }
+            }
+            final crecimientoAcumulado = <double>[];
+            for (final m in mesesEnRango) {
+              acumulado += (resumenPorMes[m]?.ninosNuevos ?? 0);
+              crecimientoAcumulado.add(acumulado);
             }
 
             return _GraficasResponsivas(

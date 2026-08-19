@@ -1,8 +1,9 @@
 const {onSchedule} = require('firebase-functions/v2/scheduler');
 const {onCall} = require('firebase-functions/v2/https');
+const {onDocumentCreated} = require('firebase-functions/v2/firestore');
 const {defineSecret} = require('firebase-functions/params');
 const {initializeApp} = require('firebase-admin/app');
-const {getFirestore, Timestamp} = require('firebase-admin/firestore');
+const {getFirestore, Timestamp, FieldValue} = require('firebase-admin/firestore');
 const {getAuth} = require('firebase-admin/auth');
 const nodemailer = require('nodemailer');
 
@@ -430,6 +431,67 @@ exports.enviarCorreoRecuperacion = onCall(
     } catch (e) {
       console.error(`No se pudo enviar correo de recuperación a ${correo}:`, e.message || e);
       return {enviado: false};
+    }
+  },
+);
+
+// ---------------------------------------------------------------------
+// Resumen mensual de asistencia — mantiene el Dashboard rápido (2026-08-19).
+// ---------------------------------------------------------------------
+//
+// El bloque "Histórico" del Dashboard (`admin/dashboard_screen.dart`)
+// traía TODAS las Entradas alguna vez registradas (~3738+ tras la
+// migración) en una sola consulta cada vez que se abría la pantalla —
+// lento, sobre todo en celular. En vez de eso, esta función mantiene un
+// documento por mes en `resumenes_mensuales/{AAAA-MM}` con los totales
+// ya agregados, actualizado incrementalmente en cada Entrada nueva — el
+// Dashboard ahora solo lee un puñado de documentos chiquitos (uno por
+// mes transcurrido) en vez de miles de registros crudos.
+//
+// `ninos/{id}.primeraAsistencia` (nuevo campo) guarda cuándo fue la
+// PRIMERA Entrada de ese niño en toda la historia — se fija una sola
+// vez (dentro de una transacción, para no contarlo dos veces si dos
+// Entradas llegaran casi simultáneas) y es lo que alimenta
+// `resumenes_mensuales/{mes}.ninosNuevos`, la base del gráfico de
+// "Crecimiento de niños registrados (acumulado)".
+function mesIdBogota(fecha) {
+  const bogota = new Date(fecha.getTime() - OFFSET_BOGOTA_HORAS * 3600 * 1000);
+  return `${bogota.getUTCFullYear()}-${String(bogota.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+async function marcarSiPrimeraAsistencia(ninoId, fechaMovimiento, mesId) {
+  const ninoRef = db.collection('ninos').doc(ninoId);
+  const resumenRef = db.collection('resumenes_mensuales').doc(mesId);
+  await db.runTransaction(async (tx) => {
+    const ninoDoc = await tx.get(ninoRef);
+    if (!ninoDoc.exists || ninoDoc.data().primeraAsistencia) return;
+    tx.update(ninoRef, {primeraAsistencia: fechaMovimiento});
+    tx.set(resumenRef, {ninosNuevos: FieldValue.increment(1)}, {merge: true});
+  });
+}
+
+exports.actualizarResumenMensual = onDocumentCreated(
+  'registros/{registroId}',
+  async (event) => {
+    const registro = event.data?.data();
+    if (!registro || registro.tipoMovimiento !== 'Entrada') return;
+
+    try {
+      const fecha = registro.fechaMovimiento.toDate();
+      const mesId = mesIdBogota(fecha);
+      const resumenRef = db.collection('resumenes_mensuales').doc(mesId);
+
+      const actualizacion = {totalEntradas: FieldValue.increment(1)};
+      if (registro.servicio) {
+        actualizacion[`porServicio.${registro.servicio}`] = FieldValue.increment(1);
+      }
+      await resumenRef.set(actualizacion, {merge: true});
+
+      if (registro.fkIdNino) {
+        await marcarSiPrimeraAsistencia(registro.fkIdNino, registro.fechaMovimiento, mesId);
+      }
+    } catch (e) {
+      console.error('actualizarResumenMensual falló para', event.params.registroId, ':', e);
     }
   },
 );

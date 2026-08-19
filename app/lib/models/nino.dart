@@ -83,6 +83,23 @@ int? diasDesdeCumpleanos(DateTime fechaNacimiento, {DateTime? hoy}) {
   return null;
 }
 
+/// "MM-DD" de una fecha, sin importar el año — campo derivado que se
+/// guarda junto a `fechaNacimiento` (en `ninos` y `usuarios`) para poder
+/// consultar "quién cumple esta semana" con un `where` acotado en vez de
+/// traer la colección completa y filtrar del lado del cliente
+/// (encontrado 2026-08-19: "Cumpleaños niños/servidores" lento en
+/// celular con ~400+ documentos).
+String mesDiaDe(DateTime fecha) =>
+    '${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}';
+
+/// Los 7 valores de "MM-DD" que cuentan como "esta semana" (hoy y los 6
+/// días anteriores) — mismo criterio exacto que [diasDesdeCumpleanos],
+/// para usar en un `where('mesDiaNacimiento', whereIn: ...)`.
+List<String> mesDiaUltimaSemana({DateTime? hoy}) {
+  final ahora = hoy ?? DateTime.now();
+  return [for (var i = 0; i < 7; i++) mesDiaDe(ahora.subtract(Duration(days: i)))];
+}
+
 /// Genera la llave interna del SOP (§3.2) cuando el menor no tiene
 /// número de documento: fechaNacimiento-PRIMERNOMBRE-PRIMERAPELLIDO.
 String generarLlaveInterna({
@@ -137,6 +154,7 @@ class Nino {
     'nombres': nombres,
     'apellidos': apellidos,
     'fechaNacimiento': Timestamp.fromDate(fechaNacimiento),
+    'mesDiaNacimiento': mesDiaDe(fechaNacimiento),
     'genero': genero,
     'estadoRegistro': estadoRegistro,
     'alertaMedicaFlag': alertaMedicaFlag,

@@ -40,6 +40,14 @@
         { "fieldPath": "rol", "order": "ASCENDING" },
         { "fieldPath": "activo", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "ninos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estadoRegistro", "order": "ASCENDING" },
+        { "fieldPath": "mesDiaNacimiento", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

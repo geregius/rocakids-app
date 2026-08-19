@@ -619,6 +619,7 @@ class AuthService {
         'nombres': nombres,
         'apellidos': apellidos,
         'fechaNacimiento': Timestamp.fromDate(fechaNacimiento),
+        'mesDiaNacimiento': mesDiaDe(fechaNacimiento),
         'genero': genero,
         'autorizoFotoFlag': autorizoFotoFlag,
         'alertaMedicaFlag': alertaMedicaFlag,
@@ -676,25 +677,18 @@ class AuthService {
         );
   }
 
-  /// Todas las Entradas registradas desde [desde] (inclusive) hasta hoy —
-  /// para el bloque "Histórico" del Dashboard. Consulta directa de una
-  /// sola vez (no reactiva): con el volumen actual de registros es
-  /// suficientemente rápida; si en el futuro se vuelve lenta, resolver
-  /// con una tabla de resúmenes pre-calculados (mismo patrón que el
-  /// cierre automático en `functions/index.js`) — no antes, sería
-  /// sobre-ingeniería para el volumen de hoy (decisión 2026-08-17).
-  Future<List<Registro>> obtenerEntradasDesde(DateTime desde) async {
-    final snap = await _firestore
-        .collection('registros')
-        .where('tipoMovimiento', isEqualTo: 'Entrada')
-        .where(
-          'fechaMovimiento',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(desde),
-        )
-        .orderBy('fechaMovimiento')
-        .get();
+  /// Resúmenes mensuales de asistencia — para el bloque "Histórico" del
+  /// Dashboard (2026-08-19). Reemplaza traer TODAS las Entradas crudas
+  /// (llegó a ser lento en celular con ~3738+ registros tras la
+  /// migración): la colección `resumenes_mensuales` tiene un documento
+  /// por mes transcurrido (mantenido por la Cloud Function
+  /// `actualizarResumenMensual`), así que esta consulta siempre trae un
+  /// puñado de documentos chiquitos, sin importar cuántos registros
+  /// individuales existan.
+  Future<List<ResumenMensual>> obtenerResumenesMensuales() async {
+    final snap = await _firestore.collection('resumenes_mensuales').get();
     return snap.docs
-        .map((d) => Registro.fromFirestore(d.id, d.data()))
+        .map((d) => ResumenMensual.fromFirestore(d.id, d.data()))
         .toList();
   }
 
@@ -834,18 +828,17 @@ class AuthService {
 
   /// Niños "Activo" que cumplieron años en los últimos 7 días (o cumplen
   /// hoy) — vista "Cumpleaños" (2026-08-18, pedido de Rafael) y aviso al
-  /// registrar su ingreso. Mismo criterio y volumen que
-  /// [obtenerNinosQueGraduanEsteMes]: se computa al vuelo comparando mes
-  /// y día contra hoy, sin importar el año.
+  /// registrar su ingreso. **Acotado por `mesDiaNacimiento`** (2026-08-19,
+  /// antes traía TODA la colección `ninos` y filtraba en el cliente —
+  /// lento en celular con ~460 documentos completos) — el `where` deja
+  /// que Firestore descarte casi todo del lado del servidor.
   Future<List<Nino>> obtenerNinosQueCumplieronEstaSemana() async {
     final snap = await _firestore
         .collection('ninos')
         .where('estadoRegistro', isEqualTo: 'Activo')
+        .where('mesDiaNacimiento', whereIn: mesDiaUltimaSemana())
         .get();
-    return snap.docs
-        .map((d) => Nino.fromFirestore(d.id, d.data()))
-        .where((n) => cumpleEnUltimaSemana(n.fechaNacimiento))
-        .toList();
+    return snap.docs.map((d) => Nino.fromFirestore(d.id, d.data())).toList();
   }
 
   /// Cuántos niños hay hoy en el sistema (colección `ninos` completa) —
@@ -896,23 +889,25 @@ class AuthService {
   /// de niños, porque `usuarios` guarda datos sensibles (documento,
   /// teléfono, EPS) que ya están acotados a liderazgo en el resto de la
   /// app (ver Dashboard/Acudientes y Niños).
+  ///
+  /// **Acotado por `mesDiaNacimiento`** (2026-08-19, mismo motivo que la
+  /// versión de niños). Firestore no permite combinar dos `whereIn` en
+  /// la misma consulta, así que a diferencia de antes el filtro de
+  /// rol/activo se aplica del lado del cliente — pero ya sobre el
+  /// puñado de resultados que cumplen esta semana (normalmente 0-2), no
+  /// sobre toda la colección.
   Future<List<UsuarioApp>> obtenerServidoresQueCumplieronEstaSemana() async {
     final rolesDeServidor = RolUsuario.values
         .where((r) => r.esRolDeServidor)
         .map((r) => r.valorFirestore)
-        .toList();
+        .toSet();
     final snap = await _firestore
         .collection('usuarios')
-        .where('rol', whereIn: rolesDeServidor)
-        .where('activo', isEqualTo: true)
+        .where('mesDiaNacimiento', whereIn: mesDiaUltimaSemana())
         .get();
     return snap.docs
         .map((d) => UsuarioApp.fromFirestore(d.id, d.data()))
-        .where(
-          (u) =>
-              u.fechaNacimiento != null &&
-              cumpleEnUltimaSemana(u.fechaNacimiento!),
-        )
+        .where((u) => u.activo && rolesDeServidor.contains(u.rol.valorFirestore))
         .toList();
   }
 
@@ -1662,6 +1657,9 @@ class AuthService {
       'fotoUrl': fotoUrl,
       'fechaNacimiento': fechaNacimiento != null
           ? Timestamp.fromDate(fechaNacimiento)
+          : null,
+      'mesDiaNacimiento': fechaNacimiento != null
+          ? mesDiaDe(fechaNacimiento)
           : null,
     });
   }

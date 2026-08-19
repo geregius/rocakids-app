@@ -136,3 +136,43 @@ class Registro {
     );
   }
 }
+
+/// Un mes de `resumenes_mensuales/{AAAA-MM}` — totales de Entradas ya
+/// agregados, mantenidos por la Cloud Function `actualizarResumenMensual`
+/// (2026-08-19). Reemplaza traer TODOS los `Registro` crudos para el
+/// bloque "Histórico" del Dashboard: en vez de miles de documentos, es
+/// un puñado de resúmenes (uno por mes transcurrido desde que existe la
+/// app).
+class ResumenMensual {
+  /// Primer día del mes que representa este resumen (ej. `2026-08-01`
+  /// para el ID de documento `"2026-08"`).
+  final DateTime mes;
+  final int totalEntradas;
+  final int ninosNuevos;
+  final Map<String, int> porServicio;
+
+  const ResumenMensual({
+    required this.mes,
+    required this.totalEntradas,
+    required this.ninosNuevos,
+    required this.porServicio,
+  });
+
+  factory ResumenMensual.fromFirestore(String id, Map<String, dynamic> data) {
+    final partes = id.split('-');
+    final mes = DateTime(int.parse(partes[0]), int.parse(partes[1]), 1);
+    final porServicio = <String, int>{};
+    final rawPorServicio = data['porServicio'];
+    if (rawPorServicio is Map) {
+      for (final entry in rawPorServicio.entries) {
+        porServicio[entry.key as String] = (entry.value as num).toInt();
+      }
+    }
+    return ResumenMensual(
+      mes: mes,
+      totalEntradas: (data['totalEntradas'] as num?)?.toInt() ?? 0,
+      ninosNuevos: (data['ninosNuevos'] as num?)?.toInt() ?? 0,
+      porServicio: porServicio,
+    );
+  }
+}
