@@ -244,6 +244,38 @@ En cada Entrada nueva: incrementa `resumenes_mensuales/{AAAA-MM}.totalEntradas` 
 
 ---
 
+## 5.6. Modo emergencia (2026-08-19)
+
+**⚠️ Feature de seguridad crítica — probar a fondo (incluyendo "desactivar") antes de confiar en ella para una emergencia real.** Pedido de Rafael: control extra para una evacuación u otra emergencia, donde puede que quien retira a un niño no sea la persona de siempre.
+
+**Qué es:** un botón "Modo emergencia" en el menú, visible solo para `usuario.rol.puedeActivarModoEmergencia` (administrador, columna, líder de ministerio — mismo grupo que `puedeVerAcudientesYNinos`). Al activarlo, se vuelve un **estado global reactivo** (`estado_app/emergencia`, campo `activo`) que TODA sesión abierta de la app respeta en tiempo real, sin recargar:
+
+| Rol | Mientras el modo está activo |
+|---|---|
+| Administrador | Ve la app completamente normal — el modo NO lo afecta a él. |
+| Cualquier otro servidor (columna, líder de ministerio, líder escuela de siervos, maestro principal/auxiliar) | Pierde el menú y TODAS las demás pantallas — solo ve el listado de "Modo emergencia" (quién está presente ahora) y puede darles salida. Columna y líder de ministerio, además, ven ahí mismo los controles de activar/desactivar y generar el reporte. |
+| Acudiente (sin rol de servidor) | Pierde el acceso a "Mis hijos" — ve un aviso de bloqueo ("La app está en modo emergencia..."), nada más. |
+
+Esto se resuelve en **un solo lugar**: `AppShell.build()` (`lib/widgets/app_shell.dart`) escucha `AuthService.emergenciaActivaStream()` con un `StreamBuilder` y decide qué mostrar ANTES de renderizar el menú/pantalla normal — como TODAS las pantallas ya se envuelven en `AppShell`, ninguna pantalla existente tuvo que tocarse para quedar protegida.
+
+**Dar salida durante la emergencia exige, además de elegir/escribir quién retira al niño (mismo picker de acudientes autorizados de siempre, con la advertencia de "Restringido"):**
+1. Una **foto tomada en el momento** — cámara en vivo únicamente, sin opción de galería (`tomarFotoConCamara()` en `utils/foto_picker.dart`), para que no se pueda "colar" una foto vieja.
+2. Una **firma dibujada en pantalla** — `widgets/firma_pad.dart` (`FirmaPad`), lienzo propio con `CustomPainter` + `RepaintBoundary.toImage()`, **sin ningún paquete nuevo**.
+
+`AuthService.registrarSalidaEmergencia()` sube ambas a Storage (`emergencia_fotos/{registroId}/`, `emergencia_firmas/{registroId}/`) y crea el `Registro` de Salida con `modalidadRegistro: 'Emergencia'` (nuevo valor, distinto de `App`/`Automático`/`Histórico`) más dos campos nuevos: `fotoEntregaEmergenciaUrl`, `firmaEntregaEmergenciaUrl`. También copia `nombreAcudienteEntradaOriginal` = el `nombreAcudienteContacto` de la Entrada correspondiente (quién lo entregó según RocaKids), para poder contrastarlo después sin tener que volver a cruzar registros.
+
+**Reporte PDF** (`utils/reporte_emergencia_pdf.dart`, botón "Generar reporte PDF (hoy)", solo liderazgo): nuevas dependencias `pdf` + `printing` (paquetes estándar, sin costo, ya usados ampliamente por la comunidad Flutter). Por cada Salida de emergencia del día: nombre del niño, hora, "entregado originalmente por (según RocaKids)", "retirado en la emergencia por" + su foto + su firma, y qué servidor registró la salida. `Printing.layoutPdf()` abre la vista de impresión/descarga del navegador — funciona igual en Flutter Web.
+
+**Reglas de seguridad:**
+- `firestore.rules`: nueva colección `estado_app/emergencia` — `get` para cualquier autenticado (todos deben poder reaccionar), `write` solo `puedeVerInfoLiderazgo()`. La regla `create` de `registros` ahora exige, además de lo de siempre, que si `modalidadRegistro == 'Emergencia'` el estado global esté REALMENTE activo (`get()` cruzado a `estado_app/emergencia`) — defensa en profundidad: cualquier servidor puede registrar salidas de emergencia mientras está activo, pero nadie puede fabricar una salida marcada "Emergencia" si el modo no está encendido de verdad.
+- `storage.rules`: nuevas rutas `emergencia_fotos/`, `emergencia_firmas/` — a diferencia del resto de fotos del proyecto (legibles por "cualquier autenticado"), la LECTURA queda acotada a liderazgo (`esLiderazgoRocaKids()`, mismo criterio repetido con `firestore.get()` cruzado porque Storage no puede llamar funciones de `firestore.rules` directamente) — es evidencia más sensible (el rostro de alguien que puede no tener ninguna cuenta en el sistema).
+
+**Compartido con "Menores Recibidos":** la función `calcularPresentes()` (qué cuenta como "presente ahora") se movió de `ninos_presentes_screen.dart` a `models/registro.dart` — ambas pantallas deben usar EXACTAMENTE el mismo criterio, crítico para que el listado de una emergencia real no pueda quedar desincronizado.
+
+**⚠️ Sin ninguna prueba real todavía** (misma limitación de siempre para verificar UI/cámara/firma desde esta sesión, ver [[dev-server-testing]]) — antes de confiar en esto para una emergencia de verdad, Rafael debería probar con al menos dos sesiones abiertas a la vez (una admin, una servidor normal, una acudiente si es posible) para confirmar que el bloqueo/desbloqueo se siente instantáneo en la práctica, que la cámara y la firma funcionan en celular, y que el PDF se genera bien con fotos reales.
+
+---
+
 ## 6. Pantallas construidas (`lib/screens/`)
 
 ### `widgets/app_shell.dart` — estructura de navegación (2026-08-14)
@@ -343,11 +375,12 @@ Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `
 
 Nada bloqueante ahora mismo. Lo único abierto de sesiones recientes:
 
-1. **La cámara sigue sin cargar en celular al escanear manilla** — confirmado por Rafael que persiste incluso después del arreglo de raíz (zxing-wasm auto-hospedado). **Decisión explícita de Rafael (2026-08-19): no seguir tocando esto por ahora.** Queda documentado como conocido/pausado, no como resuelto.
-2. **Confirmar que agregar el acceso directo con Safari (en vez de Chrome) en iPhone sí carga bien** — ver sección 8, es una limitación de Chrome en iOS, no un bug de la app.
-3. **"Cumpleaños Servidores" está vacío** hasta que los servidores llenen su fecha de nacimiento — dato nuevo que no existía antes, se llena desde "Mi perfil" → "Editar información" (ver [[feature-cumpleanos]]).
-4. **Módulo 7 — Campañas de correo (Brevo):** falta confirmar si Rafael ya tiene cuenta/API key de Brevo (el correo de cumpleaños ya no depende de esto, se resolvió con Gmail SMTP directo — ver punto 8 en la lista de abajo).
-5. **Vista histórica de asistencia del día completo** (quién pasó hoy, incluyendo quien ya salió) — "Menores Recibidos" solo muestra presentes ahora mismo; pospuesta explícitamente por Rafael desde 2026-08-15.
+1. **⚠️ Probar "Modo emergencia" a fondo antes de confiar en él para una emergencia real** — ver sección 5.6. Construido y desplegado (código + reglas de Firestore y Storage), pero sin ninguna prueba con dispositivos reales todavía: falta confirmar que el bloqueo global se siente instantáneo con varias sesiones abiertas a la vez, que la cámara y la firma en pantalla funcionan bien en celular, y que el reporte PDF se genera correctamente con fotos reales. Probar también el camino de "desactivar" — es la forma de que la app vuelva a la normalidad para todos.
+2. **La cámara sigue sin cargar en celular al escanear manilla** — confirmado por Rafael que persiste incluso después del arreglo de raíz (zxing-wasm auto-hospedado). **Decisión explícita de Rafael (2026-08-19): no seguir tocando esto por ahora.** Queda documentado como conocido/pausado, no como resuelto.
+3. **Confirmar que agregar el acceso directo con Safari (en vez de Chrome) en iPhone sí carga bien** — ver sección 8, es una limitación de Chrome en iOS, no un bug de la app.
+4. **"Cumpleaños Servidores" está vacío** hasta que los servidores llenen su fecha de nacimiento — dato nuevo que no existía antes, se llena desde "Mi perfil" → "Editar información" (ver [[feature-cumpleanos]]).
+5. **Módulo 7 — Campañas de correo (Brevo):** falta confirmar si Rafael ya tiene cuenta/API key de Brevo (el correo de cumpleaños ya no depende de esto, se resolvió con Gmail SMTP directo — ver punto 8 en la lista de abajo).
+6. **Vista histórica de asistencia del día completo** (quién pasó hoy, incluyendo quien ya salió) — "Menores Recibidos" solo muestra presentes ahora mismo; pospuesta explícitamente por Rafael desde 2026-08-15.
 
 **✅ Resuelto el mismo día (2026-08-19):** "Cumpleaños niños/servidores" y "Dashboard" lentos en celular — Rafael pidió la solución completa. Cumpleaños ahora consulta por `mesDiaNacimiento` (índice acotado) en vez de traer la colección completa; el Dashboard tiene una Cloud Function nueva (`actualizarResumenMensual`, ver sección 5.5) que mantiene resúmenes mensuales pre-calculados, y el bloque "Hoy" ya no bloquea el resto de la pantalla. Backfill de los ~3751 registros históricos corrido y verificado matemáticamente. $0 costo nuevo esperado (no es un job de Cloud Scheduler). Ver [[feature-optimizacion-cumpleanos-dashboard]].
 
