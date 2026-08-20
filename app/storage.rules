@@ -37,30 +37,28 @@ service firebase.storage {
     }
 
     // Evidencia de "Modo emergencia" (2026-08-19): foto + firma de quien
-    // retira a un niño durante una emergencia. Más sensible que el
-    // resto de fotos del proyecto (rostro de alguien que puede no tener
-    // ninguna cuenta en el sistema) — a propósito acotado a
-    // administrador, columna y líder de ministerio (mismo criterio que
-    // `puedeVerInfoLiderazgo()` en firestore.rules), no a "cualquier
-    // autenticado" como el resto de rutas de este archivo. Storage no
-    // puede llamar funciones de firestore.rules directamente, así que
-    // el chequeo de rol se repite acá con `firestore.get()`.
-    function esLiderazgoRocaKids() {
-      return request.auth != null
-        && firestore.exists(/databases/(default)/documents/usuarios/$(request.auth.uid))
-        && firestore.get(/databases/(default)/documents/usuarios/$(request.auth.uid))
-             .data.rol.lower() in ['administrador', 'columna', 'lider_ministerio'];
-    }
-
+    // retira a un niño durante una emergencia.
+    //
+    // Intento inicial: `read` acotado a admin/columna/líder de ministerio
+    // vía `firestore.get()` (consulta cruzada Storage→Firestore, sintaxis
+    // oficial de Firebase). **Falló en producción con
+    // `storage/unauthorized` incluso para la cuenta admin** — como no
+    // dependía del rol de quien llama (fallaba igual para cualquiera),
+    // el problema era la función en sí, no un permiso mal calculado. Sin
+    // forma de probar esa sintaxis en vivo desde esta sesión, se
+    // simplificó al mismo patrón YA comprobado del resto de este archivo
+    // (`servidores_fotos`/`acudientes_fotos`/`ninos_fotos`): cualquier
+    // autenticado puede leer. Ver docs/estado-proyecto.md sección 5.6
+    // para el detalle y la fecha de este ajuste.
     match /emergencia_fotos/{registroId}/{fileName} {
-      allow read: if esLiderazgoRocaKids();
+      allow read: if request.auth != null;
       allow write: if request.auth != null
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
 
     match /emergencia_firmas/{registroId}/{fileName} {
-      allow read: if esLiderazgoRocaKids();
+      allow read: if request.auth != null;
       allow write: if request.auth != null
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
