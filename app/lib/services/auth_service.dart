@@ -34,6 +34,20 @@ class AuthService {
        _firestore = firestore ?? FirebaseFirestore.instance,
        _storage = storage ?? FirebaseStorage.instance;
 
+  // Caché en memoria del índice de búsqueda de niños (`static`, no de
+  // instancia: cada pantalla crea su propio `AuthService()`, así que
+  // solo una caché compartida por la app entera evita repetir la
+  // descarga completa). Vencimiento corto (no invalidación explícita
+  // al registrar un niño nuevo) — un niño recién registrado puede
+  // tardar hasta 5 minutos en aparecer en la búsqueda desde OTRA
+  // sesión ya abierta, aceptable frente a lo simple que queda el
+  // código (encontrado 2026-08-19: "Registro de asistencia" se sentía
+  // lento en celular, sobre todo si el servidor entraba y salía de la
+  // pantalla varias veces en el mismo turno).
+  static List<NinoBusqueda>? _cacheIndiceBusqueda;
+  static DateTime? _cacheIndiceBusquedaHora;
+  static const _ttlIndiceBusqueda = Duration(minutes: 5);
+
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   Future<void> signIn({
@@ -540,10 +554,20 @@ class AuthService {
   /// sola congregación es chico, así que no hace falta un motor de
   /// búsqueda con índices por prefijo en Firestore.
   Future<List<NinoBusqueda>> obtenerIndiceBusquedaNinos() async {
+    final cache = _cacheIndiceBusqueda;
+    final horaCache = _cacheIndiceBusquedaHora;
+    if (cache != null &&
+        horaCache != null &&
+        DateTime.now().difference(horaCache) < _ttlIndiceBusqueda) {
+      return cache;
+    }
     final snap = await _firestore.collection('ninos_busqueda').get();
-    return snap.docs
+    final indice = snap.docs
         .map((d) => NinoBusqueda.fromFirestore(d.id, d.data()))
         .toList();
+    _cacheIndiceBusqueda = indice;
+    _cacheIndiceBusquedaHora = DateTime.now();
+    return indice;
   }
 
   /// Un niño por su documento (o llave interna), o null si no existe.
@@ -1000,19 +1024,21 @@ class AuthService {
         .where('fk_idNino', isEqualTo: fkIdNino)
         .get();
 
-    final acudientes = <Acudiente>[];
-    for (final rel in relaciones.docs) {
-      final acudienteUid = rel.data()['fk_idAcudiente'] as String?;
-      if (acudienteUid == null) continue;
-      final doc = await _firestore
-          .collection('acudientes')
-          .doc(acudienteUid)
-          .get();
-      if (doc.exists) {
-        acudientes.add(Acudiente.fromFirestore(doc.id, doc.data()!));
-      }
-    }
-    return acudientes;
+    // Antes pedía cada acudiente UNO POR UNO (un niño con 3 acudientes
+    // hacía 3 round-trips seguidos) — ahora los pide todos a la vez
+    // (encontrado 2026-08-19, mismo motivo que el resto de esta sesión:
+    // se sentía lento en celular al seleccionar un niño).
+    final uids = relaciones.docs
+        .map((rel) => rel.data()['fk_idAcudiente'] as String?)
+        .whereType<String>()
+        .toList();
+    final docs = await Future.wait(
+      uids.map((uid) => _firestore.collection('acudientes').doc(uid).get()),
+    );
+    return [
+      for (final doc in docs)
+        if (doc.exists) Acudiente.fromFirestore(doc.id, doc.data()!),
+    ];
   }
 
   /// Registra un movimiento de entrada o salida (SOP §3.3). El uid y

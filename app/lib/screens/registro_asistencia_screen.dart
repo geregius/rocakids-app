@@ -137,9 +137,19 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       _entradasRecientesSinDocumento = null;
     });
     try {
-      final nino = await _authService.obtenerNinoPorDocumento(
-        resultado.documentoIdentificacion,
-      );
+      // Las tres consultas solo necesitan el documento (ya conocido desde
+      // el resultado de búsqueda, no hace falta esperar al niño cargado
+      // para pedirlas) — se disparan las tres A LA VEZ en vez de una
+      // detrás de otra. En una red rápida no se nota, pero en datos
+      // móviles cada round-trip pesa (encontrado 2026-08-19: "se demora
+      // al registrar el ingreso") — 3 consultas en paralelo tardan lo
+      // que tarda la más lenta de las tres, no la suma de las tres.
+      final ninoId = resultado.documentoIdentificacion;
+      final futuroNino = _authService.obtenerNinoPorDocumento(ninoId);
+      final futuroUltimoMovimiento = _authService.obtenerUltimoMovimiento(ninoId);
+      final futuroAcudientes = _authService.obtenerAcudientesDeNino(ninoId);
+
+      final nino = await futuroNino;
       if (nino == null) {
         if (mounted) {
           setState(() {
@@ -152,14 +162,12 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
         }
         return;
       }
-      final ultimoMovimiento = await _authService.obtenerUltimoMovimiento(
-        nino.documentoIdentificacion,
-      );
-      final acudientes = await _authService.obtenerAcudientesDeNino(
-        nino.documentoIdentificacion,
-      );
-      // Solo hace falta este conteo si sigue sin documento — es lo que
-      // decide si la advertencia es normal o reforzada.
+      final ultimoMovimiento = await futuroUltimoMovimiento;
+      final acudientes = await futuroAcudientes;
+      // Este sí depende de saber si el niño sigue sin documento, así que
+      // se queda como la única consulta que espera a las de arriba —
+      // solo hace falta si sigue sin documento (decide si la advertencia
+      // es normal o reforzada).
       final entradasRecientes = nino.identificacionMenor.isEmpty
           ? await _authService.contarEntradasUltimoMes(nino.documentoIdentificacion)
           : null;
