@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/acudiente.dart';
@@ -44,9 +46,20 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   Nino? _nino;
   bool _cargandoDetalle = false;
   List<Acudiente> _acudientes = [];
+  // true mientras se piden en segundo plano los acudientes autorizados a
+  // entregar/retirar al niño (2026-08-19: separado de `_cargandoDetalle`
+  // para que el formulario aparezca en cuanto carga el niño, en vez de
+  // esperar también esta consulta — era la demora "considerablemente
+  // larga" que reportó Rafael al seleccionar un niño en datos móviles).
+  bool _cargandoAcudientes = false;
   Acudiente? _acudienteElegido;
   bool _otroAcudiente = false;
   final _otroNombreController = TextEditingController();
+  // Se incrementa en cada selección/deselección de niño, para que una
+  // carga en segundo plano que termine tarde (acudientes, entradas
+  // recientes) no pise el estado si mientras tanto el servidor ya
+  // seleccionó otro niño o volvió a buscar.
+  int _seleccionToken = 0;
 
   // Completar documento de un niño ya registrado que no lo tenía. Ya no
   // es obligatorio (2026-08-17) — es una advertencia + formulario
@@ -119,12 +132,23 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
     });
   }
 
+  /// Carga el niño primero — es el único dato que bloquea mostrar el
+  /// formulario. Acudientes y el conteo de entradas recientes sin
+  /// documento se piden DESPUÉS, en segundo plano (`unawaited`), sin
+  /// detener la pantalla: antes se esperaban 2-3 consultas seguidas
+  /// antes de mostrar cualquier cosa, y en datos móviles cada round-trip
+  /// se sentía como una demora real (reportado por Rafael 2026-08-19,
+  /// "se queda pensando un rato considerablemente largo").
   Future<void> _seleccionarNino(NinoBusqueda resultado) async {
+    final token = ++_seleccionToken;
     setState(() {
       _modo = _Modo.ninoSeleccionado;
       _cargandoDetalle = true;
+      _cargandoAcudientes = true;
       _resultados = [];
       _error = null;
+      _nino = null;
+      _acudientes = [];
       _acudienteElegido = null;
       _otroAcudiente = false;
       _servicio = servicioSugerido();
@@ -135,52 +159,75 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       _documentoCompletarController.clear();
       _entradasRecientesSinDocumento = null;
     });
-    try {
-      // Las dos consultas solo necesitan el documento (ya conocido desde
-      // el resultado de búsqueda, no hace falta esperar al niño cargado
-      // para pedirlas) — se disparan las dos A LA VEZ en vez de una
-      // detrás de otra. En una red rápida no se nota, pero en datos
-      // móviles cada round-trip pesa (encontrado 2026-08-19: "se demora
-      // al registrar el ingreso").
-      final ninoId = resultado.documentoIdentificacion;
-      final futuroNino = _authService.obtenerNinoPorDocumento(ninoId);
-      final futuroAcudientes = _authService.obtenerAcudientesDeNino(ninoId);
 
-      final nino = await futuroNino;
+    final ninoId = resultado.documentoIdentificacion;
+    try {
+      final nino = await _authService.obtenerNinoPorDocumento(ninoId);
+      if (token != _seleccionToken || !mounted) return;
       if (nino == null) {
-        if (mounted) {
-          setState(() {
-            _cargandoDetalle = false;
-            _error =
-                'No se encontró el registro completo de ${resultado.nombreCompleto} '
-                '(documento: ${resultado.documentoIdentificacion}). '
-                'Puede que su ficha esté incompleta — avísale al administrador.';
-          });
-        }
+        setState(() {
+          _cargandoDetalle = false;
+          _cargandoAcudientes = false;
+          _error =
+              'No se encontró el registro completo de ${resultado.nombreCompleto} '
+              '(documento: ${resultado.documentoIdentificacion}). '
+              'Puede que su ficha esté incompleta — avísale al administrador.';
+        });
         return;
       }
-      final acudientes = await futuroAcudientes;
-      // Este sí depende de saber si el niño sigue sin documento, así que
-      // se queda como la única consulta que espera a las de arriba —
-      // solo hace falta si sigue sin documento (decide si la advertencia
-      // es normal o reforzada).
-      final entradasRecientes = nino.identificacionMenor.isEmpty
-          ? await _authService.contarEntradasUltimoMes(nino.documentoIdentificacion)
-          : null;
-      if (!mounted) return;
       setState(() {
         _nino = nino;
-        _acudientes = acudientes;
-        _entradasRecientesSinDocumento = entradasRecientes;
         _cargandoDetalle = false;
       });
     } catch (e) {
-      if (mounted) {
+      if (token == _seleccionToken && mounted) {
         setState(() {
           _cargandoDetalle = false;
+          _cargandoAcudientes = false;
           _error = 'No se pudo cargar la información del niño: $e';
         });
       }
+      return;
+    }
+
+    unawaited(_cargarAcudientesEnSegundoPlano(ninoId, token));
+    if (_nino!.identificacionMenor.isEmpty) {
+      unawaited(_cargarEntradasRecientesEnSegundoPlano(ninoId, token));
+    }
+  }
+
+  Future<void> _cargarAcudientesEnSegundoPlano(String ninoId, int token) async {
+    try {
+      final acudientes = await _authService.obtenerAcudientesDeNino(ninoId);
+      if (token != _seleccionToken || !mounted) return;
+      setState(() {
+        _acudientes = acudientes;
+        _cargandoAcudientes = false;
+      });
+    } catch (e) {
+      if (token == _seleccionToken && mounted) {
+        setState(() {
+          _cargandoAcudientes = false;
+          _error = 'No se pudo cargar la lista de acudientes: $e';
+        });
+      }
+    }
+  }
+
+  /// Solo hace falta si el niño sigue sin documento — decide si el
+  /// aviso (`_avisoSinDocumento()`) es normal o reforzado. No es crítico
+  /// para completar el registro, así que un fallo aquí no muestra error.
+  Future<void> _cargarEntradasRecientesEnSegundoPlano(
+    String ninoId,
+    int token,
+  ) async {
+    try {
+      final entradas = await _authService.contarEntradasUltimoMes(ninoId);
+      if (token != _seleccionToken || !mounted) return;
+      setState(() => _entradasRecientesSinDocumento = entradas);
+    } catch (_) {
+      // No crítico — el aviso simplemente se queda en su versión no
+      // reforzada si esto falla.
     }
   }
 
@@ -452,10 +499,12 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   }
 
   void _volverABuscar() {
+    _seleccionToken++;
     setState(() {
       _modo = _Modo.buscar;
       _nino = null;
       _acudientes = [];
+      _cargandoAcudientes = false;
       _busquedaController.clear();
       _resultados = [];
       _error = null;
@@ -940,70 +989,86 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 8),
-          RadioGroup<String>(
-            groupValue: _otroAcudiente ? 'otro' : _acudienteElegido?.uid,
-            onChanged: (v) => setState(() {
-              if (v == 'otro') {
-                _otroAcudiente = true;
-                _acudienteElegido = null;
-              } else {
-                _otroAcudiente = false;
-                _acudienteElegido = _acudientes
-                    .where((a) => a.uid == v)
-                    .firstOrNull;
-              }
-            }),
-            child: Column(
-              children: [
-                ..._acudientes.map(
-                  (a) => Card(
-                    color: _acudienteElegido == a && !_otroAcudiente
-                        ? AppColors.azulClaro.withValues(alpha: 0.15)
-                        : null,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: RadioListTile<String>(
-                            value: a.uid,
-                            secondary: FotoAvatar(url: a.fotoSeguridadUrl),
-                            title: Text(a.nombreCompleto),
-                            subtitle: a.estadoAutorizacion == 'Restringido'
-                                ? Text(
-                                    a.observacionesRestriccion.isNotEmpty
-                                        ? 'RESTRINGIDO: ${a.observacionesRestriccion}'
-                                        : 'RESTRINGIDO — no debería retirar al niño',
-                                    style: const TextStyle(
-                                      color: AppColors.rojo,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  )
-                                : a.correoPendienteDeCorregir
-                                ? const Text(
-                                    'Sin correo real — pídeselo y actualízalo con el lápiz',
-                                    style: TextStyle(color: AppColors.textoPrincipal),
-                                  )
-                                : null,
+          if (_cargandoAcudientes)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  SizedBox(width: 12),
+                  Text('Cargando acudientes autorizados...'),
+                ],
+              ),
+            )
+          else
+            RadioGroup<String>(
+              groupValue: _otroAcudiente ? 'otro' : _acudienteElegido?.uid,
+              onChanged: (v) => setState(() {
+                if (v == 'otro') {
+                  _otroAcudiente = true;
+                  _acudienteElegido = null;
+                } else {
+                  _otroAcudiente = false;
+                  _acudienteElegido = _acudientes
+                      .where((a) => a.uid == v)
+                      .firstOrNull;
+                }
+              }),
+              child: Column(
+                children: [
+                  ..._acudientes.map(
+                    (a) => Card(
+                      color: _acudienteElegido == a && !_otroAcudiente
+                          ? AppColors.azulClaro.withValues(alpha: 0.15)
+                          : null,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: RadioListTile<String>(
+                              value: a.uid,
+                              secondary: FotoAvatar(url: a.fotoSeguridadUrl),
+                              title: Text(a.nombreCompleto),
+                              subtitle: a.estadoAutorizacion == 'Restringido'
+                                  ? Text(
+                                      a.observacionesRestriccion.isNotEmpty
+                                          ? 'RESTRINGIDO: ${a.observacionesRestriccion}'
+                                          : 'RESTRINGIDO — no debería retirar al niño',
+                                      style: const TextStyle(
+                                        color: AppColors.rojo,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    )
+                                  : a.correoPendienteDeCorregir
+                                  ? const Text(
+                                      'Sin correo real — pídeselo y actualízalo con el lápiz',
+                                      style: TextStyle(color: AppColors.textoPrincipal),
+                                    )
+                                  : null,
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          onPressed: () => _editarAcudiente(a),
-                          icon: const Icon(Icons.edit),
-                          tooltip: 'Editar datos del acudiente',
-                        ),
-                      ],
+                          IconButton(
+                            onPressed: () => _editarAcudiente(a),
+                            icon: const Icon(Icons.edit),
+                            tooltip: 'Editar datos del acudiente',
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                Card(
-                  child: RadioListTile<String>(
-                    value: 'otro',
-                    secondary: const Icon(Icons.person_outline),
-                    title: const Text('Otro (no está en la lista)'),
+                  Card(
+                    child: RadioListTile<String>(
+                      value: 'otro',
+                      secondary: const Icon(Icons.person_outline),
+                      title: const Text('Otro (no está en la lista)'),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
           if (_otroAcudiente) ...[
             const SizedBox(height: 8),
             TextFormField(
