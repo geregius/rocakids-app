@@ -464,6 +464,8 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                     fotoUrl: _acudienteEncontrado!.fotoSeguridadUrl,
                     onCambiar: _olvidarAcudienteEncontrado,
                   )
+                else if (_buscandoAcudiente)
+                  const _TarjetaCargando(mensaje: 'Buscando el documento...')
                 else ...[
                   const Text(
                     'Si el acudiente ya tiene cuenta, busca su documento primero.',
@@ -628,6 +630,8 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                     fotoUrl: _ninoEncontrado!.fotoUrl,
                     onCambiar: _olvidarNinoEncontrado,
                   )
+                else if (_buscandoNino)
+                  const _TarjetaCargando(mensaje: 'Cargando la ficha del niño...')
                 else ...[
                   const Text(
                     'Si el niño ya está registrado, búscalo por nombre primero.',
@@ -829,6 +833,36 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Ocupa el mismo lugar donde aparecerá `_TarjetaEncontrado` (o el
+/// formulario de "nuevo") mientras se espera la respuesta de la
+/// búsqueda — para que quede claro que algo está pasando, en vez de que
+/// el formulario de "nuevo" se quede quieto sin ningún aviso (pedido de
+/// Rafael, 2026-08-19: la espera se sentía como que "no pasaba nada").
+class _TarjetaCargando extends StatelessWidget {
+  final String mensaje;
+  const _TarjetaCargando({required this.mensaje});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 16),
+            Expanded(child: Text(mensaje)),
+          ],
         ),
       ),
     );
