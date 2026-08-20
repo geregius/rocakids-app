@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -33,6 +35,49 @@ class _PantallaEscanerManilla extends StatefulWidget {
 
 class _PantallaEscanerManillaState extends State<_PantallaEscanerManilla> {
   bool _yaLeido = false;
+  bool _tardando = false;
+  Key _scannerKey = UniqueKey();
+  Timer? _timerTardanza;
+
+  // En algunos navegadores/celulares el lector de códigos necesita
+  // descargar una librería de un CDN externo (ver docs/estado-proyecto.md
+  // sección 8) — si esa descarga se cuelga (red del celular, filtrado del
+  // operador, etc.), la cámara se queda cargando PARA SIEMPRE sin ningún
+  // error visible, porque el paquete no tiene un timeout propio para ese
+  // caso. Esto no lo puede arreglar la app directamente (haría falta
+  // parchear un archivo de un tercero, riesgoso sin poder probarlo en un
+  // celular real) — pero si tarda más de lo normal, se avisa con
+  // claridad y se ofrece reintentar o escribir el código a mano, en vez
+  // de dejar a la persona mirando una pantalla negra sin explicación
+  // (encontrado 2026-08-19).
+  static const _umbralTardanza = Duration(seconds: 6);
+
+  @override
+  void initState() {
+    super.initState();
+    _iniciarTimerTardanza();
+  }
+
+  void _iniciarTimerTardanza() {
+    _timerTardanza?.cancel();
+    _timerTardanza = Timer(_umbralTardanza, () {
+      if (mounted) setState(() => _tardando = true);
+    });
+  }
+
+  void _reintentar() {
+    setState(() {
+      _tardando = false;
+      _scannerKey = UniqueKey();
+    });
+    _iniciarTimerTardanza();
+  }
+
+  @override
+  void dispose() {
+    _timerTardanza?.cancel();
+    super.dispose();
+  }
 
   void _onDetect(BarcodeCapture captura) {
     if (_yaLeido || captura.barcodes.isEmpty) return;
@@ -82,6 +127,7 @@ class _PantallaEscanerManillaState extends State<_PantallaEscanerManilla> {
       body: Stack(
         children: [
           MobileScanner(
+            key: _scannerKey,
             onDetect: _onDetect,
             placeholderBuilder: (context) => const Center(
               child: CircularProgressIndicator(color: Colors.white),
@@ -99,6 +145,39 @@ class _PantallaEscanerManillaState extends State<_PantallaEscanerManilla> {
               ),
             ),
           ),
+          if (_tardando)
+            Container(
+              color: Colors.black87,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.hourglass_bottom,
+                        color: Colors.white,
+                        size: 40,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'La cámara está tardando más de lo normal.\n'
+                        'Puede ser tu conexión o tu navegador — intenta de '
+                        'nuevo, o usa "Ingresar código manualmente" abajo.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      const SizedBox(height: 20),
+                      ElevatedButton.icon(
+                        onPressed: _reintentar,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Reintentar'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           Align(
             alignment: Alignment.bottomCenter,
             child: SafeArea(
