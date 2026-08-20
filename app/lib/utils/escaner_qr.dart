@@ -11,6 +11,19 @@ import '../theme/app_colors.dart';
 /// manilla — el contenido del QR se trata como texto plano, sin importar
 /// qué formato traiga de fábrica.
 Future<String?> escanearCodigoManilla(BuildContext context) {
+  // En navegadores sin la API nativa BarcodeDetector (TODO iOS/Safari —
+  // confirmado 2026-08-19, Apple nunca la implementó — además de Firefox
+  // y navegadores viejos), el paquete necesita descargar un lector
+  // alterno (zxing-wasm). Por defecto lo trae de cdn.jsdelivr.net, y ese
+  // archivo a su vez tiene codificada una URL de OTRO CDN para el
+  // binario real — si esa descarga se cuelga en datos móviles, la
+  // cámara se queda cargando para siempre sin ningún error. Se
+  // auto-hospedó una copia parchada en `web/zxing/` (ver el README ahí)
+  // que apunta al binario DE ESTE MISMO SITIO en vez de un CDN externo
+  // — se lo indica al paquete una sola vez por sesión (`??=` interno,
+  // llamarlo de nuevo no hace nada).
+  MobileScannerPlatform.instance.setBarcodeLibraryScriptUrl('zxing/index.js');
+
   // Sin animación de transición a propósito: en Flutter Web la vista de
   // cámara del plugin es un <video> embebido (platform view), y los
   // platform views no componen bien bajo el Transform/Opacity de una
