@@ -272,6 +272,8 @@ Esto se resuelve en **un solo lugar**: `AppShell.build()` (`lib/widgets/app_shel
 
 **Compartido con "Menores Recibidos":** la función `calcularPresentes()` (qué cuenta como "presente ahora") se movió de `ninos_presentes_screen.dart` a `models/registro.dart` — ambas pantallas deben usar EXACTAMENTE el mismo criterio, crítico para que el listado de una emergencia real no pueda quedar desincronizado.
 
+**⚠️ Bug encontrado el mismo día: `MissingPluginException` al generar el reporte PDF.** Mismo patrón ya documentado en sección 8 con `image_picker` — un plugin nuevo (`printing`, agregado junto con `pdf` para esta feature) a veces no queda bien registrado en el build de producción hasta hacer `flutter clean` antes de recompilar. Se corrió `flutter clean` + `flutter pub get` + rebuild + redeploy (sin cambios de código) — **pendiente de que Rafael confirme si esto lo resolvió** (no se pudo probar la generación del PDF desde esta sesión).
+
 **⚠️ Sin ninguna prueba real todavía** (misma limitación de siempre para verificar UI/cámara/firma desde esta sesión, ver [[dev-server-testing]]) — antes de confiar en esto para una emergencia de verdad, Rafael debería probar con al menos dos sesiones abiertas a la vez (una admin, una servidor normal, una acudiente si es posible) para confirmar que el bloqueo/desbloqueo se siente instantáneo en la práctica, que la cámara y la firma funcionan en celular, y que el PDF se genera bien con fotos reales.
 
 ---
