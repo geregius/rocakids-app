@@ -252,7 +252,7 @@ En cada Entrada nueva: incrementa `resumenes_mensuales/{AAAA-MM}.totalEntradas` 
 
 | Rol | Mientras el modo está activo |
 |---|---|
-| Administrador | Ve la app completamente normal — el modo NO lo afecta a él. |
+| Administrador | Ve la app completamente normal — el modo NO lo afecta a él, pero ve un borde con degradado rojo alrededor de toda la pantalla (`_BordeEmergenciaAdmin` en `AppShell`, 2026-08-19) para no perder de vista que el modo sigue activo aunque navegue a cualquier otra pantalla. `IgnorePointer`, no bloquea ningún toque. |
 | Cualquier otro servidor (columna, líder de ministerio, líder escuela de siervos, maestro principal/auxiliar) | Pierde el menú y TODAS las demás pantallas — solo ve el listado de "Modo emergencia" (quién está presente ahora) y puede darles salida. Columna y líder de ministerio, además, ven ahí mismo los controles de activar/desactivar y generar el reporte. |
 | Acudiente (sin rol de servidor) | Pierde el acceso a "Mis hijos" — ve un aviso de bloqueo ("La app está en modo emergencia..."), nada más. |
 
