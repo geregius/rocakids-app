@@ -233,6 +233,23 @@ class AppShell extends StatelessWidget {
           return _BloqueoEmergenciaAcudiente(onCerrarSesion: () => _cerrarSesion(context));
         }
 
+        // El admin no queda restringido por el modo emergencia (sigue
+        // navegando toda la app normal), pero necesita una señal visual
+        // clara en CUALQUIER pantalla de que sigue activo — pedido de
+        // Rafael, 2026-08-19: un borde con degradado rojo alrededor de
+        // toda la pantalla. `IgnorePointer` para que no bloquee ningún
+        // toque debajo.
+        if (emergenciaActiva && esAdmin) {
+          return Stack(
+            children: [
+              _buildNormal(context),
+              const Positioned.fill(
+                child: IgnorePointer(child: _BordeEmergenciaAdmin()),
+              ),
+            ],
+          );
+        }
+
         return _buildNormal(context);
       },
     );
@@ -298,6 +315,71 @@ class _EmergenciaScreenWrapper extends StatelessWidget {
       usuario: usuario,
       seccionActiva: 'Modo emergencia',
       body: ModoEmergenciaBody(usuario: usuario),
+    );
+  }
+}
+
+/// Borde con degradado rojo en los 4 costados de la pantalla — visible
+/// SOLO para el administrador mientras "Modo emergencia" está activo
+/// (pedido de Rafael, 2026-08-19). A diferencia de cualquier otro
+/// servidor, un admin no queda restringido a la pantalla de emergencia,
+/// así que esta es su única señal de que el modo sigue encendido sin
+/// importar en qué pantalla esté. Se dibuja con 4 franjas en degradado
+/// (`LinearGradient`, rojo → transparente) en vez de un `Border` normal
+/// porque `BoxDecoration.border` no admite degradados.
+class _BordeEmergenciaAdmin extends StatelessWidget {
+  const _BordeEmergenciaAdmin();
+
+  static const _grosor = 18.0;
+
+  Widget _franja({required Alignment desde, required Alignment hacia}) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: desde,
+          end: hacia,
+          colors: [
+            AppColors.rojo.withValues(alpha: 0.85),
+            AppColors.rojo.withValues(alpha: 0),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: _grosor,
+          child: _franja(desde: Alignment.topCenter, hacia: Alignment.bottomCenter),
+        ),
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: _grosor,
+          child: _franja(desde: Alignment.bottomCenter, hacia: Alignment.topCenter),
+        ),
+        Positioned(
+          top: 0,
+          bottom: 0,
+          left: 0,
+          width: _grosor,
+          child: _franja(desde: Alignment.centerLeft, hacia: Alignment.centerRight),
+        ),
+        Positioned(
+          top: 0,
+          bottom: 0,
+          right: 0,
+          width: _grosor,
+          child: _franja(desde: Alignment.centerRight, hacia: Alignment.centerLeft),
+        ),
+      ],
     );
   }
 }
