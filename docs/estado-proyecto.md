@@ -246,7 +246,7 @@ En cada Entrada nueva: incrementa `resumenes_mensuales/{AAAA-MM}.totalEntradas` 
 
 ## 5.6. Modo emergencia (2026-08-19)
 
-**⚠️ Feature de seguridad crítica — probar a fondo (incluyendo "desactivar") antes de confiar en ella para una emergencia real.** Pedido de Rafael: control extra para una evacuación u otra emergencia, donde puede que quien retira a un niño no sea la persona de siempre.
+**⚠️ Feature de seguridad crítica.** Pedido de Rafael: control extra para una evacuación u otra emergencia, donde puede que quien retira a un niño no sea la persona de siempre. **Confirmado funcionando en computador (2026-08-19)**: activar/desactivar, dar salida con foto+firma, y generar el reporte PDF con fotos reales — todo probado por Rafael en producción. Sigue pendiente probar en celular (ver "Pendiente inmediato") y confirmar el comportamiento con varias sesiones simultáneas (una admin + una servidor normal + una acudiente a la vez) antes de depender de esto en una emergencia real de varias personas conectadas al tiempo.
 
 **Qué es:** un botón "Modo emergencia" en el menú, visible solo para `usuario.rol.puedeActivarModoEmergencia` (administrador, columna, líder de ministerio — mismo grupo que `puedeVerAcudientesYNinos`). Al activarlo, se vuelve un **estado global reactivo** (`estado_app/emergencia`, campo `activo`) que TODA sesión abierta de la app respeta en tiempo real, sin recargar:
 
@@ -274,7 +274,7 @@ Esto se resuelve en **un solo lugar**: `AppShell.build()` (`lib/widgets/app_shel
 
 **✅ Resuelto — `MissingPluginException` al generar el reporte PDF en computador.** Mismo patrón ya documentado en sección 8 con `image_picker` — un plugin nuevo (`printing`, agregado junto con `pdf` para esta feature) no había quedado bien registrado en el build de producción hasta un `flutter clean` antes de recompilar. Confirmado por Rafael: **funciona perfecto en computador.** **⚠️ En celular sigue sin dejar generarlo** — Rafael dijo explícitamente que por ahora no es prioridad, queda pendiente sin fecha.
 
-**⚠️ Sin ninguna prueba real todavía** (misma limitación de siempre para verificar UI/cámara/firma desde esta sesión, ver [[dev-server-testing]]) — antes de confiar en esto para una emergencia de verdad, Rafael debería probar con al menos dos sesiones abiertas a la vez (una admin, una servidor normal, una acudiente si es posible) para confirmar que el bloqueo/desbloqueo se siente instantáneo en la práctica, que la cámara y la firma funcionan en celular, y que el PDF se genera bien con fotos reales.
+**⚠️ Sin probar en celular todavía** (cámara/firma con dedo, y el PDF que ya se sabe que falla ahí — ver punto arriba) ni con varias sesiones simultáneas — ver "Pendiente inmediato" en sección 9.
 
 ---
 
@@ -377,7 +377,7 @@ Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `
 
 Nada bloqueante ahora mismo. Lo único abierto de sesiones recientes:
 
-1. **⚠️ Probar "Modo emergencia" a fondo antes de confiar en él para una emergencia real** — ver sección 5.6. Construido y desplegado (código + reglas de Firestore y Storage), pero sin ninguna prueba con dispositivos reales todavía: falta confirmar que el bloqueo global se siente instantáneo con varias sesiones abiertas a la vez, que la cámara y la firma en pantalla funcionan bien en celular, y que el reporte PDF se genera correctamente con fotos reales. Probar también el camino de "desactivar" — es la forma de que la app vuelva a la normalidad para todos.
+1. **"Modo emergencia" ya probado y funcionando en computador (2026-08-19)** — ver sección 5.6: activar/desactivar, dar salida con foto+firma, reporte PDF con fotos reales, y el borde rojo de aviso para el admin, todo confirmado por Rafael. **Pendiente:** confirmar en celular (falla ahí mismo el `MissingPluginException` del PDF, sin prioridad por ahora) y confirmar el comportamiento con varias sesiones simultáneas conectadas a la vez (una admin + una servidor normal + una acudiente), que no se probó todavía.
 2. **La cámara sigue sin cargar en celular al escanear manilla** — confirmado por Rafael que persiste incluso después del arreglo de raíz (zxing-wasm auto-hospedado). **Decisión explícita de Rafael (2026-08-19): no seguir tocando esto por ahora.** Queda documentado como conocido/pausado, no como resuelto.
 3. **Confirmar que agregar el acceso directo con Safari (en vez de Chrome) en iPhone sí carga bien** — ver sección 8, es una limitación de Chrome en iOS, no un bug de la app.
 4. **"Cumpleaños Servidores" está vacío** hasta que los servidores llenen su fecha de nacimiento — dato nuevo que no existía antes, se llena desde "Mi perfil" → "Editar información" (ver [[feature-cumpleanos]]).
