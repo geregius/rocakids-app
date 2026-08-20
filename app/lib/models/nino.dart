@@ -129,6 +129,16 @@ class Nino {
   final String condicionMedica;
   final bool autorizoFotoFlag;
   final String fotoUrl;
+  // Si el niño está ahora mismo adentro (última Entrada sin Salida
+  // todavía) — lo mantiene `AuthService.registrarMovimiento()` en el
+  // mismo batch atómico que crea cada `Registro`. Es la fuente de verdad
+  // real de "¿ya entró hoy?" (misma que usa `firestore.rules` para
+  // bloquear una segunda Entrada) — a propósito NO se deriva del último
+  // movimiento en `registros`, porque los 3738 registros históricos
+  // migrados (2026-08-19) se importaron todos como 'Entrada' sin ninguna
+  // 'Salida', así que "el último movimiento de toda la historia" de un
+  // niño puede ser una Entrada de hace meses.
+  final bool presente;
 
   const Nino({
     required this.documentoIdentificacion,
@@ -143,6 +153,7 @@ class Nino {
     required this.condicionMedica,
     required this.autorizoFotoFlag,
     this.fotoUrl = '',
+    this.presente = false,
   });
 
   String get nombreCompleto => '$nombres $apellidos';
@@ -178,6 +189,7 @@ class Nino {
       condicionMedica: data['condicionMedica'] as String? ?? '',
       autorizoFotoFlag: data['autorizoFotoFlag'] as bool? ?? false,
       fotoUrl: data['fotoUrl'] as String? ?? '',
+      presente: data['presente'] as bool? ?? false,
     );
   }
 }

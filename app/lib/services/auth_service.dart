@@ -956,22 +956,6 @@ class AuthService {
         .toList();
   }
 
-  /// El movimiento (Entrada/Salida) más reciente de un niño, si tiene
-  /// alguno. Con esto se decide si el próximo botón de check-in debe
-  /// decir "Registrar Entrada" o "Registrar Salida" — un niño cuyo
-  /// último movimiento fue "Entrada" está adentro; si fue "Salida" (o no
-  /// tiene ninguno todavía), está afuera.
-  Future<Registro?> obtenerUltimoMovimiento(String fkIdNino) async {
-    final snap = await _firestore
-        .collection('registros')
-        .where('fkIdNino', isEqualTo: fkIdNino)
-        .orderBy('fechaMovimiento', descending: true)
-        .limit(1)
-        .get();
-    if (snap.docs.isEmpty) return null;
-    return Registro.fromFirestore(snap.docs.first.id, snap.docs.first.data());
-  }
-
   /// Cuántas veces un niño ha tenido Entrada en los últimos 30 días —
   /// para la alerta reforzada en `registro_asistencia_screen.dart`
   /// cuando el niño sigue sin documento (2026-08-17, pedido de Rafael:

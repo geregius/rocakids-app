@@ -43,7 +43,6 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   // Niño seleccionado.
   Nino? _nino;
   bool _cargandoDetalle = false;
-  Registro? _ultimoMovimiento;
   List<Acudiente> _acudientes = [];
   Acudiente? _acudienteElegido;
   bool _otroAcudiente = false;
@@ -137,16 +136,14 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       _entradasRecientesSinDocumento = null;
     });
     try {
-      // Las tres consultas solo necesitan el documento (ya conocido desde
+      // Las dos consultas solo necesitan el documento (ya conocido desde
       // el resultado de búsqueda, no hace falta esperar al niño cargado
-      // para pedirlas) — se disparan las tres A LA VEZ en vez de una
+      // para pedirlas) — se disparan las dos A LA VEZ en vez de una
       // detrás de otra. En una red rápida no se nota, pero en datos
       // móviles cada round-trip pesa (encontrado 2026-08-19: "se demora
-      // al registrar el ingreso") — 3 consultas en paralelo tardan lo
-      // que tarda la más lenta de las tres, no la suma de las tres.
+      // al registrar el ingreso").
       final ninoId = resultado.documentoIdentificacion;
       final futuroNino = _authService.obtenerNinoPorDocumento(ninoId);
-      final futuroUltimoMovimiento = _authService.obtenerUltimoMovimiento(ninoId);
       final futuroAcudientes = _authService.obtenerAcudientesDeNino(ninoId);
 
       final nino = await futuroNino;
@@ -162,7 +159,6 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
         }
         return;
       }
-      final ultimoMovimiento = await futuroUltimoMovimiento;
       final acudientes = await futuroAcudientes;
       // Este sí depende de saber si el niño sigue sin documento, así que
       // se queda como la única consulta que espera a las de arriba —
@@ -174,7 +170,6 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       if (!mounted) return;
       setState(() {
         _nino = nino;
-        _ultimoMovimiento = ultimoMovimiento;
         _acudientes = acudientes;
         _entradasRecientesSinDocumento = entradasRecientes;
         _cargandoDetalle = false;
@@ -189,11 +184,12 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
     }
   }
 
-  String get _accion {
-    final ultimo = _ultimoMovimiento;
-    if (ultimo == null || ultimo.tipoMovimiento == 'Salida') return 'Entrada';
-    return 'Salida';
-  }
+  // `nino.presente` es la fuente de verdad real (ver docstring del campo
+  // en `Nino`) — a propósito NO se deriva del último `Registro` de toda
+  // la historia del niño, que puede ser una Entrada histórica sin Salida
+  // asociada (bug encontrado 2026-08-19: "muestra que ya tiene entrada
+  // registrada hoy" para niños que no habían venido en meses).
+  String get _accion => (_nino?.presente ?? false) ? 'Salida' : 'Entrada';
 
   /// Escanea el QR de una manilla y llena el campo con el código leído
   /// (2026-08-18, pedido de Rafael) — mismo campo/validación de siempre,
@@ -459,7 +455,6 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
     setState(() {
       _modo = _Modo.buscar;
       _nino = null;
-      _ultimoMovimiento = null;
       _acudientes = [];
       _busquedaController.clear();
       _resultados = [];
