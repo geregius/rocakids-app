@@ -9,19 +9,27 @@ class FotoAvatar extends StatelessWidget {
   final String url;
   final double radius;
   final IconData iconoSinFoto;
+  final Color? backgroundColor;
+  final Color? iconColor;
 
   const FotoAvatar({
     super.key,
     required this.url,
     this.radius = 20,
     this.iconoSinFoto = Icons.person,
+    this.backgroundColor,
+    this.iconColor,
   });
+
+  Widget _fallback() => CircleAvatar(
+    radius: radius,
+    backgroundColor: backgroundColor,
+    child: Icon(iconoSinFoto, color: iconColor),
+  );
 
   @override
   Widget build(BuildContext context) {
-    if (url.isEmpty) {
-      return CircleAvatar(radius: radius, child: Icon(iconoSinFoto));
-    }
+    if (url.isEmpty) return _fallback();
     return ClipOval(
       child: SizedBox(
         width: radius * 2,
@@ -39,8 +47,7 @@ class FotoAvatar extends StatelessWidget {
               ),
             );
           },
-          errorBuilder: (context, error, stackTrace) =>
-              CircleAvatar(radius: radius, child: Icon(iconoSinFoto)),
+          errorBuilder: (context, error, stackTrace) => _fallback(),
         ),
       ),
     );

@@ -479,10 +479,12 @@ class _ListaPendientesSheet extends StatelessWidget {
 
 /// Antes recibía `ninosPorId` ya cargado por `DashboardScreen`, que
 /// bloqueaba TODA la pantalla (incluidos los conteos baratos de
-/// `_BloqueTotales`) esperando `obtenerTodosLosNinos()` — un dato
-/// pesado (~460 documentos completos) solo para un dato secundario
-/// ("sin documento" de hoy). Ahora este bloque carga esos niños por su
-/// cuenta (2026-08-19): el resto del Dashboard ya no espera por esto.
+/// `_BloqueTotales`) esperando traer TODOS los ~460 niños de la base
+/// solo para un dato secundario ("sin documento" de hoy). Ahora este
+/// bloque carga esos niños por su cuenta (2026-08-19) y solo pide los
+/// que de verdad aparecen en las Entradas de hoy (`obtenerNinosPorIds`)
+/// — el resto del Dashboard ya no espera por esto, y el pedido en sí es
+/// mucho más chico.
 class _BloqueHoy extends StatefulWidget {
   final AuthService authService;
 
@@ -493,17 +495,27 @@ class _BloqueHoy extends StatefulWidget {
 }
 
 class _BloqueHoyState extends State<_BloqueHoy> {
-  Map<String, Nino> _ninosPorId = {};
+  // Antes traía los ~460 niños completos (`obtenerTodosLosNinos()`) solo
+  // para el dato secundario "sin documento" — ahora pide bajo demanda
+  // solo los niños de las Entradas de hoy (2026-08-19, mismo arreglo que
+  // `ninos_presentes_screen.dart`).
+  final Map<String, Nino> _ninosPorId = {};
+  final Set<String> _pidiendo = {};
 
-  @override
-  void initState() {
-    super.initState();
-    widget.authService.obtenerTodosLosNinos().then((ninos) {
-      if (mounted) {
-        setState(() {
-          _ninosPorId = {for (final n in ninos) n.documentoIdentificacion: n};
-        });
-      }
+  void _asegurarNinosCargados(Iterable<String> ids) {
+    final faltantes = ids
+        .where((id) => !_ninosPorId.containsKey(id) && !_pidiendo.contains(id))
+        .toSet();
+    if (faltantes.isEmpty) return;
+    _pidiendo.addAll(faltantes);
+    widget.authService.obtenerNinosPorIds(faltantes).then((ninos) {
+      if (!mounted) return;
+      setState(() {
+        for (final n in ninos) {
+          _ninosPorId[n.documentoIdentificacion] = n;
+        }
+        _pidiendo.removeAll(faltantes);
+      });
     });
   }
 
@@ -546,6 +558,9 @@ class _BloqueHoyState extends State<_BloqueHoy> {
         final entradasHoy = registrosDeHoy
             .where((r) => r.tipoMovimiento == 'Entrada')
             .toList();
+        _asegurarNinosCargados(
+          entradasHoy.where((r) => !r.esVisitante).map((r) => r.fkIdNino),
+        );
         final presentes = _presentesAhora(registrosDeHoy);
         final yaSalieron = entradasHoy.length - presentes.length;
         final visitantes = entradasHoy.where((r) => r.esVisitante).length;

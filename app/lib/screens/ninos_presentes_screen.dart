@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/escaner_qr.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/foto_avatar.dart';
 import 'nino_detalle_sheet.dart';
 
 const _sinGrupo = 'Sin grupo';
@@ -43,8 +44,17 @@ class NinosPresentesScreen extends StatefulWidget {
 
 class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
   final _authService = AuthService();
-  bool _cargandoNinos = true;
-  Map<String, Nino> _ninosPorId = {};
+
+  // Antes se traían los ~460 niños completos (`obtenerTodosLosNinos()`)
+  // antes de mostrar nada — lento en celular, y de sobra: "presentes
+  // ahora" normalmente son unos pocos. Ahora se pide bajo demanda, solo
+  // los niños que de verdad aparecen en el stream de hoy (2026-08-19).
+  // `_ninosPorId` se va llenando incrementalmente y nunca se limpia
+  // (una vez cargado un niño, sirve para toda la sesión); `_pidiendo`
+  // evita pedir dos veces al mismo niño si el stream se actualiza antes
+  // de que termine la consulta anterior.
+  final Map<String, Nino> _ninosPorId = {};
+  final Set<String> _pidiendo = {};
 
   // IDs de registros de ENTRADA a los que ya se les dio salida desde esta
   // pantalla, pero el stream de Firestore todavía no lo refleja (hay un
@@ -54,24 +64,21 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
   // limpiar este set.
   final Set<String> _ocultosOptimista = {};
 
-  @override
-  void initState() {
-    super.initState();
-    _cargarNinos();
-  }
-
-  Future<void> _cargarNinos() async {
-    try {
-      final ninos = await _authService.obtenerTodosLosNinos();
-      if (mounted) {
-        setState(() {
-          _ninosPorId = {for (final n in ninos) n.documentoIdentificacion: n};
-          _cargandoNinos = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _cargandoNinos = false);
-    }
+  void _asegurarNinosCargados(Iterable<String> ids) {
+    final faltantes = ids
+        .where((id) => !_ninosPorId.containsKey(id) && !_pidiendo.contains(id))
+        .toSet();
+    if (faltantes.isEmpty) return;
+    _pidiendo.addAll(faltantes);
+    _authService.obtenerNinosPorIds(faltantes).then((ninos) {
+      if (!mounted) return;
+      setState(() {
+        for (final n in ninos) {
+          _ninosPorId[n.documentoIdentificacion] = n;
+        }
+        _pidiendo.removeAll(faltantes);
+      });
+    });
   }
 
   /// De todos los movimientos de hoy, deja solo a quien está presente
@@ -180,13 +187,12 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
         title: const Text('¿Dar salida a este niño?'),
         content: Row(
           children: [
-            CircleAvatar(
+            FotoAvatar(
+              url: fotoUrl,
               radius: 28,
+              iconoSinFoto: Icons.child_care,
               backgroundColor: AppColors.amarillo,
-              backgroundImage: fotoUrl.isNotEmpty ? NetworkImage(fotoUrl) : null,
-              child: fotoUrl.isEmpty
-                  ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
-                  : null,
+              iconColor: AppColors.textoPrincipal,
             ),
             const SizedBox(width: 12),
             Expanded(child: Text(nombre, style: const TextStyle(fontSize: 16))),
@@ -240,9 +246,7 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
         icon: const Icon(Icons.photo_camera),
         label: const Text('Salida por manilla'),
       ),
-      body: _cargandoNinos
-          ? const Center(child: CircularProgressIndicator())
-          : StreamBuilder<List<Registro>>(
+      body: StreamBuilder<List<Registro>>(
               stream: _authService.registrosDeHoy(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -252,6 +256,9 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
                   return Center(child: Text('Error: ${snapshot.error}'));
                 }
                 final presentes = _calcularPresentes(snapshot.data ?? []);
+                _asegurarNinosCargados(
+                  presentes.where((r) => !r.esVisitante).map((r) => r.fkIdNino),
+                );
                 final grupos = _agruparPorEdad(presentes);
                 final ordenados = [
                   ...gruposEdad,
@@ -395,12 +402,11 @@ class _NinoPresenteTile extends StatelessWidget {
       onDismissed: (_) => onDarSalida(registro),
       child: ListTile(
         onTap: () => _abrirFicha(context),
-        leading: CircleAvatar(
+        leading: FotoAvatar(
+          url: fotoUrl,
+          iconoSinFoto: Icons.child_care,
           backgroundColor: AppColors.amarillo,
-          backgroundImage: fotoUrl.isNotEmpty ? NetworkImage(fotoUrl) : null,
-          child: fotoUrl.isEmpty
-              ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
-              : null,
+          iconColor: AppColors.textoPrincipal,
         ),
         title: Text(nombre),
         subtitle: Text('$documentoTexto · Manilla ${registro.numeroManilla}'),

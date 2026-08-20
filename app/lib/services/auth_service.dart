@@ -667,13 +667,34 @@ class AuthService {
     }
   }
 
-  /// Todos los niños registrados, en una sola lectura (no reactivo) —
-  /// para cruzar contra "presentes hoy" sin mantener un listener abierto
-  /// todo el tiempo que dura el servicio. Mismo permiso que
-  /// [listarNinosAdmin] (`allow list`: admin o `puedeRegistrarAsistencia()`).
-  Future<List<Nino>> obtenerTodosLosNinos() async {
-    final snap = await _firestore.collection('ninos').get();
-    return snap.docs.map((d) => Nino.fromFirestore(d.id, d.data())).toList();
+  /// Solo los niños de [ids] (en vez de la colección completa) — para
+  /// "Menores Recibidos" y el bloque "Hoy" del Dashboard, que antes
+  /// traían TODOS los ~460 niños (`obtenerTodosLosNinos()`, eliminado
+  /// 2026-08-19 por quedar sin uso) solo para cruzar nombre/foto/documento
+  /// de los pocos que aparecen en los movimientos de hoy — lento en
+  /// celular. `whereIn` de Firestore acepta máximo 30 valores por
+  /// consulta, así que si hay más se piden en varios lotes en paralelo.
+  /// Mismo permiso que [listarNinosAdmin] (`allow list`: admin o
+  /// `puedeRegistrarAsistencia()`).
+  Future<List<Nino>> obtenerNinosPorIds(Iterable<String> ids) async {
+    final lista = ids.toList();
+    if (lista.isEmpty) return [];
+    final lotes = <List<String>>[
+      for (var i = 0; i < lista.length; i += 30)
+        lista.sublist(i, i + 30 > lista.length ? lista.length : i + 30),
+    ];
+    final snaps = await Future.wait(
+      lotes.map(
+        (lote) => _firestore
+            .collection('ninos')
+            .where(FieldPath.documentId, whereIn: lote)
+            .get(),
+      ),
+    );
+    return [
+      for (final snap in snaps)
+        for (final d in snap.docs) Nino.fromFirestore(d.id, d.data()),
+    ];
   }
 
   /// Movimientos de entrada/salida del día de HOY (hora local del
@@ -832,8 +853,8 @@ class AuthService {
   /// por Rafael 2026-08-18 para poder pasarlos al siguiente nivel de la
   /// iglesia a tiempo. No hay Cloud Function ni campo pre-calculado: se
   /// computa al vuelo cada vez que se abre el Dashboard, cruzando todos
-  /// los niños "Activo" contra su fecha de nacimiento (mismo volumen que
-  /// [obtenerTodosLosNinos], barato con el tamaño actual de la base).
+  /// los niños "Activo" contra su fecha de nacimiento — barato con el
+  /// tamaño actual de la base (~460 niños).
   Future<List<Nino>> obtenerNinosQueGraduanEsteMes() async {
     final snap = await _firestore
         .collection('ninos')
