@@ -64,8 +64,10 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
   bool _cargandoIndiceNinos = true;
   List<NinoBusqueda> _indiceNinos = [];
   List<NinoBusqueda> _resultadosNino = [];
-  Nino? _ninoEncontrado;
-  bool _buscandoNino = false;
+  // `NinoBusqueda`, no `Nino` completo — ver docstring de
+  // `_seleccionarNino()`: a propósito no se vuelve a consultar Firebase
+  // al seleccionar un niño, ya trae todo lo necesario (nombre, edad, ID).
+  NinoBusqueda? _ninoEncontrado;
 
   String? _parentesco;
   bool _mostrarPassword = false;
@@ -184,30 +186,20 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
     });
   }
 
-  Future<void> _seleccionarNino(NinoBusqueda resultado) async {
+  /// A propósito NO vuelve a consultar Firebase: el resultado tocado
+  /// (`NinoBusqueda`, del índice `ninos_busqueda` ya cargado) ya trae
+  /// todo lo que hace falta acá — nombre, edad (vía `fechaNacimiento`) y
+  /// el ID para crear la relación. Antes se pedía la ficha completa del
+  /// niño (`obtenerNinoPorDocumento`) solo para tener su foto en la
+  /// tarjeta de confirmación; se decidió (2026-08-19, con Rafael)
+  /// mostrarla sin foto a cambio de que la selección sea instantánea —
+  /// esa consulta era justo la que se sentía lenta en datos móviles.
+  void _seleccionarNino(NinoBusqueda resultado) {
     setState(() {
-      _buscandoNino = true;
+      _ninoEncontrado = resultado;
       _resultadosNino = [];
       _busquedaNinoController.text = resultado.nombreCompleto;
     });
-    try {
-      final nino = await _authService.obtenerNinoPorDocumento(
-        resultado.documentoIdentificacion,
-      );
-      if (mounted) {
-        setState(() {
-          _ninoEncontrado = nino;
-          _buscandoNino = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _buscandoNino = false;
-          _error = 'No se pudo cargar la ficha del niño: $e';
-        });
-      }
-    }
   }
 
   void _olvidarNinoEncontrado() {
@@ -627,11 +619,9 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                     nombre: _ninoEncontrado!.nombreCompleto,
                     subtitulo:
                         '${calcularEdad(_ninoEncontrado!.fechaNacimiento)} años',
-                    fotoUrl: _ninoEncontrado!.fotoUrl,
+                    fotoUrl: '',
                     onCambiar: _olvidarNinoEncontrado,
                   )
-                else if (_buscandoNino)
-                  const _TarjetaCargando(mensaje: 'Cargando la ficha del niño...')
                 else ...[
                   const Text(
                     'Si el niño ya está registrado, búscalo por nombre primero.',
@@ -643,7 +633,7 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                     enabled: !_cargandoIndiceNinos,
                     decoration: InputDecoration(
                       labelText: 'Buscar niño por nombre',
-                      suffixIcon: _cargandoIndiceNinos || _buscandoNino
+                      suffixIcon: _cargandoIndiceNinos
                           ? const Padding(
                               padding: EdgeInsets.all(14),
                               child: SizedBox(
