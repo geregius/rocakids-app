@@ -240,15 +240,36 @@ service cloud.firestore {
       // registrar una Entrada para un niño que YA está presente — evita
       // duplicados. No aplica a niños visitante (no tienen doc en
       // `ninos`) ni a movimientos de Salida.
+      // Una Salida de "Modo emergencia" (2026-08-19) exige además ser
+      // admin/columna/líder de ministerio (`puedeVerInfoLiderazgo()`) —
+      // defensa en profundidad: el cliente ya se lo exige a quien
+      // ACTIVA/DESACTIVA el modo, pero cualquier servidor puede REGISTRAR
+      // salidas mientras está activo (pedido de Rafael), así que la
+      // condición real que hay que exigir acá es que nadie pueda marcar
+      // `modalidadRegistro: 'Emergencia'` sin que el modo esté
+      // realmente activo en `estado_app/emergencia`.
       allow create: if puedeRegistrarAsistencia()
         && request.resource.data.fkIdServidor == request.auth.uid
         && (
           request.resource.data.tipoMovimiento != 'Entrada'
             || request.resource.data.fkIdNino == ''
             || !ninoYaPresente(request.resource.data.fkIdNino)
+        )
+        && (
+          request.resource.data.modalidadRegistro != 'Emergencia'
+            || get(/databases/$(database)/documents/estado_app/emergencia).data.activo == true
         );
       allow get, list: if puedeRegistrarAsistencia();
       allow update, delete: if esAdmin();
+    }
+
+    // Estado global de "Modo emergencia" (2026-08-19) — TODA la app
+    // (incluidos acudientes) necesita leerlo para reaccionar en tiempo
+    // real (ver `AppShell`), pero solo admin/columna/líder de ministerio
+    // pueden activarlo/desactivarlo.
+    match /estado_app/emergencia {
+      allow get: if request.auth != null;
+      allow write: if puedeVerInfoLiderazgo();
     }
 
     // Resumen mensual de asistencia (2026-08-19) — solo lo escribe la

@@ -117,6 +117,15 @@ enum RolUsuario {
   /// restringe la entrada de menú: la lectura de `registros` que usa el
   /// dashboard ya está abierta a cualquier rol de servidor.
   bool get puedeVerDashboard => puedeVerAcudientesYNinos;
+
+  /// Quién puede activar/desactivar "Modo emergencia" y ver el botón
+  /// correspondiente en el menú fuera de una emergencia (2026-08-19,
+  /// pedido explícito de Rafael) — mismo criterio que
+  /// [puedeVerAcudientesYNinos]. Debe quedar sincronizado con
+  /// `puedeVerInfoLiderazgo()` en firestore.rules. Distinto de "quién
+  /// puede OPERAR salidas durante una emergencia" — eso es cualquier
+  /// rol de servidor, ver [esRolDeServidor] y `AppShell`.
+  bool get puedeActivarModoEmergencia => puedeVerAcudientesYNinos;
 }
 
 const gruposSanguineos = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];

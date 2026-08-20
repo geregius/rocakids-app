@@ -31,3 +31,11 @@ Future<XFile?> elegirFotoConCamaraOGaleria(BuildContext context) async {
   if (origen == null || !context.mounted) return null;
   return ImagePicker().pickImage(source: origen, imageQuality: 80);
 }
+
+/// Toma una foto SOLO con la cámara, sin ofrecer la galería — para
+/// evidencia que debe capturarse en el momento (ej. "Modo emergencia",
+/// 2026-08-19): dejar elegir una foto ya guardada anularía el propósito
+/// de verificar quién está ahí en ese instante.
+Future<XFile?> tomarFotoConCamara() {
+  return ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 80);
+}

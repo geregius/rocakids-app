@@ -11,6 +11,7 @@ import '../screens/cambiar_password_sheet.dart';
 import '../screens/cumpleanos_ninos_screen.dart';
 import '../screens/cumpleanos_servidores_screen.dart';
 import '../screens/home_screen.dart';
+import '../screens/modo_emergencia_screen.dart';
 import '../screens/modulo_en_construccion_screen.dart';
 import '../screens/ninos_presentes_screen.dart';
 import '../screens/registrar_familia_screen.dart';
@@ -150,6 +151,18 @@ class AppShell extends StatelessWidget {
           label: 'Gestión de Servidores',
           onTap: () => _irA(context, AdminUsersListScreen(usuario: usuario)),
         ),
+      // Solo administrador, columna y líder de ministerio pueden
+      // activar/desactivar el modo (2026-08-19, pedido explícito de
+      // Rafael) — mientras está inactivo, este ítem es la única forma
+      // de llegar a la pantalla (navegación normal, con el menú de
+      // siempre). Una vez activo, TODA la app reacciona sola sin
+      // depender de este ítem — ver la rama de bloqueo en `build()`.
+      if (usuario.rol.puedeActivarModoEmergencia)
+        _ItemMenu(
+          icon: Icons.priority_high,
+          label: 'Modo emergencia',
+          onTap: () => _irA(context, _EmergenciaScreenWrapper(usuario: usuario)),
+        ),
       if (esServidor)
         _ItemMenu(
           icon: Icons.person,
@@ -184,6 +197,48 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // "Modo emergencia" (2026-08-19, pedido de Rafael): estado GLOBAL,
+    // reactivo para toda la app — mientras está activo, un
+    // administrador sigue viendo todo normal (no pasa por esta rama);
+    // cualquier otro servidor queda restringido SOLO a la pantalla de
+    // emergencia (sin el menú de siempre); un acudiente sin rol de
+    // servidor ve un aviso de bloqueo. Se resuelve acá, en el único
+    // widget que envuelve TODAS las pantallas autenticadas, para que
+    // ninguna pantalla existente tenga que acordarse de revisar esto
+    // por su cuenta.
+    return StreamBuilder<bool>(
+      stream: AuthService().emergenciaActivaStream(),
+      builder: (context, snapshot) {
+        final emergenciaActiva = snapshot.data ?? false;
+        final esAdmin = usuario.rol == RolUsuario.administrador;
+
+        if (emergenciaActiva && !esAdmin) {
+          if (usuario.rol.esRolDeServidor) {
+            return Scaffold(
+              appBar: AppBar(
+                title: const Text('Modo emergencia'),
+                backgroundColor: AppColors.rojo,
+                foregroundColor: Colors.white,
+                actions: [
+                  IconButton(
+                    onPressed: () => _cerrarSesion(context),
+                    icon: const Icon(Icons.logout),
+                    tooltip: 'Cerrar sesión',
+                  ),
+                ],
+              ),
+              body: ModoEmergenciaBody(usuario: usuario),
+            );
+          }
+          return _BloqueoEmergenciaAcudiente(onCerrarSesion: () => _cerrarSesion(context));
+        }
+
+        return _buildNormal(context);
+      },
+    );
+  }
+
+  Widget _buildNormal(BuildContext context) {
     final items = _items(context);
     final esAncho = MediaQuery.of(context).size.width >= _anchoMenuFijo;
 
@@ -223,6 +278,77 @@ class AppShell extends StatelessWidget {
       ),
       body: body,
       floatingActionButton: floatingActionButton,
+    );
+  }
+}
+
+/// Envuelve `ModoEmergenciaBody` en un `AppShell` normal, con el menú de
+/// siempre — es como llega leadership a la pantalla desde el ítem de
+/// menú CUANDO la emergencia todavía no está activa (para poder
+/// activarla). Una vez activa, `AppShell.build()` ya no usa este
+/// wrapper: reemplaza TODO por `ModoEmergenciaBody` directamente, sin
+/// menú, para cualquier servidor (ver arriba).
+class _EmergenciaScreenWrapper extends StatelessWidget {
+  final UsuarioApp usuario;
+  const _EmergenciaScreenWrapper({required this.usuario});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppShell(
+      usuario: usuario,
+      seccionActiva: 'Modo emergencia',
+      body: ModoEmergenciaBody(usuario: usuario),
+    );
+  }
+}
+
+/// Lo que ve un acudiente (sin rol de servidor) mientras el modo
+/// emergencia está activo — pierde acceso a "Mis hijos" y cualquier
+/// otra pantalla hasta que un admin/columna/líder de ministerio lo
+/// desactive.
+class _BloqueoEmergenciaAcudiente extends StatelessWidget {
+  final VoidCallback onCerrarSesion;
+  const _BloqueoEmergenciaAcudiente({required this.onCerrarSesion});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('RocaKids'),
+        backgroundColor: AppColors.rojo,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            onPressed: onCerrarSesion,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Cerrar sesión',
+          ),
+        ],
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.priority_high, color: AppColors.rojo, size: 56),
+              const SizedBox(height: 16),
+              Text(
+                'La app está en modo emergencia',
+                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Por seguridad, el acceso a "Mis hijos" está temporalmente '
+                'suspendido. Acércate a un líder de ministerio, columna o '
+                'administrador para más información.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

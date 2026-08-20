@@ -60,6 +60,16 @@ class Registro {
   final String servicio;
   final String grupoEdad;
   final String observacion;
+  // Solo se llenan en una Salida de "Modo emergencia" (2026-08-19, ver
+  // modo_emergencia_screen.dart): evidencia extra de quién retiró al
+  // niño, exigida además del acudiente elegido/escrito de siempre.
+  final String fotoEntregaEmergenciaUrl;
+  final String firmaEntregaEmergenciaUrl;
+  // Copia del `nombreAcudienteContacto` de la Entrada correspondiente,
+  // tomada en el momento de la Salida de emergencia — para que el
+  // reporte pueda mostrar "según RocaKids lo entregó X" vs. "en la
+  // emergencia lo retiró Y" sin tener que volver a cruzar registros.
+  final String nombreAcudienteEntradaOriginal;
 
   const Registro({
     required this.id,
@@ -81,9 +91,13 @@ class Registro {
     required this.servicio,
     this.grupoEdad = '',
     this.observacion = '',
+    this.fotoEntregaEmergenciaUrl = '',
+    this.firmaEntregaEmergenciaUrl = '',
+    this.nombreAcudienteEntradaOriginal = '',
   });
 
   bool get esVisitante => fkIdNino.isEmpty;
+  bool get esEmergencia => modalidadRegistro == 'Emergencia';
 
   String get nombreNino => nombreNinoVisitante;
 
@@ -106,6 +120,9 @@ class Registro {
     'servicio': servicio,
     'grupoEdad': grupoEdad,
     'observacion': observacion,
+    'fotoEntregaEmergenciaUrl': fotoEntregaEmergenciaUrl,
+    'firmaEntregaEmergenciaUrl': firmaEntregaEmergenciaUrl,
+    'nombreAcudienteEntradaOriginal': nombreAcudienteEntradaOriginal,
   };
 
   factory Registro.fromFirestore(String id, Map<String, dynamic> data) {
@@ -133,8 +150,41 @@ class Registro {
       servicio: data['servicio'] as String? ?? '',
       grupoEdad: data['grupoEdad'] as String? ?? '',
       observacion: data['observacion'] as String? ?? '',
+      fotoEntregaEmergenciaUrl: data['fotoEntregaEmergenciaUrl'] as String? ?? '',
+      firmaEntregaEmergenciaUrl:
+          data['firmaEntregaEmergenciaUrl'] as String? ?? '',
+      nombreAcudienteEntradaOriginal:
+          data['nombreAcudienteEntradaOriginal'] as String? ?? '',
     );
   }
+}
+
+/// De todos los movimientos de un día, deja solo a quien está presente
+/// AHORA: para un niño registrado, su movimiento más reciente debe ser
+/// "Entrada" (si ya salió, no cuenta); para un visitante, cada "Entrada"
+/// cuenta por separado (no hay forma de dar salida a un visitante desde
+/// el registro manual, así que cada una es una presencia distinta).
+/// Compartido entre "Menores Recibidos" y "Modo emergencia" (2026-08-19)
+/// — antes vivía solo en `ninos_presentes_screen.dart`; se movió acá
+/// para que ambas pantallas usen EXACTAMENTE el mismo criterio de
+/// "quién está presente", crítico para que el listado de una emergencia
+/// no pueda quedar desincronizado del real.
+List<Registro> calcularPresentes(List<Registro> registrosDelDia) {
+  final ultimoPorNino = <String, Registro>{};
+  final visitantesPresentes = <Registro>[];
+  for (final r in registrosDelDia) {
+    if (r.esVisitante) {
+      if (r.tipoMovimiento == 'Entrada') visitantesPresentes.add(r);
+      continue;
+    }
+    // Los registros ya vienen ordenados por fecha ascendente, así que
+    // el último que se procese por niño es el más reciente.
+    ultimoPorNino[r.fkIdNino] = r;
+  }
+  return [
+    ...ultimoPorNino.values.where((r) => r.tipoMovimiento == 'Entrada'),
+    ...visitantesPresentes,
+  ];
 }
 
 /// Un mes de `resumenes_mensuales/{AAAA-MM}` — totales de Entradas ya

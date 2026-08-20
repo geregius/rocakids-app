@@ -1111,6 +1111,120 @@ class AuthService {
     }
   }
 
+  /// true si "Modo emergencia" está activo AHORA MISMO — cualquier
+  /// autenticado puede leerlo (`estado_app/emergencia`, ver
+  /// `firestore.rules`), porque TODA la app reacciona a este valor en
+  /// tiempo real (ver `AppShell`, 2026-08-19). `false` si el documento
+  /// todavía no existe (nunca se ha activado).
+  Stream<bool> emergenciaActivaStream() {
+    return _firestore
+        .collection('estado_app')
+        .doc('emergencia')
+        .snapshots()
+        .map((doc) => doc.data()?['activo'] as bool? ?? false);
+  }
+
+  /// Activa "Modo emergencia" — a partir de este momento, TODA la app
+  /// reacciona en tiempo real (ver `emergenciaActivaStream`):
+  /// servidores quedan restringidos a la pantalla de emergencia,
+  /// acudientes ven un aviso de bloqueo, admin sigue viendo todo normal.
+  /// Solo `puedeVerInfoLiderazgo()` (admin/columna/líder de ministerio)
+  /// puede llamarlo — impuesto en `firestore.rules`. [nombreActivador]
+  /// se pasa desde la UI (mismo patrón que `Registro.nombreServidor`) en
+  /// vez de resolverlo del lado del servidor.
+  Future<void> activarModoEmergencia(String nombreActivador) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+    try {
+      await _firestore.collection('estado_app').doc('emergencia').set({
+        'activo': true,
+        'activadoPorUid': user.uid,
+        'activadoPorNombre': nombreActivador,
+        'activadoEn': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw AuthException('No se pudo activar el modo emergencia: $e');
+    }
+  }
+
+  /// Desactiva "Modo emergencia" — misma restricción de permiso que
+  /// [activarModoEmergencia].
+  Future<void> desactivarModoEmergencia() async {
+    try {
+      await _firestore.collection('estado_app').doc('emergencia').update({
+        'activo': false,
+      });
+    } catch (e) {
+      throw AuthException('No se pudo desactivar el modo emergencia: $e');
+    }
+  }
+
+  /// Registra una Salida durante "Modo emergencia" (2026-08-19, pedido
+  /// de Rafael): exige, ADEMÁS de los datos normales de quién retira al
+  /// niño (ya armados en [salida] por el llamador — acudiente elegido o
+  /// "Otro" escrito a mano, igual que una salida normal), una foto
+  /// tomada en el momento y una firma — evidencia extra para el reporte
+  /// posterior, porque en una emergencia quien retira al niño puede no
+  /// ser la persona de siempre. `modalidadRegistro` se fuerza a
+  /// `'Emergencia'` sin importar lo que traiga [salida] (impuesto
+  /// también en `firestore.rules`, no es solo un detalle de la UI).
+  ///
+  /// El ID del registro se genera ANTES de escribirlo (necesario para
+  /// nombrar la ruta de Storage de la foto/firma con ese mismo ID) — a
+  /// diferencia de [registrarMovimiento], que deja que Firestore genere
+  /// el ID en el mismo `set()`.
+  Future<void> registrarSalidaEmergencia({
+    required Registro salida,
+    required Uint8List fotoBytes,
+    required String fotoExt,
+    required Uint8List firmaBytes,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+    final docRef = _firestore.collection('registros').doc();
+
+    String fotoUrl;
+    String firmaUrl;
+    try {
+      final fotoRef = _storage.ref('emergencia_fotos/${docRef.id}/foto.$fotoExt');
+      await fotoRef.putData(fotoBytes, _metadataDeFoto(fotoExt));
+      fotoUrl = await fotoRef.getDownloadURL();
+
+      final firmaRef = _storage.ref('emergencia_firmas/${docRef.id}/firma.png');
+      await firmaRef.putData(
+        firmaBytes,
+        SettableMetadata(contentType: 'image/png'),
+      );
+      firmaUrl = await firmaRef.getDownloadURL();
+    } catch (e) {
+      throw AuthException('No se pudo subir la foto/firma: $e');
+    }
+
+    final datos = salida.toFirestore()
+      ..['fkIdServidor'] = user.uid
+      ..['nombreServidor'] = salida.nombreServidor
+      ..['modalidadRegistro'] = 'Emergencia'
+      ..['fotoEntregaEmergenciaUrl'] = fotoUrl
+      ..['firmaEntregaEmergenciaUrl'] = firmaUrl;
+
+    final batch = _firestore.batch();
+    batch.set(docRef, datos);
+    if (salida.fkIdNino.isNotEmpty) {
+      batch.update(_firestore.collection('ninos').doc(salida.fkIdNino), {
+        'presente': false,
+      });
+    }
+    try {
+      await batch.commit();
+    } catch (e) {
+      throw AuthException('No se pudo registrar la salida de emergencia: $e');
+    }
+  }
+
   /// Busca un niño ya registrado por su documento (o llave interna) y,
   /// si existe, lo vincula al acudiente logueado. Vínculo inmediato, sin
   /// aprobación — el control real de quién retira a un niño ocurre en

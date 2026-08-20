@@ -81,26 +81,13 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
     });
   }
 
-  /// De todos los movimientos de hoy, deja solo a quien está presente
-  /// ahora: para un niño registrado, su movimiento más reciente debe ser
-  /// "Entrada" (si ya salió, no cuenta); para un visitante, cada
-  /// "Entrada" cuenta por separado (ver docstring de la clase).
+  /// Envuelve la función compartida [calcularPresentes] (`models/registro.dart`)
+  /// agregando el ocultamiento optimista propio de esta pantalla (ver
+  /// `_ocultosOptimista` arriba).
   List<Registro> _calcularPresentes(List<Registro> registrosDeHoy) {
-    final ultimoPorNino = <String, Registro>{};
-    final visitantesPresentes = <Registro>[];
-    for (final r in registrosDeHoy) {
-      if (r.esVisitante) {
-        if (r.tipoMovimiento == 'Entrada') visitantesPresentes.add(r);
-        continue;
-      }
-      // Los registros ya vienen ordenados por fecha ascendente, así que
-      // el último que se procese por niño es el más reciente.
-      ultimoPorNino[r.fkIdNino] = r;
-    }
-    return [
-      ...ultimoPorNino.values.where((r) => r.tipoMovimiento == 'Entrada'),
-      ...visitantesPresentes,
-    ].where((r) => !_ocultosOptimista.contains(r.id)).toList();
+    return calcularPresentes(
+      registrosDeHoy,
+    ).where((r) => !_ocultosOptimista.contains(r.id)).toList();
   }
 
   /// Registra la salida de `entrada` con la fecha/hora actual, copiando
