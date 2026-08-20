@@ -27,6 +27,11 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
   bool _cargandoPermiso = true;
   bool _puedeEditar = false;
   bool _eliminando = false;
+  // Mi propia relación con este niño (si tengo una, de cualquier
+  // parentesco) — se usa para el botón "Quitar de mis hijos". Distinto
+  // de `_puedeEditar`, que solo es true si soy Padre/Madre.
+  NinoAcudiente? _miRelacion;
+  bool _desvinculando = false;
 
   bool get _esAdmin => widget.usuario.rol == RolUsuario.administrador;
 
@@ -39,14 +44,13 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
 
   Future<void> _verificarPermiso() async {
     final esAdmin = widget.usuario.rol == RolUsuario.administrador;
-    var puedeEditar = esAdmin;
-    if (!puedeEditar) {
-      final relacion = await AuthService().obtenerMiRelacionConNino(_nino.documentoIdentificacion);
-      puedeEditar = relacion?.parentescoTipo == 'Padre' || relacion?.parentescoTipo == 'Madre';
-    }
+    final relacion = await AuthService().obtenerMiRelacionConNino(_nino.documentoIdentificacion);
+    final puedeEditar =
+        esAdmin || relacion?.parentescoTipo == 'Padre' || relacion?.parentescoTipo == 'Madre';
     if (mounted) {
       setState(() {
         _puedeEditar = puedeEditar;
+        _miRelacion = relacion;
         _cargandoPermiso = false;
       });
     }
@@ -73,6 +77,60 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
         setState(() => _eliminando = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('No se pudo eliminar: $e')),
+        );
+      }
+    }
+  }
+
+  /// Quita MI propio vínculo con este niño (ej. lo agregué por
+  /// equivocación en "Mis hijos") — no borra al niño, solo la relación.
+  /// No requiere ser Padre/Madre: cualquier parentesco puede
+  /// deshacerse a sí mismo.
+  Future<void> _desvincularme() async {
+    final relacion = _miRelacion;
+    if (relacion == null) return;
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Quitar de mis hijos?'),
+        content: Text(
+          '${_nino.nombreCompleto} ya no va a aparecer en tu lista de "Mis '
+          'hijos". Esto NO borra su información — solo quita tu vínculo con '
+          'él/ella.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.rojo),
+            child: const Text('Quitar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmado != true) return;
+    setState(() => _desvinculando = true);
+    try {
+      await AuthService().eliminarRelacionNinoAcudiente(
+        ninoId: relacion.fkIdNino,
+        acudienteUid: relacion.fkIdAcudiente,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(() => _desvinculando = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.mensaje)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _desvinculando = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo quitar el vínculo: $e')),
         );
       }
     }
@@ -160,6 +218,21 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
                 onPressed: _abrirEdicion,
                 icon: const Icon(Icons.edit),
                 label: const Text('Editar información'),
+              ),
+            ],
+            if (!_cargandoPermiso && _miRelacion != null) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _desvinculando ? null : _desvincularme,
+                style: OutlinedButton.styleFrom(foregroundColor: AppColors.rojo),
+                icon: _desvinculando
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.delete_outline),
+                label: const Text('Quitar de mis hijos'),
               ),
             ],
             if (_esAdmin) ...[

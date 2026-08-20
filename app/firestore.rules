@@ -215,7 +215,14 @@ service cloud.firestore {
       // CUALQUIER niño, no solo a los suyos.
       allow get, list: if request.auth != null;
 
-      allow update, delete: if esAdmin();
+      allow update: if esAdmin();
+      // Un acudiente puede quitar su PROPIO vínculo con un niño (ej. lo
+      // registró por equivocación como su hijo) — no borra ni al niño ni
+      // al acudiente, solo esta relación. No puede tocar el vínculo de
+      // OTRO acudiente por esta vía (2026-08-19, pedido de Rafael).
+      allow delete: if esAdmin()
+        || (request.auth != null
+            && request.auth.uid == resource.data.fk_idAcudiente);
     }
 
     match /registros/{registroId} {

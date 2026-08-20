@@ -84,6 +84,53 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
     }
   }
 
+  /// Quita el vínculo de este acudiente con UN niño puntual (solo
+  /// admin) — no borra ni al niño ni al acudiente, solo la relación
+  /// entre ambos. Para cuando se registró/vinculó por equivocación
+  /// (2026-08-19, pedido de Rafael).
+  Future<void> _quitarVinculo(Nino nino) async {
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Quitar este vínculo?'),
+        content: Text(
+          '${nino.nombreCompleto} ya no va a aparecer vinculado a '
+          '${_acudiente.nombreCompleto}. Esto NO borra la información de '
+          'ninguno de los dos — solo la relación entre ellos.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.rojo),
+            child: const Text('Quitar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmado != true) return;
+    try {
+      await AuthService().eliminarRelacionNinoAcudiente(
+        ninoId: nino.documentoIdentificacion,
+        acudienteUid: _acudiente.uid,
+      );
+      if (mounted) _cargarHijos();
+    } on AuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo quitar el vínculo: $e')),
+        );
+      }
+    }
+  }
+
   /// Aviso de que este acudiente no tiene correo (o llegó duplicado con
   /// otro al migrar los datos históricos, 2026-08-18) — sin esto no
   /// puede iniciar sesión con su propia cuenta. Desaparece solo en
@@ -193,6 +240,13 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
                   ),
                   title: Text(n.nombreCompleto),
                   subtitle: Text('${calcularEdad(n.fechaNacimiento)} años'),
+                  trailing: _esAdmin
+                      ? IconButton(
+                          onPressed: () => _quitarVinculo(n),
+                          icon: const Icon(Icons.delete_outline, color: AppColors.rojo),
+                          tooltip: 'Quitar vínculo',
+                        )
+                      : null,
                 ),
               ),
             if (_puedeEditar) ...[

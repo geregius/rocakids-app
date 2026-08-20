@@ -596,6 +596,31 @@ class AuthService {
     return NinoAcudiente.fromFirestore(doc.id, doc.data()!);
   }
 
+  /// Quita el vínculo entre un niño y un acudiente — SIN borrar ni al
+  /// niño ni al acudiente, solo la relación entre ambos (2026-08-19,
+  /// pedido de Rafael: un acudiente que vinculó un niño por equivocación
+  /// debe poder deshacerlo desde "Mis hijos", y un admin debe poder
+  /// hacerlo desde la ficha de cualquier acudiente). El ID de
+  /// `nino_acudiente` es determinístico, así que no hace falta ninguna
+  /// consulta previa para encontrarlo. `firestore.rules` exige que quien
+  /// llama sea admin, o el propio `acudienteUid` de la relación.
+  Future<void> eliminarRelacionNinoAcudiente({
+    required String ninoId,
+    required String acudienteUid,
+  }) async {
+    try {
+      await _firestore
+          .collection('nino_acudiente')
+          .doc('${ninoId}_$acudienteUid')
+          .delete();
+    } catch (e) {
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException('No tienes permiso para quitar este vínculo.');
+      }
+      throw AuthException('No se pudo quitar el vínculo: $e');
+    }
+  }
+
   /// Completa el documento de un niño que no lo tenía (el "ajuste
   /// inmediato" que pidió Rafael): quien hace el check-in puede
   /// arreglarlo ahí mismo en vez de tener que ir a buscar a un admin.
