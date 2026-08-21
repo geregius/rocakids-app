@@ -62,6 +62,20 @@ service cloud.firestore {
         ];
     }
 
+    // --- Validación de formato/tipo de datos (2026-08-21) ---
+    // Todo lo de arriba valida QUIÉN puede escribir; esto valida QUÉ se
+    // puede escribir. Antes de esto, `allow create` solo exigía rol/
+    // sesión — cualquier cuenta válida podía crear un documento con
+    // campos de cualquier tipo/formato saltándose la app Flutter (única
+    // que validaba hasta ahora). Se aplica SOLO a `create` (nunca a
+    // `update`, que ya tiene su propio bloqueo de campos por regla) y
+    // solo a los campos con un formato conocido — deliberadamente
+    // permisivo en longitud/contenido de texto libre para no rechazar
+    // nunca un dato real.
+    function esTexto(v) { return v is string; }
+    function esTextoAcotado(v, maxLen) { return v is string && v.size() <= maxLen; }
+    function esTextoNoVacioAcotado(v, maxLen) { return v is string && v.size() > 0 && v.size() <= maxLen; }
+
     match /usuarios/{uid} {
       // Cualquiera autenticado puede leer su propio perfil. Un admin, o
       // columna/líder de ministerio (`puedeVerInfoLiderazgo()`), puede
@@ -76,7 +90,11 @@ service cloud.firestore {
       // un rol con más permisos.
       allow create: if request.auth != null
         && request.auth.uid == uid
-        && request.resource.data.rol in ['usuario_externo', 'pendiente'];
+        && request.resource.data.rol in ['usuario_externo', 'pendiente']
+        && esTextoNoVacioAcotado(request.resource.data.get('correo', ''), 200)
+        && esTextoNoVacioAcotado(request.resource.data.get('nombre', ''), 100)
+        && esTextoNoVacioAcotado(request.resource.data.get('apellido', ''), 100)
+        && request.resource.data.get('activo', true) == true;
 
       // Un admin puede editar cualquier cosa. El propio dueño del
       // perfil puede completarlo/editarlo (documento, teléfono, EPS,
@@ -117,7 +135,16 @@ service cloud.firestore {
       allow list: if puedeVerInfoLiderazgo();
 
       // Auto-registro: solo su propio documento.
-      allow create: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && esTextoNoVacioAcotado(request.resource.data.get('tipoDocumento', ''), 60)
+        && esTextoNoVacioAcotado(request.resource.data.get('numeroDocumento', ''), 30)
+        && esTextoNoVacioAcotado(request.resource.data.get('nombres', ''), 150)
+        && esTextoNoVacioAcotado(request.resource.data.get('apellidos', ''), 150)
+        && esTextoNoVacioAcotado(request.resource.data.get('telefonoCelular', ''), 30)
+        && esTextoNoVacioAcotado(request.resource.data.get('correoElectronico', ''), 200)
+        && esTextoAcotado(request.resource.data.get('fotoSeguridadUrl', ''), 1000)
+        && request.resource.data.get('estadoAutorizacion', 'Autorizado') == 'Autorizado'
+        && request.resource.data.get('observacionesRestriccion', '') == '';
 
       // El propio acudiente, un admin, o quien hace check-in/out puede
       // corregir los datos de contacto/documento de un acudiente — pero
@@ -142,7 +169,23 @@ service cloud.firestore {
       // clasifica la operación como "create" solo si el documento AÚN NO
       // existe, esto previene duplicados: un segundo intento con el mismo
       // ID cae en "update", que aquí no está permitido para el cliente.
-      allow create: if request.auth != null;
+      allow create: if request.auth != null
+        && esTextoNoVacioAcotado(request.resource.data.get('documentoIdentificacion', ''), 100)
+        && request.resource.data.get('tipoIdentificacion', '') in
+          ['Registro Civil', 'Tarjeta de Identidad', 'Cédula de Extranjería', 'Pasaporte', 'No tiene documento']
+        && esTextoAcotado(request.resource.data.get('identificacionMenor', ''), 50)
+        && esTextoNoVacioAcotado(request.resource.data.get('nombres', ''), 150)
+        && esTextoNoVacioAcotado(request.resource.data.get('apellidos', ''), 150)
+        && request.resource.data.get('fechaNacimiento', request.time) is timestamp
+        && request.resource.data.get('genero', '') in ['Masculino', 'Femenino']
+        && request.resource.data.get('estadoRegistro', '') == 'Activo'
+        && request.resource.data.get('alertaMedicaFlag', false) is bool
+        && esTextoAcotado(request.resource.data.get('condicionMedica', ''), 500)
+        && request.resource.data.get('autorizoFotoFlag', false) is bool
+        && esTextoAcotado(request.resource.data.get('fotoUrl', ''), 1000)
+        && request.resource.data.get('tieneNoAutorizados', false) == false
+        && request.resource.data.get('totalEntradas', 0) == 0
+        && request.resource.data.get('ultimaAsistencia', null) == null;
 
       allow get: if request.auth != null;
       // `list` (traer TODA la colección) es más sensible que `get`
@@ -208,7 +251,10 @@ service cloud.firestore {
     // información que un acudiente o un maestro deba ver.
     match /ninos/{ninoId}/gestiones/{gestionId} {
       allow create: if puedeVerInfoLiderazgo()
-        && request.resource.data.fkIdRegistradoPor == request.auth.uid;
+        && request.resource.data.fkIdRegistradoPor == request.auth.uid
+        && esTextoNoVacioAcotado(request.resource.data.get('nota', ''), 1000)
+        && request.resource.data.get('estadoResultante', '') in ['Activo', 'Inactivo']
+        && request.resource.data.get('fecha', request.time) is timestamp;
       allow get, list: if puedeVerInfoLiderazgo();
       allow update, delete: if esAdmin();
     }
@@ -224,7 +270,10 @@ service cloud.firestore {
     match /ninos/{ninoId}/no_autorizados/{entradaId} {
       allow create: if request.auth != null
         && (esAdmin() || puedeVerInfoLiderazgo() || esPadreOMadreDe(ninoId))
-        && request.resource.data.fkIdRegistradoPor == request.auth.uid;
+        && request.resource.data.fkIdRegistradoPor == request.auth.uid
+        && esTextoNoVacioAcotado(request.resource.data.get('nombre', ''), 200)
+        && esTextoAcotado(request.resource.data.get('documento', ''), 50)
+        && esTextoAcotado(request.resource.data.get('motivo', ''), 1000);
 
       allow get, list: if esAdmin()
         || puedeVerInfoLiderazgo()
@@ -241,7 +290,10 @@ service cloud.firestore {
     // sensibles de niños con los que no tiene ningún vínculo real. Se
     // crea junto con ninos/{ninoId} (mismo ID) en el mismo batch.
     match /ninos_busqueda/{ninoId} {
-      allow create: if request.auth != null;
+      allow create: if request.auth != null
+        && esTextoNoVacioAcotado(request.resource.data.get('nombres', ''), 150)
+        && esTextoNoVacioAcotado(request.resource.data.get('apellidos', ''), 150)
+        && request.resource.data.get('fechaNacimiento', request.time) is timestamp;
       allow get, list: if request.auth != null;
       // Debe quedar sincronizado con el nombre en ninos/{ninoId} — mismo
       // permiso que editar el niño en sí.
@@ -261,7 +313,14 @@ service cloud.firestore {
           request.resource.data.fk_idAcudiente == request.auth.uid ||
           esAdmin() ||
           puedeRegistrarAsistencia()
-        );
+        )
+        && esTextoNoVacioAcotado(request.resource.data.get('fk_idNino', ''), 100)
+        && esTextoNoVacioAcotado(request.resource.data.get('fk_idAcudiente', ''), 128)
+        && request.resource.data.get('parentescoTipo', '') in
+          ['Padre', 'Madre', 'Tío/a', 'Abuelo/a', 'Acudiente Autorizado']
+        && request.resource.data.get('autorizacionFormulario', '') in ['Sí', 'No']
+        && request.resource.data.get('autorizacionImagen', '') in ['Sí', 'No']
+        && request.resource.data.get('esRepresentanteLegalFlag', false) is bool;
 
       // Cualquier autenticado puede leer relaciones (igual que ninos y
       // ninos_busqueda) — hace falta para que quien hace check-in/out
@@ -312,7 +371,24 @@ service cloud.firestore {
         && (
           request.resource.data.modalidadRegistro != 'Emergencia'
             || get(/databases/$(database)/documents/estado_app/emergencia).data.activo == true
-        );
+        )
+        && request.resource.data.tipoMovimiento in ['Entrada', 'Salida']
+        && request.resource.data.fechaMovimiento is timestamp
+        && esTexto(request.resource.data.get('fkIdNino', ''))
+        && esTexto(request.resource.data.get('nombreNinoVisitante', ''))
+        && esTextoNoVacioAcotado(request.resource.data.get('numeroManilla', ''), 30)
+        && esTextoNoVacioAcotado(request.resource.data.get('nombreServidor', ''), 150)
+        && esTexto(request.resource.data.get('fkIdAcudienteContacto', ''))
+        && esTextoNoVacioAcotado(request.resource.data.get('nombreAcudienteContacto', ''), 150)
+        && esTexto(request.resource.data.get('tipoIdentificacionVisitante', ''))
+        && esTexto(request.resource.data.get('documentoNinoVisitante', ''))
+        && esTexto(request.resource.data.get('telefonoAcudienteVisitante', ''))
+        && request.resource.data.get('alertaMedicaVisitante', false) is bool
+        && esTexto(request.resource.data.get('condicionMedicaVisitante', ''))
+        && request.resource.data.get('modalidadRegistro', '') in ['App', 'Automático', 'Histórico', 'Emergencia']
+        && esTextoNoVacioAcotado(request.resource.data.get('servicio', ''), 60)
+        && esTexto(request.resource.data.get('grupoEdad', ''))
+        && esTexto(request.resource.data.get('observacion', ''));
       allow get, list: if puedeRegistrarAsistencia();
       allow update, delete: if esAdmin();
     }
