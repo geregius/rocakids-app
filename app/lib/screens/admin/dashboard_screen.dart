@@ -103,10 +103,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 12),
           _BloqueInasistencia(authService: _authService, usuario: widget.usuario),
-          if (widget.usuario.rol == RolUsuario.administrador) ...[
-            const SizedBox(height: 8),
-            _BotonBackfillAsistencia(authService: _authService),
-          ],
           const SizedBox(height: 32),
           _TituloBloque('Pendientes'),
           const SizedBox(height: 8),
@@ -274,93 +270,6 @@ class _BloqueInasistencia extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-/// Botón admin **temporal**: calcula `totalEntradas`/`ultimaAsistencia`
-/// para el histórico completo de `registros`, ya que la Cloud Function
-/// solo mantiene esos campos para Entradas NUEVAS desde 2026-08-21 (ver
-/// docstring de `AuthService.backfillEstadisticasAsistencia()`). Se
-/// ejecuta una sola vez tras desplegar esta feature — quitar este botón
-/// después (mismo criterio que "Reindexar"/"Migrar vínculos" en su
-/// momento, ver docs/estado-proyecto.md).
-class _BotonBackfillAsistencia extends StatefulWidget {
-  final AuthService authService;
-  const _BotonBackfillAsistencia({required this.authService});
-
-  @override
-  State<_BotonBackfillAsistencia> createState() => _BotonBackfillAsistenciaState();
-}
-
-class _BotonBackfillAsistenciaState extends State<_BotonBackfillAsistencia> {
-  bool _ejecutando = false;
-
-  Future<void> _ejecutar() async {
-    final confirmado = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('¿Calcular estadísticas de asistencia?'),
-        content: const Text(
-          'Recorre TODOS los registros históricos y actualiza el total de '
-          'entradas y la última asistencia de cada niño. Se puede volver a '
-          'correr sin problema, pero solo hace falta una vez tras este '
-          'despliegue.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Ejecutar'),
-          ),
-        ],
-      ),
-    );
-    if (confirmado != true) return;
-    setState(() => _ejecutando = true);
-    try {
-      final resultado = await widget.authService.backfillEstadisticasAsistencia();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Listo: ${resultado['ninosActualizados']} niños actualizados '
-              '(${resultado['entradasProcesadas']} entradas procesadas).',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('No se pudo calcular: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _ejecutando = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        onPressed: _ejecutando ? null : _ejecutar,
-        icon: _ejecutando
-            ? const SizedBox(
-                height: 14,
-                width: 14,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.calculate_outlined, size: 18),
-        label: const Text(
-          'Calcular estadísticas de asistencia (ejecutar una sola vez)',
-        ),
-      ),
     );
   }
 }

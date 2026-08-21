@@ -1028,16 +1028,19 @@ class AuthService {
     return ninos;
   }
 
-  /// **Ejecutar una sola vez** (botón admin temporal en el Dashboard):
-  /// calcula `ninos/{id}.totalEntradas`/`ultimaAsistencia` para el
-  /// histórico completo de `registros`, ya que la Cloud Function
+  /// Backfill de un solo uso: calculó `ninos/{id}.totalEntradas`/
+  /// `ultimaAsistencia` para el histórico completo de `registros` ya
+  /// existente antes de 2026-08-21 (la Cloud Function
   /// `actualizarResumenMensual` solo mantiene estos campos para
-  /// Entradas NUEVAS desde 2026-08-21 — sin esto, el reporte "Niños que
-  /// dejaron de asistir" quedaría vacío para cualquier niño cuyas
-  /// entradas sean todas anteriores a ese cambio (prácticamente todos).
-  /// Idempotente: se puede volver a correr sin problema, siempre
-  /// recalcula desde `registros` (la fuente de verdad), no acumula.
-  /// **Solo admin** (mismo permiso que editar `ninos` libremente).
+  /// Entradas NUEVAS desde ese cambio). **Ya se corrió** (botón admin
+  /// temporal en el Dashboard, quitado tras confirmarlo — mismo
+  /// criterio que "Reindexar"/"Migrar vínculos" en su momento, ver
+  /// docs/estado-proyecto.md). El método queda en el código por si
+  /// hace falta recalcular de nuevo (ej. una migración de datos futura
+  /// que traiga `registros` sin pasar por la Cloud Function): es
+  /// idempotente, siempre recalcula desde `registros` (la fuente de
+  /// verdad), no acumula. **Solo admin** (mismo permiso que editar
+  /// `ninos` libremente).
   Future<Map<String, int>> backfillEstadisticasAsistencia() async {
     final snap = await _firestore
         .collection('registros')
