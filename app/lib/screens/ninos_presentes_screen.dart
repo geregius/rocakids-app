@@ -380,6 +380,10 @@ class _NinoPresenteTile extends StatelessWidget {
         ? registro.documentoNinoVisitante
         : (nino?.identificacionMenor ?? '');
     final documentoTexto = documento.isNotEmpty ? documento : 'Sin documento';
+    // Los visitantes no tienen fecha de nacimiento registrada (ver
+    // docstring de `Registro`), así que solo aplica a niños con ficha —
+    // misma lógica exacta de "Cumpleaños niños" (`diasDesdeCumpleanos`).
+    final diasDeCumpleanos = nino != null ? diasDesdeCumpleanos(nino.fechaNacimiento) : null;
 
     return Dismissible(
       key: ValueKey(registro.id),
@@ -397,12 +401,22 @@ class _NinoPresenteTile extends StatelessWidget {
         ),
         title: Text(nombre),
         subtitle: Text('$documentoTexto · Manilla ${registro.numeroManilla}'),
-        trailing: tieneAlertaMedica
-            ? const Tooltip(
-                message: 'Tiene condición médica/alergia registrada',
-                child: Icon(Icons.medical_information, color: AppColors.rojo),
-              )
-            : null,
+        trailing: (diasDeCumpleanos == null && !tieneAlertaMedica)
+            ? null
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (diasDeCumpleanos != null) ...[
+                    _BadgeCumpleanos(dias: diasDeCumpleanos),
+                    if (tieneAlertaMedica) const SizedBox(width: 6),
+                  ],
+                  if (tieneAlertaMedica)
+                    const Tooltip(
+                      message: 'Tiene condición médica/alergia registrada',
+                      child: Icon(Icons.medical_information, color: AppColors.rojo),
+                    ),
+                ],
+              ),
       ),
     );
   }
@@ -419,6 +433,49 @@ class _NinoPresenteTile extends StatelessWidget {
           SizedBox(width: 8),
           Text('Salida', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         ],
+      ),
+    );
+  }
+}
+
+/// Insignia de cumpleaños (2026-08-20, pedido de Rafael) — mismo criterio
+/// de "Cumpleaños niños" (`diasDesdeCumpleanos`), pero como ícono junto
+/// al de alerta médica en vez de una pantalla aparte. Reutiliza el
+/// degradado de marca de `_avisoCumpleanos()` en
+/// `registro_asistencia_screen.dart` para que se sienta consistente con
+/// el resto de la app.
+class _BadgeCumpleanos extends StatelessWidget {
+  final int dias;
+  const _BadgeCumpleanos({required this.dias});
+
+  @override
+  Widget build(BuildContext context) {
+    final mensaje = dias == 0
+        ? '¡Cumple años hoy!'
+        : dias == 1
+        ? 'Cumplió ayer'
+        : 'Cumplió hace $dias días';
+    return Tooltip(
+      message: mensaje,
+      child: Container(
+        width: 26,
+        height: 26,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: [AppColors.purpura, AppColors.rojo, AppColors.amarillo],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 3,
+              offset: Offset(0, 1),
+            ),
+          ],
+        ),
+        child: const Icon(Icons.cake, color: Colors.white, size: 15),
       ),
     );
   }
