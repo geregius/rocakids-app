@@ -8,6 +8,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/acudiente.dart';
+import '../models/gestion.dart';
 import '../models/nino.dart';
 import '../models/no_autorizado.dart';
 import '../models/registro.dart';
@@ -1091,6 +1092,60 @@ class AuthService {
       'ninosActualizados': ninoIds.length,
       'entradasProcesadas': snap.docs.length,
     };
+  }
+
+  /// Historial de gestión de un niño (llamadas hechas, resultado, etc.)
+  /// — ver docstring de [Gestion]. Orden más reciente primero.
+  Future<List<Gestion>> obtenerGestiones(String ninoId) async {
+    final snap = await _firestore
+        .collection('ninos')
+        .doc(ninoId)
+        .collection('gestiones')
+        .orderBy('fecha', descending: true)
+        .get();
+    return snap.docs.map((d) => Gestion.fromFirestore(d.id, d.data())).toList();
+  }
+
+  /// Registra una gestión de seguimiento sobre un niño (típicamente uno
+  /// que dejó de asistir) y deja su `estadoRegistro` en [nuevoEstado]
+  /// (`estadosRegistroGestionables`: 'Activo' o 'Inactivo') — mismo
+  /// batch atómico, para que la nota y el estado resultante siempre
+  /// queden consistentes entre sí. Solo liderazgo (admin/columna/líder
+  /// de ministerio) puede llamar esto (`firestore.rules`) — pedido de
+  /// Rafael (2026-08-21) para poder "evidenciar" que el reporte de
+  /// inasistencia se está gestionando, no solo mirando.
+  Future<void> registrarGestion({
+    required String ninoId,
+    required String nota,
+    required String nuevoEstado,
+    required String nombreRegistradoPor,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+    final gestion = Gestion(
+      id: '',
+      nota: nota,
+      estadoResultante: nuevoEstado,
+      fkIdRegistradoPor: user.uid,
+      nombreRegistradoPor: nombreRegistradoPor,
+      fecha: DateTime.now(),
+    );
+    final ninoRef = _firestore.collection('ninos').doc(ninoId);
+    final batch = _firestore.batch();
+    batch.set(ninoRef.collection('gestiones').doc(), gestion.toFirestore());
+    batch.update(ninoRef, {'estadoRegistro': nuevoEstado});
+    try {
+      await batch.commit();
+    } catch (e) {
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException(
+          'No tienes permiso para registrar una gestión sobre este niño.',
+        );
+      }
+      throw AuthException('No se pudo guardar la gestión: $e');
+    }
   }
 
   /// Cuántos niños hay hoy en el sistema (colección `ninos` completa) —

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../models/gestion.dart';
 import '../models/nino.dart';
 import '../models/no_autorizado.dart';
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/confirmar_eliminar.dart';
+import '../widgets/gestion_dialog.dart';
 import 'editar_nino_sheet.dart';
 
 /// Hoja inferior con la ficha completa de un niño: foto, documento, edad
@@ -41,6 +43,15 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
   bool _puedeGestionarNoAutorizados = false;
   bool _agregandoNoAutorizado = false;
 
+  // Historial de gestión de asistencia (2026-08-21) — ver docstring de
+  // `Gestion`. Solo liderazgo lo ve/gestiona, ni siquiera el padre/madre
+  // (a diferencia de "no autorizados"): es seguimiento interno, no algo
+  // que un acudiente necesite ver.
+  List<Gestion> _gestiones = [];
+  bool _cargandoGestiones = true;
+  bool _esLiderazgo = false;
+  bool _registrandoGestion = false;
+
   bool get _esAdmin => widget.usuario.rol == RolUsuario.administrador;
 
   @override
@@ -49,6 +60,7 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
     _nino = widget.nino;
     _verificarPermiso();
     _cargarNoAutorizados();
+    _cargarGestiones();
   }
 
   Future<void> _verificarPermiso() async {
@@ -57,6 +69,7 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
     final esPadreOMadre =
         relacion?.parentescoTipo == 'Padre' || relacion?.parentescoTipo == 'Madre';
     final puedeEditar = esAdmin || esPadreOMadre;
+    final esLiderazgo = esAdmin || widget.usuario.rol.puedeVerAcudientesYNinos;
     if (mounted) {
       setState(() {
         _puedeEditar = puedeEditar;
@@ -65,9 +78,68 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
         // Solo liderazgo o el padre/madre vinculado pueden agregar/quitar
         // personas no autorizadas — no cualquier servidor, por la
         // sensibilidad legal del dato (decisión de Rafael, 2026-08-21).
-        _puedeGestionarNoAutorizados =
-            esAdmin || esPadreOMadre || widget.usuario.rol.puedeVerAcudientesYNinos;
+        _puedeGestionarNoAutorizados = esAdmin || esPadreOMadre || esLiderazgo;
+        _esLiderazgo = esLiderazgo;
       });
+    }
+  }
+
+  /// Mismo criterio que `_cargarNoAutorizados()`: si no hay permiso, la
+  /// consulta falla con permission-denied y se trata como "no hay nada
+  /// que mostrar", no como un error visible.
+  Future<void> _cargarGestiones() async {
+    try {
+      final lista = await AuthService().obtenerGestiones(_nino.documentoIdentificacion);
+      if (mounted) {
+        setState(() {
+          _gestiones = lista;
+          _cargandoGestiones = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _cargandoGestiones = false);
+    }
+  }
+
+  Future<void> _registrarGestion() async {
+    final resultado = await mostrarDialogoGestion(
+      context,
+      nombreNino: _nino.nombreCompleto,
+      estadoActual: _nino.estadoRegistro,
+    );
+    if (resultado == null) return;
+    setState(() => _registrandoGestion = true);
+    try {
+      await AuthService().registrarGestion(
+        ninoId: _nino.documentoIdentificacion,
+        nota: resultado.nota,
+        nuevoEstado: resultado.nuevoEstado,
+        nombreRegistradoPor: widget.usuario.nombreCompleto,
+      );
+      final actualizado = await AuthService().obtenerNinoPorDocumento(
+        _nino.documentoIdentificacion,
+      );
+      await _cargarGestiones();
+      if (mounted) {
+        setState(() {
+          if (actualizado != null) _nino = actualizado;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Gestión registrada.')),
+        );
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No se pudo guardar: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _registrandoGestion = false);
     }
   }
 
@@ -341,6 +413,24 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
                 label: const Text('Agregar persona NO autorizada'),
               ),
             ],
+            if (_esLiderazgo && !_cargandoGestiones && _gestiones.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _SeccionGestiones(gestiones: _gestiones),
+            ],
+            if (_esLiderazgo) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _registrandoGestion ? null : _registrarGestion,
+                icon: _registrandoGestion
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.fact_check_outlined),
+                label: const Text('Registrar gestión'),
+              ),
+            ],
             if (!_cargandoPermiso && _puedeEditar) ...[
               const SizedBox(height: 16),
               OutlinedButton.icon(
@@ -388,6 +478,52 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
 
 String _formatearFecha(DateTime fecha) =>
     '${fecha.day.toString().padLeft(2, '0')}/${fecha.month.toString().padLeft(2, '0')}/${fecha.year}';
+
+/// Historial de gestión de asistencia — solo liderazgo lo ve (ver
+/// docstring de `Gestion`), para evidenciar el seguimiento hecho a un
+/// niño que dejó de asistir (o cualquier otro cambio de estado).
+class _SeccionGestiones extends StatelessWidget {
+  final List<Gestion> gestiones;
+  const _SeccionGestiones({required this.gestiones});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.superficie,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.azulClaro.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.fact_check_outlined, color: AppColors.azulMarino),
+              const SizedBox(width: 8),
+              Text(
+                'Historial de gestión',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          for (final g in gestiones) ...[
+            const Divider(height: 16),
+            Text(g.nota),
+            Text(
+              '${g.nombreRegistradoPor.isNotEmpty ? g.nombreRegistradoPor : 'alguien del equipo'} · '
+              '${_formatearFecha(g.fecha)} · quedó ${g.estadoResultante}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
 class _FilaDato extends StatelessWidget {
   final String etiqueta;

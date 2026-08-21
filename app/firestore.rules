@@ -176,9 +176,41 @@ service cloud.firestore {
         request.resource.data.autorizoFotoFlag == resource.data.autorizoFotoFlag &&
         request.resource.data.alertaMedicaFlag == resource.data.alertaMedicaFlag &&
         request.resource.data.condicionMedica == resource.data.condicionMedica
+      ) || (
+        // Liderazgo (admin/columna/líder de ministerio) puede cambiar
+        // `estadoRegistro` — ej. "Inactivo" para un niño que se mudó de
+        // ciudad, desde el reporte "Niños que dejaron de asistir"
+        // (2026-08-21, pedido de Rafael). Nada más se puede tocar por
+        // esta vía (todo lo demás queda igual) — ver
+        // `AuthService.registrarGestion()`.
+        puedeVerInfoLiderazgo() &&
+        request.resource.data.tipoIdentificacion == resource.data.tipoIdentificacion &&
+        request.resource.data.identificacionMenor == resource.data.identificacionMenor &&
+        request.resource.data.fotoUrl == resource.data.fotoUrl &&
+        request.resource.data.nombres == resource.data.nombres &&
+        request.resource.data.apellidos == resource.data.apellidos &&
+        request.resource.data.fechaNacimiento == resource.data.fechaNacimiento &&
+        request.resource.data.genero == resource.data.genero &&
+        request.resource.data.autorizoFotoFlag == resource.data.autorizoFotoFlag &&
+        request.resource.data.alertaMedicaFlag == resource.data.alertaMedicaFlag &&
+        request.resource.data.condicionMedica == resource.data.condicionMedica
       );
 
       allow delete: if esAdmin();
+    }
+
+    // Historial de gestión de asistencia (2026-08-21): registro interno
+    // de liderazgo sobre el seguimiento hecho a un niño que dejó de
+    // asistir (llamada hecha, resultado, si se marcó Inactivo por
+    // mudanza, etc.) — para evidenciar que el reporte del Dashboard se
+    // está gestionando de verdad, no solo mirando. Solo liderazgo
+    // (`puedeVerInfoLiderazgo()`) puede crear o ver estas notas — no es
+    // información que un acudiente o un maestro deba ver.
+    match /ninos/{ninoId}/gestiones/{gestionId} {
+      allow create: if puedeVerInfoLiderazgo()
+        && request.resource.data.fkIdRegistradoPor == request.auth.uid;
+      allow get, list: if puedeVerInfoLiderazgo();
+      allow update, delete: if esAdmin();
     }
 
     // Personas que NO deben tener contacto con un niño puntual (custodias,

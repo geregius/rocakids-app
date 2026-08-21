@@ -296,7 +296,25 @@ Pedido de Rafael: en el Dashboard, un reporte de niños con **10 o más Entradas
 
 **⚠️ Nota de despliegue (2026-08-21):** un `firebase deploy --only firestore,hosting,functions` combinado terminó con un aviso no fatal de Cloud Functions ("could not set up cleanup policy") que hizo que el paso de publicar **hosting** no se completara esa vez, aunque firestore/functions sí quedaron bien — el sitio siguió sirviendo el build viejo hasta un `firebase deploy --only hosting` aparte. Se detectó porque el botón de backfill "no aparecía"; se confirmó comparando el `main.dart.js` de producción contra el build local. **Recomendación a futuro:** cuando un deploy combinado termine con cualquier advertencia/error, no asumir que hosting se publicó — verificar o simplemente correr `firebase deploy --only hosting` aparte para estar seguro.
 
-**Dónde vive:** `AuthService.obtenerNinosQueDejaronDeAsistir()` (consulta `ninos` con `estadoRegistro == 'Activo'` + `totalEntradas >= 10`, filtra `ultimaAsistencia` en el cliente — nuevo índice compuesto en `firestore.indexes.json`), `_BloqueInasistencia`/`_ListaInasistenciaSheet`/`_BotonBackfillAsistencia` en `admin/dashboard_screen.dart`.
+**Dónde vive:** `AuthService.obtenerNinosQueDejaronDeAsistir()` (consulta `ninos` con `estadoRegistro == 'Activo'` + `totalEntradas >= 10`, filtra `ultimaAsistencia` en el cliente — nuevo índice compuesto en `firestore.indexes.json`), `_BloqueInasistencia`/`_ListaInasistenciaSheet` en `admin/dashboard_screen.dart`.
+
+---
+
+## 5.8. Gestión de asistencia — "Registrar gestión" + estado Inactivo (2026-08-21)
+
+Pedido de Rafael, sobre el reporte anterior: poder **evidenciar** que un niño de "Niños que dejaron de asistir" sí se gestionó (se le llamó, se investigó qué pasó), y si se confirma que no va a volver (ej. se mudó de ciudad), sacarlo del reporte marcándolo **Inactivo** — sin borrarlo ni perder su historial.
+
+**Nuevo valor de `estadoRegistro`:** además de `Activo`/`Graduado` (este último sigue siendo un ajuste manual sin flujo en la app), ahora existe `Inactivo` (`estadosRegistroGestionables` en `lib/models/nino.dart`). Un niño Inactivo sale de: el reporte de inasistencia, la alerta de graduación, "Cumpleaños niños", y el correo automático de cumpleaños (todos ya filtraban por `estadoRegistro == 'Activo'`) — pero **no** se bloquea su check-in: si vuelve a entrar, se le puede seguir registrando la Entrada normalmente. **A propósito no se reactiva solo** al recibir una nueva Entrada — queda en el mismo estado hasta que alguien de liderazgo lo cambie explícitamente con una nueva gestión (para no perder de vista que alguien debe confirmar que de verdad volvió, no solo que pasó una vez).
+
+**Nueva subcolección `ninos/{ninoId}/gestiones/{gestionId}`:** bitácora de seguimiento — `nota`, `estadoResultante`, `fkIdRegistradoPor`, `nombreRegistradoPor`, `fecha` (`lib/models/gestion.dart`). Solo liderazgo (`puedeVerInfoLiderazgo()`: admin/columna/líder de ministerio) puede crear o ver estas notas — a diferencia de "personas no autorizadas", ni siquiera el padre/madre del niño (es seguimiento interno, no algo que un acudiente deba ver).
+
+**`firestore.rules`:** nueva rama en `allow update` de `ninos/{ninoId}` — liderazgo puede cambiar `estadoRegistro` (nada más, todo lo demás queda igual por esta vía). Nueva colección `ninos/{ninoId}/gestiones`, create/get/list solo `puedeVerInfoLiderazgo()`.
+
+**`AuthService.registrarGestion()`:** batch atómico — crea la nota en `gestiones` Y actualiza `ninos/{id}.estadoRegistro` en la misma escritura, para que nunca queden inconsistentes entre sí.
+
+**Dónde se ve:**
+- Dashboard → "Niños que dejaron de asistir": botón "Registrar gestión" por niño (`lib/widgets/gestion_dialog.dart`, diálogo compartido) — nota + elegir "Sigue activo" o "Marcar inactivo". Si queda Inactivo, se quita de la lista al instante (optimista, sin esperar a reabrir el Dashboard).
+- Ficha del niño (`nino_detalle_sheet.dart`): mismo botón + bloque "Historial de gestión" con todas las notas anteriores — visible desde cualquier pantalla que abra la ficha (Menores Recibidos, Acudientes y Niños, etc.), no solo desde el reporte.
 
 **Compartido con "Menores Recibidos":** la función `calcularPresentes()` (qué cuenta como "presente ahora") se movió de `ninos_presentes_screen.dart` a `models/registro.dart` — ambas pantallas deben usar EXACTAMENTE el mismo criterio, crítico para que el listado de una emergencia real no pueda quedar desincronizado.
 

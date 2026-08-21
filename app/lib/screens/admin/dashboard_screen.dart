@@ -8,6 +8,7 @@ import '../../models/usuario_app.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_shell.dart';
+import '../../widgets/gestion_dialog.dart';
 import '../acudiente_detalle_sheet.dart';
 import '../nino_detalle_sheet.dart';
 
@@ -275,10 +276,16 @@ class _BloqueInasistencia extends StatelessWidget {
 }
 
 /// Hoja con el detalle de cada niño de `_BloqueInasistencia`: última
-/// asistencia, total de entradas, y los acudientes vinculados (nombre,
-/// teléfono, correo) para que el liderazgo pueda contactarlos. Tocar al
-/// niño abre su ficha completa, igual que el resto del Dashboard.
-class _ListaInasistenciaSheet extends StatelessWidget {
+/// asistencia, total de entradas, los acudientes vinculados (nombre,
+/// teléfono, correo) para que el liderazgo pueda contactarlos, y el
+/// botón "Registrar gestión" (2026-08-21) para dejar constancia de la
+/// llamada/seguimiento hecho y, si se confirma que no va a volver (ej.
+/// se mudó de ciudad), marcarlo "Inactivo" — sale de este listado de
+/// inmediato (quita local optimista, mismo patrón que
+/// `ninos_presentes_screen.dart`), sin esperar a reabrir el Dashboard.
+/// Tocar al niño abre su ficha completa, igual que el resto del
+/// Dashboard.
+class _ListaInasistenciaSheet extends StatefulWidget {
   final List<Nino> ninos;
   final AuthService authService;
   final UsuarioApp usuario;
@@ -290,6 +297,55 @@ class _ListaInasistenciaSheet extends StatelessWidget {
   });
 
   @override
+  State<_ListaInasistenciaSheet> createState() => _ListaInasistenciaSheetState();
+}
+
+class _ListaInasistenciaSheetState extends State<_ListaInasistenciaSheet> {
+  late List<Nino> _ninos;
+
+  @override
+  void initState() {
+    super.initState();
+    _ninos = List.of(widget.ninos);
+  }
+
+  Future<void> _registrarGestion(Nino nino) async {
+    final resultado = await mostrarDialogoGestion(
+      context,
+      nombreNino: nino.nombreCompleto,
+      estadoActual: nino.estadoRegistro,
+    );
+    if (resultado == null) return;
+    try {
+      await widget.authService.registrarGestion(
+        ninoId: nino.documentoIdentificacion,
+        nota: resultado.nota,
+        nuevoEstado: resultado.nuevoEstado,
+        nombreRegistradoPor: widget.usuario.nombreCompleto,
+      );
+      if (!mounted) return;
+      if (resultado.nuevoEstado == 'Inactivo') {
+        setState(() => _ninos.removeWhere(
+          (n) => n.documentoIdentificacion == nino.documentoIdentificacion,
+        ));
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gestión registrada.')),
+      );
+    } on AuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No se pudo guardar: $e')));
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
       initialChildSize: 0.6,
@@ -299,7 +355,9 @@ class _ListaInasistenciaSheet extends StatelessWidget {
       builder: (context, scrollController) {
         return FutureBuilder<List<List<Acudiente>>>(
           future: Future.wait(
-            ninos.map((n) => authService.obtenerAcudientesDeNino(n.documentoIdentificacion)),
+            widget.ninos.map(
+              (n) => widget.authService.obtenerAcudientesDeNino(n.documentoIdentificacion),
+            ),
           ),
           builder: (context, snapshot) {
             final acudientesPorNino = snapshot.data;
@@ -309,23 +367,45 @@ class _ListaInasistenciaSheet extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
                   child: Text(
-                    'Niños que dejaron de asistir (${ninos.length})',
+                    'Niños que dejaron de asistir (${_ninos.length})',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
                 const Divider(height: 1),
                 Expanded(
-                  child: ListView.separated(
-                    controller: scrollController,
-                    itemCount: ninos.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (context, i) => _FilaNinoInasistente(
-                      nino: ninos[i],
-                      acudientes: acudientesPorNino?[i] ?? const <Acudiente>[],
-                      cargandoAcudientes: acudientesPorNino == null,
-                      usuario: usuario,
-                    ),
-                  ),
+                  child: _ninos.isEmpty
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text('Ya no queda ninguno pendiente de gestionar.'),
+                          ),
+                        )
+                      : ListView.separated(
+                          controller: scrollController,
+                          itemCount: _ninos.length,
+                          separatorBuilder: (_, _) => const Divider(height: 1),
+                          itemBuilder: (context, i) {
+                            final nino = _ninos[i];
+                            // El índice del acudientes original se busca por
+                            // ID en vez de por posición: `widget.ninos` no
+                            // cambia aunque `_ninos` ya haya quitado a
+                            // alguien tras una gestión.
+                            final indiceOriginal = widget.ninos.indexWhere(
+                              (n) => n.documentoIdentificacion == nino.documentoIdentificacion,
+                            );
+                            final acudientes =
+                                (acudientesPorNino != null && indiceOriginal >= 0)
+                                ? acudientesPorNino[indiceOriginal]
+                                : const <Acudiente>[];
+                            return _FilaNinoInasistente(
+                              nino: nino,
+                              acudientes: acudientes,
+                              cargandoAcudientes: acudientesPorNino == null,
+                              usuario: widget.usuario,
+                              onRegistrarGestion: () => _registrarGestion(nino),
+                            );
+                          },
+                        ),
                 ),
               ],
             );
@@ -341,12 +421,14 @@ class _FilaNinoInasistente extends StatelessWidget {
   final List<Acudiente> acudientes;
   final bool cargandoAcudientes;
   final UsuarioApp usuario;
+  final VoidCallback onRegistrarGestion;
 
   const _FilaNinoInasistente({
     required this.nino,
     required this.acudientes,
     required this.cargandoAcudientes,
     required this.usuario,
+    required this.onRegistrarGestion,
   });
 
   @override
@@ -427,6 +509,15 @@ class _FilaNinoInasistente extends StatelessWidget {
                   ),
               ],
             ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: onRegistrarGestion,
+              icon: const Icon(Icons.fact_check_outlined, size: 18),
+              label: const Text('Registrar gestión'),
+            ),
+          ),
         ],
       ),
     );

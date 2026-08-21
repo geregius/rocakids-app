@@ -10,6 +10,15 @@ const tiposIdentificacionMenor = [
 
 const generos = ['Masculino', 'Femenino'];
 
+/// Valores posibles de `estadoRegistro`. "Graduado" sigue siendo un
+/// ajuste manual (fuera de esta lista de gestión de asistencia — no
+/// hay flujo en la app para volver a poner "Activo" a un niño
+/// graduado). "Inactivo" (2026-08-21, pedido de Rafael) es el que se
+/// puede alternar desde una `Gestion` — para un niño que dejó de venir
+/// y se confirmó que no va a volver (ej. se mudó de ciudad), sin
+/// borrarlo ni perder su historial.
+const estadosRegistroGestionables = ['Activo', 'Inactivo'];
+
 /// Los 5 grupos/aulas del ministerio infantil, en orden de edad.
 const gruposEdad = ['José', 'David', 'Judá', 'Daniel', 'Santiago'];
 
