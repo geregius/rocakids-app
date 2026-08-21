@@ -1187,6 +1187,32 @@ class AuthService {
     return snap.count ?? 0;
   }
 
+  /// Servidores activos con `perfilCompletoConNacimiento` — para poder
+  /// "validar quiénes ya ingresaron a la aplicación" de verdad (pedido
+  /// de Rafael, 2026-08-21): con foto Y fecha de nacimiento, no solo
+  /// los campos originales del perfil. Mismo permiso/patrón que
+  /// [obtenerServidoresQueCumplieronEstaSemana]: el filtro se aplica
+  /// del lado del cliente sobre la lista ya acotada a servidores
+  /// activos (no toda la colección `usuarios`).
+  Future<List<UsuarioApp>> obtenerServidoresConPerfilCompleto() async {
+    final rolesDeServidor = RolUsuario.values
+        .where((r) => r.esRolDeServidor)
+        .map((r) => r.valorFirestore)
+        .toList();
+    final snap = await _firestore
+        .collection('usuarios')
+        .where('rol', whereIn: rolesDeServidor)
+        .where('activo', isEqualTo: true)
+        .get();
+    return snap.docs
+        .map((d) => UsuarioApp.fromFirestore(d.id, d.data()))
+        .where((u) => u.perfilCompletoConNacimiento)
+        .toList()
+      ..sort(
+        (a, b) => a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase()),
+      );
+  }
+
   /// Servidores activos que cumplieron años en los últimos 7 días (o
   /// cumplen hoy) — "Cumpleaños Servidores" (2026-08-19), mismo criterio
   /// que [obtenerNinosQueCumplieronEstaSemana] pero sobre `usuarios`.

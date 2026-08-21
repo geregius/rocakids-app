@@ -188,7 +188,12 @@ class UsuarioApp {
       [nombre, apellido].where((s) => s.isNotEmpty).join(' ');
 
   /// Todos los campos del perfil de servidor (no el rol/activo, que
-  /// controla el admin) están llenos.
+  /// controla el admin) están llenos. Es el criterio de la pantalla
+  /// obligatoria "Completa tu perfil" (`AuthGate`) — a propósito NO
+  /// incluye `fechaNacimiento` (campo agregado después, 2026-08-19, para
+  /// "Cumpleaños Servidores") para no volver a bloquear con esa pantalla
+  /// obligatoria a nadie que ya había completado su perfil antes de que
+  /// ese campo existiera.
   bool get perfilCompleto =>
       tipoDocumento.isNotEmpty &&
       numeroDocumento.isNotEmpty &&
@@ -198,6 +203,15 @@ class UsuarioApp {
       contactoEmergenciaNombre.isNotEmpty &&
       contactoEmergenciaTelefono.isNotEmpty &&
       fotoUrl.isNotEmpty;
+
+  /// Igual que [perfilCompleto], pero además exige `fechaNacimiento` —
+  /// el criterio más estricto que pidió Rafael para el Dashboard
+  /// (2026-08-21): "quiénes ya ingresaron a la aplicación" de verdad,
+  /// con foto Y fecha de nacimiento. A propósito un getter aparte (no se
+  /// modificó [perfilCompleto]) para no reabrir la pantalla obligatoria
+  /// de perfil a servidores que ya la habían completado antes de que
+  /// existiera el campo de fecha de nacimiento.
+  bool get perfilCompletoConNacimiento => perfilCompleto && fechaNacimiento != null;
 
   factory UsuarioApp.fromFirestore(String uid, Map<String, dynamic> data) {
     final antecedentes = data['fechaVerificacionAntecedentes'];

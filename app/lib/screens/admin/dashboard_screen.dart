@@ -8,9 +8,11 @@ import '../../models/usuario_app.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_shell.dart';
+import '../../widgets/foto_avatar.dart';
 import '../../widgets/gestion_dialog.dart';
 import '../acudiente_detalle_sheet.dart';
 import '../nino_detalle_sheet.dart';
+import 'user_edit_sheet.dart';
 
 /// Nombres cortos de cada servicio para que quepan como etiqueta de eje
 /// en las gráficas (los nombres completos de [serviciosDisponibles] son
@@ -96,7 +98,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           _TituloBloque('Totales del sistema'),
           const SizedBox(height: 8),
-          _BloqueTotales(authService: _authService),
+          _BloqueTotales(authService: _authService, usuario: widget.usuario),
           const SizedBox(height: 20),
           _BloqueAlertaGraduacion(
             authService: _authService,
@@ -139,26 +141,33 @@ class _TituloBloque extends StatelessWidget {
 }
 
 /// Conteos simples de "ahora mismo" — no dependen del filtro de fecha
-/// del bloque Histórico. Las tres estadísticas usan el mismo permiso
+/// del bloque Histórico. Las estadísticas usan el mismo permiso
 /// (`puedeVerInfoLiderazgo()` en firestore.rules: administrador, columna,
 /// líder de ministerio — el mismo conjunto que da acceso al Dashboard),
-/// así que todo quien vea esta pantalla ve las tres.
+/// así que todo quien vea esta pantalla las ve todas.
 class _BloqueTotales extends StatelessWidget {
   final AuthService authService;
+  final UsuarioApp usuario;
 
-  const _BloqueTotales({required this.authService});
+  const _BloqueTotales({required this.authService, required this.usuario});
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<int>>(
+    return FutureBuilder<List<Object>>(
       future: Future.wait([
         authService.contarNinosRegistrados(),
         authService.contarAcudientesRegistrados(),
         authService.contarServidoresActivos(),
         authService.contarNinosGraduados(),
+        // Lista completa (no solo el conteo) para poder abrir el
+        // detalle de quién falta/quién ya tiene el perfil completo al
+        // tocar la tarjeta — pedido de Rafael (2026-08-21): "validar
+        // quiénes ya ingresaron a la aplicación".
+        authService.obtenerServidoresConPerfilCompleto(),
       ]),
       builder: (context, snapshot) {
         final valores = snapshot.data;
+        final servidoresConPerfil = valores?[4] as List<UsuarioApp>?;
         return Wrap(
           spacing: 12,
           runSpacing: 12,
@@ -182,6 +191,21 @@ class _BloqueTotales extends StatelessWidget {
               etiqueta: 'Niños graduados',
               valor: valores != null ? '${valores[3]}' : '…',
               icono: Icons.school,
+            ),
+            _StatTile(
+              etiqueta: 'Servidores con perfil completo',
+              valor: servidoresConPerfil != null ? '${servidoresConPerfil.length}' : '…',
+              icono: Icons.verified_user,
+              onTap: (servidoresConPerfil == null || servidoresConPerfil.isEmpty)
+                  ? null
+                  : () => showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) => _ListaServidoresPerfilSheet(
+                        servidores: servidoresConPerfil,
+                        usuario: usuario,
+                      ),
+                    ),
             ),
           ],
         );
@@ -1072,17 +1096,22 @@ class _StatTile extends StatelessWidget {
   final String valor;
   final IconData icono;
   final bool destacar;
+  // Si no es null, la tarjeta se puede tocar (ej. para ver el detalle
+  // de quiénes forman ese número, 2026-08-21) — muestra una flechita,
+  // igual que `_TarjetaPendiente`.
+  final VoidCallback? onTap;
 
   const _StatTile({
     required this.etiqueta,
     required this.valor,
     required this.icono,
     this.destacar = false,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final contenido = Container(
       width: 160,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1099,7 +1128,14 @@ class _StatTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icono, color: destacar ? AppColors.rojo : AppColors.azulMarino),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Icon(icono, color: destacar ? AppColors.rojo : AppColors.azulMarino),
+              if (onTap != null)
+                const Icon(Icons.chevron_right, color: AppColors.textoPrincipal, size: 18),
+            ],
+          ),
           const SizedBox(height: 8),
           Text(
             valor,
@@ -1111,6 +1147,74 @@ class _StatTile extends StatelessWidget {
           Text(etiqueta, style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
+    );
+    if (onTap == null) return contenido;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: contenido,
+    );
+  }
+}
+
+/// Lista de servidores con `perfilCompletoConNacimiento` (foto + fecha
+/// de nacimiento + resto del perfil) — pedido de Rafael (2026-08-21)
+/// para poder validar quiénes ya ingresaron a la aplicación de verdad,
+/// no solo cuántos. Tocar a alguien abre su ficha de servidor completa
+/// (`UserEditSheet`, misma pantalla que usa el panel de servidores).
+class _ListaServidoresPerfilSheet extends StatelessWidget {
+  final List<UsuarioApp> servidores;
+  final UsuarioApp usuario;
+
+  const _ListaServidoresPerfilSheet({required this.servidores, required this.usuario});
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Text(
+                'Servidores con perfil completo (${servidores.length})',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                itemCount: servidores.length,
+                itemBuilder: (context, i) {
+                  final s = servidores[i];
+                  return ListTile(
+                    leading: FotoAvatar(
+                      url: s.fotoUrl,
+                      backgroundColor: AppColors.azulClaro,
+                    ),
+                    title: Text(s.nombreCompleto),
+                    subtitle: Text(s.rol.etiqueta),
+                    onTap: () => showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) => UserEditSheet(
+                        usuario: s,
+                        esAdmin: usuario.rol == RolUsuario.administrador,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

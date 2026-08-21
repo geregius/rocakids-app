@@ -316,6 +316,16 @@ Pedido de Rafael, sobre el reporte anterior: poder **evidenciar** que un niño d
 - Dashboard → "Niños que dejaron de asistir": botón "Registrar gestión" por niño (`lib/widgets/gestion_dialog.dart`, diálogo compartido) — nota + elegir "Sigue activo" o "Marcar inactivo". Si queda Inactivo, se quita de la lista al instante (optimista, sin esperar a reabrir el Dashboard).
 - Ficha del niño (`nino_detalle_sheet.dart`): mismo botón + bloque "Historial de gestión" con todas las notas anteriores — visible desde cualquier pantalla que abra la ficha (Menores Recibidos, Acudientes y Niños, etc.), no solo desde el reporte.
 
+---
+
+## 5.9. Tarjeta "Servidores con perfil completo" (2026-08-21)
+
+Pedido de Rafael, sobre "Totales del sistema": junto a "Servidores activos" (cuántos hay), otra tarjeta que muestre cuántos **ya diligenciaron todo su perfil** — con foto y fecha de nacimiento en particular — "para poder validar quiénes ya ingresaron a la aplicación".
+
+**`UsuarioApp.perfilCompletoConNacimiento`** (nuevo getter, `lib/models/usuario_app.dart`): igual que `perfilCompleto` (el de siempre, que exige documento/teléfono/EPS/grupo sanguíneo/contacto de emergencia/foto — es el criterio de la pantalla obligatoria "Completa tu perfil") pero además exige `fechaNacimiento`. Se dejó como getter **aparte** a propósito: `perfilCompleto` no se tocó, para no volver a bloquear con la pantalla obligatoria a ningún servidor que ya la había completado antes de que existiera el campo de fecha de nacimiento (2026-08-19).
+
+**`AuthService.obtenerServidoresConPerfilCompleto()`:** mismo query/permiso que `contarServidoresActivos()` (`puedeVerInfoLiderazgo()`), pero trae la lista completa (no solo el conteo) para poder abrir el detalle. La tarjeta nueva es tocable — `_StatTile` ahora acepta un `onTap` opcional (antes no lo tenía) — y abre `_ListaServidoresPerfilSheet`, que al tocar a un servidor abre su `UserEditSheet` de siempre.
+
 **Compartido con "Menores Recibidos":** la función `calcularPresentes()` (qué cuenta como "presente ahora") se movió de `ninos_presentes_screen.dart` a `models/registro.dart` — ambas pantallas deben usar EXACTAMENTE el mismo criterio, crítico para que el listado de una emergencia real no pueda quedar desincronizado.
 
 **✅ Resuelto — `MissingPluginException` al generar el reporte PDF en computador.** Mismo patrón ya documentado en sección 8 con `image_picker` — un plugin nuevo (`printing`, agregado junto con `pdf` para esta feature) no había quedado bien registrado en el build de producción hasta un `flutter clean` antes de recompilar. Confirmado por Rafael: **funciona perfecto en computador.** **⚠️ En celular sigue sin dejar generarlo** — Rafael dijo explícitamente que por ahora no es prioridad, queda pendiente sin fecha.
