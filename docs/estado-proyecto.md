@@ -1,6 +1,6 @@
 # RocaKids — Estado del Proyecto (guía de continuación)
 
-**Última actualización:** 2026-08-21 (reporte "Niños que dejaron de asistir")
+**Última actualización:** 2026-08-21 (reporte "Niños que dejaron de asistir" + gestión de asistencia + tarjeta "Servidores con perfil completo" — todo confirmado funcionando en producción)
 **Propósito de este documento:** que una conversación nueva (u otra persona) pueda retomar el desarrollo sin perder contexto. Resume qué existe, qué funciona, cómo está armado, y qué falta.
 
 Documentos relacionados en `docs/`:
@@ -325,6 +325,8 @@ Pedido de Rafael, sobre "Totales del sistema": junto a "Servidores activos" (cu�
 **`UsuarioApp.perfilCompletoConNacimiento`** (nuevo getter, `lib/models/usuario_app.dart`): igual que `perfilCompleto` (el de siempre, que exige documento/teléfono/EPS/grupo sanguíneo/contacto de emergencia/foto — es el criterio de la pantalla obligatoria "Completa tu perfil") pero además exige `fechaNacimiento`. Se dejó como getter **aparte** a propósito: `perfilCompleto` no se tocó, para no volver a bloquear con la pantalla obligatoria a ningún servidor que ya la había completado antes de que existiera el campo de fecha de nacimiento (2026-08-19).
 
 **`AuthService.obtenerServidoresConPerfilCompleto()`:** mismo query/permiso que `contarServidoresActivos()` (`puedeVerInfoLiderazgo()`), pero trae la lista completa (no solo el conteo) para poder abrir el detalle. La tarjeta nueva es tocable — `_StatTile` ahora acepta un `onTap` opcional (antes no lo tenía) — y abre `_ListaServidoresPerfilSheet`, que al tocar a un servidor abre su `UserEditSheet` de siempre.
+
+**✅ Confirmado funcionando por Rafael en producción (2026-08-21)** — pero el ícono elegido inicialmente (`Icons.verified_user`) no se veía; se reemplazó por `Icons.badge_outlined` (ver la nota de caché en sección 8, "Tercera vuelta").
 
 **Compartido con "Menores Recibidos":** la función `calcularPresentes()` (qué cuenta como "presente ahora") se movió de `ninos_presentes_screen.dart` a `models/registro.dart` — ambas pantallas deben usar EXACTAMENTE el mismo criterio, crítico para que el listado de una emergencia real no pueda quedar desincronizado.
 
