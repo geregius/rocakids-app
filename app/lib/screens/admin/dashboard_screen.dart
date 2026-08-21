@@ -195,7 +195,15 @@ class _BloqueTotales extends StatelessWidget {
             _StatTile(
               etiqueta: 'Servidores con perfil completo',
               valor: servidoresConPerfil != null ? '${servidoresConPerfil.length}' : '…',
-              icono: Icons.verified_user,
+              // `Icons.verified_user` (2026-08-21) tenía el glifo bien
+              // mapeado en la fuente subseteada (`cmap` verificado a
+              // mano), pero seguía sin verse ni en incógnito con recarga
+              // forzada — algo salió mal con el tree-shaking de ESE
+              // ícono puntual, sin explicación clara. Se reemplazó por
+              // `badge_outlined` (mismo que "Niños sin documento"),
+              // reutilizado y ya confirmado visualmente por Rafael antes
+              // — evita introducir un ícono nunca antes usado en la app.
+              icono: Icons.badge_outlined,
               onTap: (servidoresConPerfil == null || servidoresConPerfil.isEmpty)
                   ? null
                   : () => showModalBottomSheet<void>(
