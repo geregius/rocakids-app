@@ -11,6 +11,7 @@ import '../screens/cambiar_password_sheet.dart';
 import '../screens/cumpleanos_ninos_screen.dart';
 import '../screens/cumpleanos_servidores_screen.dart';
 import '../screens/home_screen.dart';
+import '../screens/informacion_app_sheet.dart';
 import '../screens/manual_usuario_screen.dart';
 import '../screens/modo_emergencia_screen.dart';
 import '../screens/modulo_en_construccion_screen.dart';
@@ -194,6 +195,17 @@ class AppShell extends StatelessWidget {
           context: context,
           isScrollControlled: true,
           builder: (_) => const CambiarPasswordSheet(),
+        ),
+      ),
+      // Autoría y derechos de uso (2026-08-20, pedido de Rafael) —
+      // disponible para cualquier usuario logueado, sin importar el rol.
+      _ItemMenu(
+        icon: Icons.info_outline,
+        label: 'Información de la App',
+        onTap: () => showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          builder: (_) => const InformacionAppSheet(),
         ),
       ),
       _ItemMenu(
