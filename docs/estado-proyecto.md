@@ -1,6 +1,6 @@
 # RocaKids — Estado del Proyecto (guía de continuación)
 
-**Última actualización:** 2026-08-21
+**Última actualización:** 2026-08-21 (reporte "Niños que dejaron de asistir")
 **Propósito de este documento:** que una conversación nueva (u otra persona) pueda retomar el desarrollo sin perder contexto. Resume qué existe, qué funciona, cómo está armado, y qué falta.
 
 Documentos relacionados en `docs/`:
@@ -283,6 +283,18 @@ Esto se resuelve en **un solo lugar**: `AppShell.build()` (`lib/widgets/app_shel
 **Reglas de seguridad:**
 - `firestore.rules`: nueva colección `estado_app/emergencia` — `get` para cualquier autenticado (todos deben poder reaccionar), `write` solo `puedeVerInfoLiderazgo()`. La regla `create` de `registros` ahora exige, además de lo de siempre, que si `modalidadRegistro == 'Emergencia'` el estado global esté REALMENTE activo (`get()` cruzado a `estado_app/emergencia`) — defensa en profundidad: cualquier servidor puede registrar salidas de emergencia mientras está activo, pero nadie puede fabricar una salida marcada "Emergencia" si el modo no está encendido de verdad.
 - `storage.rules`: nuevas rutas `emergencia_fotos/`, `emergencia_firmas/`. **Intento inicial (fallido, corregido el mismo día):** la LECTURA se acotó a liderazgo con `firestore.get()` cruzado Storage→Firestore (sintaxis oficial de Firebase) — Rafael probó y dio `storage/unauthorized` al confirmar una salida de emergencia, **incluso con la cuenta admin**. Como la regla de `write` no depende del rol (cualquier autenticado puede subir) y aun así fallaba igual para todos, el punto real de falla era `getDownloadURL()` (que exige `read`) apoyado en esa función cruzada rota — no un cálculo de permiso específico de un usuario. Sin forma de probar esa sintaxis en vivo desde esta sesión, se simplificó la LECTURA al mismo patrón ya comprobado del resto de `storage.rules` (`servidores_fotos`/`acudientes_fotos`/`ninos_fotos`: cualquier autenticado puede leer) — se perdió el acotamiento extra a liderazgo, pero desbloqueó la función. **Si se quiere recuperar esa restricción más adelante, probar la sintaxis de `firestore.get()` cruzado por separado, con calma, antes de depender de ella en una feature crítica.**
+
+---
+
+## 5.7. Reporte "Niños que dejaron de asistir" (2026-08-21)
+
+Pedido de Rafael: en el Dashboard, un reporte de niños con **10 o más Entradas** en toda su historia (vinieron con regularidad) que llevan **más de 45 días** sin una Entrada nueva (umbral elegido por Rafael entre 30/45/60) — para que el liderazgo pueda hacerles seguimiento. Muestra, por niño: última fecha de asistencia (+ "hace N días"), total de entradas, y los datos de contacto (nombre/teléfono/correo) de cada acudiente vinculado.
+
+**Campos nuevos en `ninos/{id}`:** `totalEntradas` (int) y `ultimaAsistencia` (timestamp) — se mantienen junto a `primeraAsistencia` en la MISMA transacción de la Cloud Function `actualizarResumenMensual` (ver sección 5.5, renombrada internamente a `actualizarEstadisticasNino`) cada vez que se crea una Entrada nueva. Un niño con una nueva Entrada actualiza `ultimaAsistencia` de inmediato — sale del reporte solo, sin ningún contador que reiniciar a mano (aclaración explícita de Rafael).
+
+**Backfill del histórico:** como la Cloud Function solo mantiene estos campos para Entradas creadas DESPUÉS de este cambio, hace falta calcular una sola vez el histórico completo (miles de `registros` previos) — `AuthService.backfillEstadisticasAsistencia()`, expuesto como botón admin **temporal** en el Dashboard ("Calcular estadísticas de asistencia (ejecutar una sola vez)", junto al nuevo bloque). Recorre `registros` donde `tipoMovimiento == 'Entrada'`, agrupa por `fkIdNino` (ignora visitantes, sin ficha en `ninos`), y escribe `totalEntradas`/`ultimaAsistencia` en lotes de 400. Idempotente (recalcula desde la fuente de verdad cada vez), y descarta niños ya eliminados (`eliminarNino()` conserva sus `registros` históricos). **Pendiente: Rafael debe ejecutarlo una vez** desde el Dashboard (solo lo ve como admin) — hasta entonces el reporte queda vacío para todo el histórico anterior a este despliegue. Quitar el botón después de correrlo, mismo criterio que "Reindexar"/"Migrar vínculos" en su momento.
+
+**Dónde vive:** `AuthService.obtenerNinosQueDejaronDeAsistir()` (consulta `ninos` con `estadoRegistro == 'Activo'` + `totalEntradas >= 10`, filtra `ultimaAsistencia` en el cliente — nuevo índice compuesto en `firestore.indexes.json`), `_BloqueInasistencia`/`_ListaInasistenciaSheet`/`_BotonBackfillAsistencia` en `admin/dashboard_screen.dart`.
 
 **Compartido con "Menores Recibidos":** la función `calcularPresentes()` (qué cuenta como "presente ahora") se movió de `ninos_presentes_screen.dart` a `models/registro.dart` — ambas pantallas deben usar EXACTAMENTE el mismo criterio, crítico para que el listado de una emergencia real no pueda quedar desincronizado.
 

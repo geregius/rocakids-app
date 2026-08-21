@@ -48,6 +48,14 @@
         { "fieldPath": "estadoRegistro", "order": "ASCENDING" },
         { "fieldPath": "mesDiaNacimiento", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "ninos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estadoRegistro", "order": "ASCENDING" },
+        { "fieldPath": "totalEntradas", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

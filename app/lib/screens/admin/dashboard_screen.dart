@@ -101,6 +101,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             authService: _authService,
             usuario: widget.usuario,
           ),
+          const SizedBox(height: 12),
+          _BloqueInasistencia(authService: _authService, usuario: widget.usuario),
+          if (widget.usuario.rol == RolUsuario.administrador) ...[
+            const SizedBox(height: 8),
+            _BotonBackfillAsistencia(authService: _authService),
+          ],
           const SizedBox(height: 32),
           _TituloBloque('Pendientes'),
           const SizedBox(height: 8),
@@ -231,6 +237,295 @@ class _BloqueAlertaGraduacion extends StatelessWidget {
     );
   }
 }
+
+/// Reporte de seguimiento pedido por Rafael (2026-08-21): niños que
+/// vinieron con regularidad (10+ Entradas en su historia) pero llevan
+/// más de 45 días sin una Entrada nueva. Se apoya en
+/// `ninos/{id}.totalEntradas`/`ultimaAsistencia` (ver
+/// `AuthService.obtenerNinosQueDejaronDeAsistir()`) — si el niño vuelve,
+/// esos campos se actualizan solos y desaparece de este listado en la
+/// siguiente consulta, sin ningún contador que reiniciar a mano.
+class _BloqueInasistencia extends StatelessWidget {
+  final AuthService authService;
+  final UsuarioApp usuario;
+
+  const _BloqueInasistencia({required this.authService, required this.usuario});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Nino>>(
+      future: authService.obtenerNinosQueDejaronDeAsistir(),
+      builder: (context, snapshot) {
+        final ninos = snapshot.data;
+        final total = ninos?.length;
+        if (total == 0) return const SizedBox.shrink();
+        return _TarjetaPendiente(
+          etiqueta: 'Niños que dejaron de asistir (10+ entradas, 45+ días ausentes)',
+          valor: total,
+          icono: Icons.person_off,
+          onTap: () => showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            builder: (_) => _ListaInasistenciaSheet(
+              ninos: ninos!,
+              authService: authService,
+              usuario: usuario,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Botón admin **temporal**: calcula `totalEntradas`/`ultimaAsistencia`
+/// para el histórico completo de `registros`, ya que la Cloud Function
+/// solo mantiene esos campos para Entradas NUEVAS desde 2026-08-21 (ver
+/// docstring de `AuthService.backfillEstadisticasAsistencia()`). Se
+/// ejecuta una sola vez tras desplegar esta feature — quitar este botón
+/// después (mismo criterio que "Reindexar"/"Migrar vínculos" en su
+/// momento, ver docs/estado-proyecto.md).
+class _BotonBackfillAsistencia extends StatefulWidget {
+  final AuthService authService;
+  const _BotonBackfillAsistencia({required this.authService});
+
+  @override
+  State<_BotonBackfillAsistencia> createState() => _BotonBackfillAsistenciaState();
+}
+
+class _BotonBackfillAsistenciaState extends State<_BotonBackfillAsistencia> {
+  bool _ejecutando = false;
+
+  Future<void> _ejecutar() async {
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Calcular estadísticas de asistencia?'),
+        content: const Text(
+          'Recorre TODOS los registros históricos y actualiza el total de '
+          'entradas y la última asistencia de cada niño. Se puede volver a '
+          'correr sin problema, pero solo hace falta una vez tras este '
+          'despliegue.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Ejecutar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmado != true) return;
+    setState(() => _ejecutando = true);
+    try {
+      final resultado = await widget.authService.backfillEstadisticasAsistencia();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Listo: ${resultado['ninosActualizados']} niños actualizados '
+              '(${resultado['entradasProcesadas']} entradas procesadas).',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No se pudo calcular: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _ejecutando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: _ejecutando ? null : _ejecutar,
+        icon: _ejecutando
+            ? const SizedBox(
+                height: 14,
+                width: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.calculate_outlined, size: 18),
+        label: const Text(
+          'Calcular estadísticas de asistencia (ejecutar una sola vez)',
+        ),
+      ),
+    );
+  }
+}
+
+/// Hoja con el detalle de cada niño de `_BloqueInasistencia`: última
+/// asistencia, total de entradas, y los acudientes vinculados (nombre,
+/// teléfono, correo) para que el liderazgo pueda contactarlos. Tocar al
+/// niño abre su ficha completa, igual que el resto del Dashboard.
+class _ListaInasistenciaSheet extends StatelessWidget {
+  final List<Nino> ninos;
+  final AuthService authService;
+  final UsuarioApp usuario;
+
+  const _ListaInasistenciaSheet({
+    required this.ninos,
+    required this.authService,
+    required this.usuario,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        return FutureBuilder<List<List<Acudiente>>>(
+          future: Future.wait(
+            ninos.map((n) => authService.obtenerAcudientesDeNino(n.documentoIdentificacion)),
+          ),
+          builder: (context, snapshot) {
+            final acudientesPorNino = snapshot.data;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                  child: Text(
+                    'Niños que dejaron de asistir (${ninos.length})',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView.separated(
+                    controller: scrollController,
+                    itemCount: ninos.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, i) => _FilaNinoInasistente(
+                      nino: ninos[i],
+                      acudientes: acudientesPorNino?[i] ?? const <Acudiente>[],
+                      cargandoAcudientes: acudientesPorNino == null,
+                      usuario: usuario,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _FilaNinoInasistente extends StatelessWidget {
+  final Nino nino;
+  final List<Acudiente> acudientes;
+  final bool cargandoAcudientes;
+  final UsuarioApp usuario;
+
+  const _FilaNinoInasistente({
+    required this.nino,
+    required this.acudientes,
+    required this.cargandoAcudientes,
+    required this.usuario,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ultima = nino.ultimaAsistencia;
+    final diasAusente = ultima != null
+        ? DateTime.now().difference(ultima).inDays
+        : null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => NinoDetalleSheet(nino: nino, usuario: usuario),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppColors.amarillo,
+                  backgroundImage: nino.fotoUrl.isNotEmpty
+                      ? NetworkImage(nino.fotoUrl)
+                      : null,
+                  child: nino.fotoUrl.isEmpty
+                      ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(nino.nombreCompleto, style: Theme.of(context).textTheme.titleSmall),
+                      Text(
+                        ultima != null
+                            ? 'Última asistencia: ${_formatearFecha(ultima)} '
+                                  '(hace $diasAusente días) · ${nino.totalEntradas} entradas en total'
+                            : '${nino.totalEntradas} entradas en total',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: AppColors.textoPrincipal),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (cargandoAcudientes)
+            Text(
+              'Cargando datos de contacto...',
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else if (acudientes.isEmpty)
+            Text(
+              'Sin acudientes vinculados para contactar.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+            )
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final a in acudientes)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      '${a.nombreCompleto} · '
+                      '${a.telefonoCelular.isNotEmpty ? a.telefonoCelular : 'sin teléfono'}'
+                      '${a.correoElectronico.isNotEmpty ? ' · ${a.correoElectronico}' : ''}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatearFecha(DateTime fecha) =>
+    '${fecha.day.toString().padLeft(2, '0')}/${fecha.month.toString().padLeft(2, '0')}/${fecha.year}';
 
 /// Bloque "Pendientes" (2026-08-18, pedido de Rafael): un dato
 /// interactivo por categoría de dato faltante — al tocar una tarjeta se

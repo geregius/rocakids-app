@@ -454,19 +454,40 @@ exports.enviarCorreoRecuperacion = onCall(
 // Entradas llegaran casi simultáneas) y es lo que alimenta
 // `resumenes_mensuales/{mes}.ninosNuevos`, la base del gráfico de
 // "Crecimiento de niños registrados (acumulado)".
+//
+// `ninos/{id}.totalEntradas`/`ultimaAsistencia` (2026-08-21) alimentan
+// el reporte "Niños que dejaron de asistir" del Dashboard: cuántas
+// Entradas tiene en total y cuándo fue la más reciente. Se mantienen
+// junto a `primeraAsistencia` en la misma transacción (mismo motivo:
+// evitar una carrera si dos Entradas del mismo niño llegan casi
+// simultáneas). El histórico previo a este cambio se calculó una sola
+// vez con `AuthService.backfillEstadisticasAsistencia()` — ver
+// docs/estado-proyecto.md.
 function mesIdBogota(fecha) {
   const bogota = new Date(fecha.getTime() - OFFSET_BOGOTA_HORAS * 3600 * 1000);
   return `${bogota.getUTCFullYear()}-${String(bogota.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
-async function marcarSiPrimeraAsistencia(ninoId, fechaMovimiento, mesId) {
+async function actualizarEstadisticasNino(ninoId, fechaMovimiento, mesId) {
   const ninoRef = db.collection('ninos').doc(ninoId);
   const resumenRef = db.collection('resumenes_mensuales').doc(mesId);
   await db.runTransaction(async (tx) => {
     const ninoDoc = await tx.get(ninoRef);
-    if (!ninoDoc.exists || ninoDoc.data().primeraAsistencia) return;
-    tx.update(ninoRef, {primeraAsistencia: fechaMovimiento});
-    tx.set(resumenRef, {ninosNuevos: FieldValue.increment(1)}, {merge: true});
+    if (!ninoDoc.exists) return;
+    const datos = ninoDoc.data();
+
+    // Un solo `tx.update()` por documento — Firestore no permite más de
+    // una escritura sobre la misma referencia dentro de una transacción.
+    const actualizacion = {totalEntradas: FieldValue.increment(1)};
+    const ultimaActual = datos.ultimaAsistencia;
+    if (!ultimaActual || fechaMovimiento.toMillis() > ultimaActual.toMillis()) {
+      actualizacion.ultimaAsistencia = fechaMovimiento;
+    }
+    if (!datos.primeraAsistencia) {
+      actualizacion.primeraAsistencia = fechaMovimiento;
+      tx.set(resumenRef, {ninosNuevos: FieldValue.increment(1)}, {merge: true});
+    }
+    tx.update(ninoRef, actualizacion);
   });
 }
 
@@ -488,7 +509,7 @@ exports.actualizarResumenMensual = onDocumentCreated(
       await resumenRef.set(actualizacion, {merge: true});
 
       if (registro.fkIdNino) {
-        await marcarSiPrimeraAsistencia(registro.fkIdNino, registro.fechaMovimiento, mesId);
+        await actualizarEstadisticasNino(registro.fkIdNino, registro.fechaMovimiento, mesId);
       }
     } catch (e) {
       console.error('actualizarResumenMensual falló para', event.params.registroId, ':', e);

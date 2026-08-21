@@ -996,6 +996,100 @@ class AuthService {
     return snap.docs.map((d) => Nino.fromFirestore(d.id, d.data())).toList();
   }
 
+  /// Niños "Activo" con 10 o más Entradas en toda su historia
+  /// (`totalEntradas`) cuya última Entrada (`ultimaAsistencia`) fue hace
+  /// más de [diasSinAsistir] días — reporte de seguimiento pedido por
+  /// Rafael (2026-08-21) para identificar a quiénes dejaron de asistir
+  /// después de venir con regularidad. Ordenado por más tiempo ausente
+  /// primero. Si el niño vuelve (nueva Entrada), `ultimaAsistencia` se
+  /// actualiza de inmediato (ver Cloud Function `actualizarResumenMensual`
+  /// en `app/functions/index.js`) y sale de este listado solo — no hay
+  /// ningún contador de "días sin venir" que reiniciar a mano.
+  ///
+  /// `totalEntradas`/`ultimaAsistencia` deben estar poblados con
+  /// [backfillEstadisticasAsistencia] para el histórico anterior a
+  /// 2026-08-21 — ver docs/estado-proyecto.md.
+  Future<List<Nino>> obtenerNinosQueDejaronDeAsistir({
+    int diasSinAsistir = 45,
+  }) async {
+    final snap = await _firestore
+        .collection('ninos')
+        .where('estadoRegistro', isEqualTo: 'Activo')
+        .where('totalEntradas', isGreaterThanOrEqualTo: 10)
+        .get();
+    final limite = DateTime.now().subtract(Duration(days: diasSinAsistir));
+    final ninos = snap.docs
+        .map((d) => Nino.fromFirestore(d.id, d.data()))
+        .where(
+          (n) => n.ultimaAsistencia != null && n.ultimaAsistencia!.isBefore(limite),
+        )
+        .toList()
+      ..sort((a, b) => a.ultimaAsistencia!.compareTo(b.ultimaAsistencia!));
+    return ninos;
+  }
+
+  /// **Ejecutar una sola vez** (botón admin temporal en el Dashboard):
+  /// calcula `ninos/{id}.totalEntradas`/`ultimaAsistencia` para el
+  /// histórico completo de `registros`, ya que la Cloud Function
+  /// `actualizarResumenMensual` solo mantiene estos campos para
+  /// Entradas NUEVAS desde 2026-08-21 — sin esto, el reporte "Niños que
+  /// dejaron de asistir" quedaría vacío para cualquier niño cuyas
+  /// entradas sean todas anteriores a ese cambio (prácticamente todos).
+  /// Idempotente: se puede volver a correr sin problema, siempre
+  /// recalcula desde `registros` (la fuente de verdad), no acumula.
+  /// **Solo admin** (mismo permiso que editar `ninos` libremente).
+  Future<Map<String, int>> backfillEstadisticasAsistencia() async {
+    final snap = await _firestore
+        .collection('registros')
+        .where('tipoMovimiento', isEqualTo: 'Entrada')
+        .get();
+
+    final totalPorNino = <String, int>{};
+    final ultimaPorNino = <String, DateTime>{};
+    for (final doc in snap.docs) {
+      final datos = doc.data();
+      final ninoId = datos['fkIdNino'] as String? ?? '';
+      if (ninoId.isEmpty) continue; // visitante, sin ficha en `ninos`
+      final fecha = (datos['fechaMovimiento'] as Timestamp?)?.toDate();
+      if (fecha == null) continue;
+      totalPorNino[ninoId] = (totalPorNino[ninoId] ?? 0) + 1;
+      final actual = ultimaPorNino[ninoId];
+      if (actual == null || fecha.isAfter(actual)) {
+        ultimaPorNino[ninoId] = fecha;
+      }
+    }
+
+    // `eliminarNino()` borra la ficha pero conserva sus `registros`
+    // históricos (a propósito, ver docstring) — así que un `fkIdNino` de
+    // un niño ya eliminado no debe intentar actualizarse (`.update()`
+    // fallaría con NOT_FOUND y tumbaría todo el batch).
+    final ninosExistentes = await _firestore.collection('ninos').get();
+    final idsExistentes = ninosExistentes.docs.map((d) => d.id).toSet();
+    final ninoIds = totalPorNino.keys
+        .where((id) => idsExistentes.contains(id))
+        .toList();
+    const tamanoLote = 400; // margen bajo el límite de 500 escrituras/batch
+    for (var i = 0; i < ninoIds.length; i += tamanoLote) {
+      final lote = ninoIds.sublist(
+        i,
+        i + tamanoLote > ninoIds.length ? ninoIds.length : i + tamanoLote,
+      );
+      final batch = _firestore.batch();
+      for (final ninoId in lote) {
+        batch.update(_firestore.collection('ninos').doc(ninoId), {
+          'totalEntradas': totalPorNino[ninoId],
+          'ultimaAsistencia': Timestamp.fromDate(ultimaPorNino[ninoId]!),
+        });
+      }
+      await batch.commit();
+    }
+
+    return {
+      'ninosActualizados': ninoIds.length,
+      'entradasProcesadas': snap.docs.length,
+    };
+  }
+
   /// Cuántos niños hay hoy en el sistema (colección `ninos` completa) —
   /// estadística simple para el Dashboard. No es una tendencia en el
   /// tiempo porque los documentos de `ninos` no guardan fecha de

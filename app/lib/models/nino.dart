@@ -145,6 +145,17 @@ class Nino {
   // una consulta extra por niño — ambas pantallas ya cargan el `Nino`
   // completo de todas formas.
   final bool tieneNoAutorizados;
+  // Total de Entradas de toda la historia y fecha de la más reciente —
+  // mantenidos por la Cloud Function `actualizarResumenMensual` en cada
+  // Entrada NUEVA (`app/functions/index.js`), y calculados una sola vez
+  // para el histórico con `AuthService.backfillEstadisticasAsistencia()`
+  // (ver docs/estado-proyecto.md). Alimentan el reporte "Niños que
+  // dejaron de asistir" del Dashboard: si el niño registra una Entrada
+  // nueva, `ultimaAsistencia` se actualiza de inmediato y sale de ese
+  // reporte en la siguiente consulta — no hay ningún contador separado
+  // que reiniciar a mano.
+  final int totalEntradas;
+  final DateTime? ultimaAsistencia;
 
   const Nino({
     required this.documentoIdentificacion,
@@ -161,6 +172,8 @@ class Nino {
     this.fotoUrl = '',
     this.presente = false,
     this.tieneNoAutorizados = false,
+    this.totalEntradas = 0,
+    this.ultimaAsistencia,
   });
 
   String get nombreCompleto => '$nombres $apellidos';
@@ -180,10 +193,15 @@ class Nino {
     'autorizoFotoFlag': autorizoFotoFlag,
     'fotoUrl': fotoUrl,
     'tieneNoAutorizados': tieneNoAutorizados,
+    'totalEntradas': totalEntradas,
+    'ultimaAsistencia': ultimaAsistencia != null
+        ? Timestamp.fromDate(ultimaAsistencia!)
+        : null,
   };
 
   factory Nino.fromFirestore(String id, Map<String, dynamic> data) {
     final fecha = data['fechaNacimiento'];
+    final ultima = data['ultimaAsistencia'];
     return Nino(
       documentoIdentificacion: id,
       tipoIdentificacion: data['tipoIdentificacion'] as String? ?? '',
@@ -199,6 +217,8 @@ class Nino {
       fotoUrl: data['fotoUrl'] as String? ?? '',
       presente: data['presente'] as bool? ?? false,
       tieneNoAutorizados: data['tieneNoAutorizados'] as bool? ?? false,
+      totalEntradas: data['totalEntradas'] as int? ?? 0,
+      ultimaAsistencia: ultima is Timestamp ? ultima.toDate() : null,
     );
   }
 }
