@@ -30,6 +30,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   String? _tipoDocumento;
   String? _grupoSanguineo;
   String _fotoUrl = '';
+  int? _diaNacimiento;
+  int? _mesNacimiento;
+  int? _anioNacimiento;
 
   bool _subiendoFoto = false;
   bool _guardando = false;
@@ -46,6 +49,16 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     _tipoDocumento = widget.usuario.tipoDocumento.isNotEmpty ? widget.usuario.tipoDocumento : null;
     _grupoSanguineo = widget.usuario.grupoSanguineo.isNotEmpty ? widget.usuario.grupoSanguineo : null;
     _fotoUrl = widget.usuario.fotoUrl;
+    _diaNacimiento = widget.usuario.fechaNacimiento?.day;
+    _mesNacimiento = widget.usuario.fechaNacimiento?.month;
+    _anioNacimiento = widget.usuario.fechaNacimiento?.year;
+  }
+
+  DateTime? get _fechaNacimientoElegida {
+    if (_diaNacimiento == null || _mesNacimiento == null || _anioNacimiento == null) {
+      return null;
+    }
+    return DateTime(_anioNacimiento!, _mesNacimiento!, _diaNacimiento!);
   }
 
   @override
@@ -85,6 +98,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       setState(() => _error = 'Debes subir tu foto de perfil.');
       return;
     }
+    if (_fechaNacimientoElegida == null) {
+      setState(() => _error = 'Selecciona tu fecha de nacimiento.');
+      return;
+    }
 
     setState(() {
       _guardando = true;
@@ -101,6 +118,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         contactoEmergenciaNombre: _contactoNombreController.text.trim(),
         contactoEmergenciaTelefono: _contactoTelefonoController.text.trim(),
         fotoUrl: _fotoUrl,
+        fechaNacimiento: _fechaNacimientoElegida,
       );
       // El AuthGate reacciona solo: al guardar, perfilCompleto pasa a
       // true y la pantalla cambia sin que tengamos que navegar aquí.
@@ -207,6 +225,70 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                           .toList(),
                       onChanged: (v) => setState(() => _grupoSanguineo = v),
                       validator: (v) => v == null ? 'Requerido' : null,
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Fecha de nacimiento',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: DropdownButtonFormField<int>(
+                            initialValue: _diaNacimiento,
+                            decoration: const InputDecoration(labelText: 'Día'),
+                            items: List.generate(
+                              31,
+                              (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}')),
+                            ),
+                            onChanged: (v) => setState(() => _diaNacimiento = v),
+                            validator: (v) => v == null ? 'Requerido' : null,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 3,
+                          child: DropdownButtonFormField<int>(
+                            initialValue: _mesNacimiento,
+                            decoration: const InputDecoration(labelText: 'Mes'),
+                            items: const [
+                              DropdownMenuItem(value: 1, child: Text('Enero')),
+                              DropdownMenuItem(value: 2, child: Text('Febrero')),
+                              DropdownMenuItem(value: 3, child: Text('Marzo')),
+                              DropdownMenuItem(value: 4, child: Text('Abril')),
+                              DropdownMenuItem(value: 5, child: Text('Mayo')),
+                              DropdownMenuItem(value: 6, child: Text('Junio')),
+                              DropdownMenuItem(value: 7, child: Text('Julio')),
+                              DropdownMenuItem(value: 8, child: Text('Agosto')),
+                              DropdownMenuItem(value: 9, child: Text('Septiembre')),
+                              DropdownMenuItem(value: 10, child: Text('Octubre')),
+                              DropdownMenuItem(value: 11, child: Text('Noviembre')),
+                              DropdownMenuItem(value: 12, child: Text('Diciembre')),
+                            ],
+                            onChanged: (v) => setState(() => _mesNacimiento = v),
+                            validator: (v) => v == null ? 'Requerido' : null,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 2,
+                          child: DropdownButtonFormField<int>(
+                            initialValue: _anioNacimiento,
+                            decoration: const InputDecoration(labelText: 'Año'),
+                            items: List.generate(
+                              76,
+                              (i) => DropdownMenuItem(
+                                value: DateTime.now().year - 15 - i,
+                                child: Text('${DateTime.now().year - 15 - i}'),
+                              ),
+                            ),
+                            onChanged: (v) => setState(() => _anioNacimiento = v),
+                            validator: (v) => v == null ? 'Requerido' : null,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 20),
                     Text('Contacto de emergencia', style: Theme.of(context).textTheme.titleSmall),
