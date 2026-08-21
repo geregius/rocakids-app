@@ -434,6 +434,23 @@ Cada pantalla le pasa a `AppShell` su propio contenido (ya no tienen su propio `
 
 ---
 
+## 8.5. Prueba de concurrencia — "23 servidores activos al mismo tiempo" (2026-08-21)
+
+Rafael pidió evaluar cómo se comporta la app si TODOS los servidores (~23) están activos a la vez — el peor caso realista, una hora pico de un domingo. Se instaló Java (`winget install EclipseAdoptium.Temurin.21.JDK`, hace falta para el emulador de Firestore) y se agregó un bloque `emulators` a `firebase.json` (puertos por defecto: auth 9099, firestore 8080, functions 5001, UI 4000) para poder correr una prueba real **contra el emulador local, NUNCA contra producción** — sin este emulador no hay forma segura de simular 23 sesiones concurrentes sin crear basura en la base de datos real.
+
+**Qué se probó (script Node temporal, usando la Cloud Function y las reglas de seguridad REALES del proyecto, sin reimplementarlas):**
+- **Escenario A — 23 servidores, 23 niños DISTINTOS, registrando Entrada al mismo tiempo** (el caso real de una hora pico): **23/23 exitosos en ~0.6 segundos.** Sin errores, sin contención.
+- **Escenario B — los 23 servidores intentando registrar Entrada al MISMO niño, al mismo instante** (un choque adversarial, mucho más extremo que cualquier caso real — en la práctica sería raro que 2 servidores intenten esto a la vez, no 23): **exactamente 1 de 23 se registró, los otros 22 quedaron bloqueados** por `ninoYaPresente()` (`firestore.rules`) — el niño terminó con `presente=true`, `totalEntradas=1` y solo 1 documento en `registros`, sin duplicados. En una corrida se vieron algunos `ABORTED: Transaction lock timeout` (contención normal de Firestore al pelear 23 escrituras por el MISMO documento), pero el resultado final fue correcto en ambas corridas.
+- **Consistencia del contador compartido:** `resumenes_mensuales/{mes}.totalEntradas` (mantenido por `FieldValue.increment()` en la Cloud Function `actualizarResumenMensual`, ver sección 5.5) quedó en exactamente 24 (23 del escenario A + 1 del B) — ningún incremento se perdió pese a que las 24 Entradas dispararon la función casi simultáneamente. Este mismo mecanismo alimenta `totalEntradas`/`ultimaAsistencia` de cada niño (sección 5.7), así que el reporte "Niños que dejaron de asistir" también queda protegido.
+
+**Conclusión:** la app **sí soporta bien** que todos los servidores estén activos al mismo tiempo, siempre que cada uno esté trabajando con un niño distinto (el caso real) — rápido y sin errores. El único punto de contención real es si dos o más servidores intentan registrar al MISMO niño casi al mismo instante (poco probable en la práctica, ej. alguien intentando de nuevo tras no ver la confirmación) — ahí sí hay una demora extra mientras Firestore serializa el acceso a ese documento puntual, pero el diseño ya garantiza que nunca queda una entrada duplicada, sin importar cuántos lo intenten a la vez.
+
+**Qué NO se probó (fuera de alcance de esta sesión):** carga real de red/latencia en celulares con mala señal (el emulador corre en la misma máquina, sin latencia de red real), ni el comportamiento de las pantallas en vivo (`registrosDeHoy()`, "Menores Recibidos") con 23 listeners simultáneos — Firestore está diseñado para eso y no hay razón para dudarlo, pero no se verificó empíricamente.
+
+**Limpieza:** el emulador y los datos de prueba viven SOLO en la máquina local, nunca tocaron la base de datos real — se detuvo el emulador y se borraron los datos de prueba (usuarios/niños/registros) al terminar. El bloque `emulators` en `firebase.json` se quedó (útil para repetir este tipo de prueba en el futuro); no afecta nada en producción, solo se usa con `firebase emulators:start`.
+
+---
+
 ## 9. Qué falta (pendiente, en orden sugerido)
 
 ### ⚠️ Pendiente inmediato — retomar aquí
