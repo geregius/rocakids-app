@@ -10,6 +10,26 @@ const nodemailer = require('nodemailer');
 initializeApp();
 const db = getFirestore();
 
+// Los correos arman su HTML por interpolación de strings (nombres de
+// niños, etc. — datos que llenó un acudiente/servidor, sin validación
+// de formato en `firestore.rules`). Sin escapar, un nombre con
+// caracteres como `<`/`>`/`&` quedaría insertado tal cual en el HTML
+// del correo (inyección de marcado). Se usa en cualquier valor que
+// venga de un documento de Firestore antes de interpolarlo en una
+// plantilla de correo.
+const ENTIDADES_HTML = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'};
+function escapeHtml(texto) {
+  return String(texto ?? '').replace(/[&<>"']/g, (c) => ENTIDADES_HTML[c]);
+}
+
+// Para valores que van en un encabezado de correo (ej. `subject`) en vez
+// de en el cuerpo HTML — nodemailer ya sanitiza esto internamente, pero
+// se quita cualquier salto de línea como defensa adicional (un dato sin
+// validar con un `\r\n` no debería poder inyectar encabezados extra).
+function sinSaltosDeLinea(texto) {
+  return String(texto ?? '').replace(/[\r\n]+/g, ' ');
+}
+
 // Colombia no observa horario de verano, así que el offset es siempre
 // fijo — más simple y confiable que depender del huso horario del
 // contenedor de la función (que corre en UTC salvo que se configure lo
@@ -204,6 +224,7 @@ function hoyEnBogota() {
 }
 
 function plantillaCorreoCumpleanos(nombreNino, versiculo) {
+  const nombreNinoSeguro = escapeHtml(nombreNino);
   return `
   <div style="background:#f2f2f2;padding:24px 12px;font-family:Verdana,Arial,sans-serif;">
     <div style="max-width:480px;margin:0 auto;background:#ffffff;border:2px solid #ffcc00;border-radius:20px;overflow:hidden;">
@@ -217,7 +238,7 @@ function plantillaCorreoCumpleanos(nombreNino, versiculo) {
         <p style="font-size:16px;color:#1A1A2E;margin:0 0 16px;">¡Hola campeón@!</p>
         <div style="display:inline-block;background:#2dd4bf;color:#ffffff;font-weight:bold;
                     padding:10px 20px;border-radius:999px;font-size:16px;margin-bottom:20px;">
-          ⭐ ¡¡Feliz Cumpleaños ${nombreNino}!! ⭐
+          ⭐ ¡¡Feliz Cumpleaños ${nombreNinoSeguro}!! ⭐
         </div>
         <p style="font-size:15px;color:#1A1A2E;text-align:left;line-height:1.5;margin:0 0 14px;">
           En <b>RocaKids</b> estamos saltando de alegría 🥳🙏 porque hoy Dios te regala un
@@ -307,7 +328,7 @@ async function enviarCorreosCumpleanosDeHoy() {
         await transporter.sendMail({
           from: '"RocaKids" <rokakidsarmenia@gmail.com>',
           to: correo,
-          subject: `¡Feliz cumpleaños ${nino.nombres}! 🎂`,
+          subject: `¡Feliz cumpleaños ${sinSaltosDeLinea(nino.nombres)}! 🎂`,
           html,
         });
         enviados++;

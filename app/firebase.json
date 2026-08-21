@@ -52,6 +52,20 @@
     ],
     "headers": [
       {
+        "source": "**",
+        "headers": [
+          { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
+          { "key": "X-Content-Type-Options", "value": "nosniff" },
+          { "key": "X-Frame-Options", "value": "DENY" },
+          { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+          { "key": "Permissions-Policy", "value": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()" },
+          {
+            "key": "Content-Security-Policy-Report-Only",
+            "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.googleusercontent.com https://firebasestorage.googleapis.com https://*.firebasestorage.app; connect-src 'self' https://*.googleapis.com https://*.google.com https://*.gstatic.com wss://*.firebaseio.com https://*.cloudfunctions.net; frame-src 'self' https://rocakidsarmenia-7935b.firebaseapp.com; object-src 'none'; base-uri 'self'; worker-src 'self' blob:"
+          }
+        ]
+      },
+      {
         "source": "/index.html",
         "headers": [
           { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }

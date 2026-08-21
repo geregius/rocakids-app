@@ -451,6 +451,24 @@ Rafael pidió evaluar cómo se comporta la app si TODOS los servidores (~23) est
 
 ---
 
+## 8.6. Auditoría de seguridad pre-lanzamiento (2026-08-21)
+
+Rafael compartió una checklist genérica de 20 recomendaciones de seguridad pre-lanzamiento (típica de redes sociales). Se evaluó cada una contra el código real del proyecto (Flutter Web + Firebase, sin backend propio) — la mayoría ya estaban cubiertas por diseño (Firebase Auth hashea contraseñas, Hosting fuerza HTTPS, `storage.rules` ya valida tipo/tamaño de archivo, no hay rutas URL que salten el login, nada filtrado nunca en el historial de git). Se encontraron y corrigieron 3 fallas reales:
+
+**1. `nodemailer` con vulnerabilidad de severidad ALTA (✅ corregido).** La versión `^6.9.15` tenía varios advisories reales (inyección de comandos SMTP vía CRLF, bypass de `disableFileAccess`/`disableUrlAccess` que permite SSRF/lectura de archivos arbitraria, validación TLS insuficiente en OAuth2). Se subió a `^9.0.5` — se revisó el CHANGELOG completo de 6.x a 9.x y los únicos *breaking changes* reales (código `NoAuth`→`ENOAUTH`, validación TLS estricta para adjuntos/OAuth2/proxy, cambios de soporte AWS SES) no afectan cómo este proyecto usa la librería (`service: 'gmail'`, sin adjuntos, sin OAuth2, sin proxy) — confirmado además cargando el módulo tras el cambio. Desplegado, las 5 Cloud Functions se actualizaron sin problema.
+
+**2. Inyección de HTML en los correos de cumpleaños (✅ corregido).** `plantillaCorreoCumpleanos()` interpolaba `nino.nombres` directo en el HTML del correo sin escapar — un nombre con `<img src=x onerror=...>` se habría insertado tal cual. Se agregaron dos helpers en `app/functions/index.js`: `escapeHtml()` (entidades HTML, usado en el nombre dentro del cuerpo del correo) y `sinSaltosDeLinea()` (defensa extra contra inyección de encabezados vía `\r\n`, usado en el `subject`). `plantillaCorreoRecuperacion()` no necesitó cambios — el `link` que interpola es generado enteramente por el propio código (Firebase `generatePasswordResetLink` + `oobCode`), nunca por texto libre del usuario.
+
+**3. Sin cabeceras de seguridad en Hosting (✅ corregido, en dos pasos).** `firebase.json` solo tenía `Cache-Control`. Se agregó un bloque `"source": "**"` con `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin` y `Permissions-Policy` (cámara permitida solo para `self` — la app la usa para el escáner QR y modo emergencia; micrófono/geolocalización/pago/USB bloqueados) — verificado con `curl -I` y sin errores nuevos en consola del navegador tras desplegar.
+- **CSP (Content-Security-Policy) — desplegado en modo `-Report-Only` (2026-08-21), a propósito NO forzado todavía.** Es la cabecera de mayor riesgo de romper la app (Flutter Web + `google_fonts` con fetch en vivo a `fonts.gstatic.com` + Firebase JS SDK inyectando scripts inline + iframe de `authDomain` para Auth). Se investigó el tráfico real de red de la app (scripts todos same-origin o inline pequeños, sin CDN externo de Firebase JS visible; no se pudo confirmar en vivo la llamada real de login/Cloud Function por una limitación de esta sesión para interactuar con el canvas de Flutter vía automatización — ver nota de accesibilidad en memoria). La política borrador (permite `*.googleapis.com`/`*.google.com`/`*.gstatic.com` para `connect-src`, `fonts.gstatic.com` para `font-src`, el iframe de `authDomain`) no generó NINGUNA violación en consola durante la carga completa e inicialización de Firebase. **Pendiente:** que Rafael use la app con normalidad unos días (el modo Report-Only nunca bloquea nada, solo registra violaciones en la consola del navegador si las hay) antes de pasar la cabecera a modo forzado (`Content-Security-Policy`, sin `-Report-Only`).
+
+**Quedan 2 hallazgos reales sin corregir todavía (más grandes/riesgosos, ver sección 9):**
+- **Sin protección contra bots** (Firebase App Check / reCAPTCHA) en registro y recuperar contraseña.
+- **`firestore.rules` no valida formato/tipo/rango de los campos** al crear documentos (`ninos`, `acudientes`, `usuarios`, `registros`) — solo valida rol/permiso. Toda la validación de contenido vive hoy en la app Flutter, así que una cuenta válida podría escribir datos con formato inválido saltándose la app. Corregirlo bien implica revisar colección por colección, con cuidado de no romper ningún flujo existente.
+- Nota menor, no de seguridad: falta actualizar `firebase-admin`/`firebase-functions` (quedan 9 vulnerabilidades *moderate* transitivas vía `uuid`, arrastradas por `firebase-admin@^12.6.0` → `@google-cloud/firestore`/`storage`) — requiere subir a `firebase-admin@14.x`, un cambio más grande que toca TODAS las Cloud Functions, se dejó pendiente a propósito para no combinarlo con los cambios de arriba.
+
+---
+
 ## 9. Qué falta (pendiente, en orden sugerido)
 
 ### ⚠️ Pendiente inmediato — retomar aquí
