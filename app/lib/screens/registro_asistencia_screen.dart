@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/acudiente.dart';
 import '../models/nino.dart';
+import '../models/no_autorizado.dart';
 import '../models/registro.dart';
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
@@ -52,6 +53,10 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   // esperar también esta consulta — era la demora "considerablemente
   // larga" que reportó Rafael al seleccionar un niño en datos móviles).
   bool _cargandoAcudientes = false;
+  // Personas NO autorizadas para este niño (solo se pide si
+  // `nino.tieneNoAutorizados` — la mayoría de niños no tienen ninguna,
+  // así que se evita la consulta extra en el caso común).
+  List<NoAutorizado> _noAutorizados = [];
   Acudiente? _acudienteElegido;
   bool _otroAcudiente = false;
   final _otroNombreController = TextEditingController();
@@ -149,6 +154,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       _error = null;
       _nino = null;
       _acudientes = [];
+      _noAutorizados = [];
       _acudienteElegido = null;
       _otroAcudiente = false;
       _servicio = servicioSugerido();
@@ -193,6 +199,23 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
     unawaited(_cargarAcudientesEnSegundoPlano(ninoId, token));
     if (_nino!.identificacionMenor.isEmpty) {
       unawaited(_cargarEntradasRecientesEnSegundoPlano(ninoId, token));
+    }
+    if (_nino!.tieneNoAutorizados) {
+      unawaited(_cargarNoAutorizadosEnSegundoPlano(ninoId, token));
+    }
+  }
+
+  /// Solo se llama si `nino.tieneNoAutorizados` — trae quiénes son, para
+  /// que el aviso (`_avisoNoAutorizados()`) muestre los nombres en vez de
+  /// solo "hay alguien no autorizado". No crítico para completar el
+  /// registro: si falla, el aviso genérico ya alcanzó a advertir.
+  Future<void> _cargarNoAutorizadosEnSegundoPlano(String ninoId, int token) async {
+    try {
+      final lista = await _authService.obtenerNoAutorizados(ninoId);
+      if (token != _seleccionToken || !mounted) return;
+      setState(() => _noAutorizados = lista);
+    } catch (_) {
+      // No crítico.
     }
   }
 
@@ -370,6 +393,51 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
                 color: alertaFuerte ? AppColors.rojo : AppColors.textoPrincipal,
                 fontWeight: alertaFuerte ? FontWeight.bold : FontWeight.normal,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Aviso (bien llamativo, a propósito) de que este niño tiene personas
+  /// registradas como NO autorizadas para tener contacto con él —
+  /// custodias, órdenes de alejamiento, etc. (2026-08-21). Muestra los
+  /// nombres si ya se alcanzaron a cargar (`_cargarNoAutorizadosEnSegundoPlano`);
+  /// mientras tanto, o si esa consulta falló, igual advierte con el aviso
+  /// genérico para no dejar pasar el registro sin que el servidor se
+  /// entere.
+  Widget _avisoNoAutorizados() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.rojo.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.rojo, width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.person_off, color: AppColors.rojo),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Este niño tiene personas registradas como NO autorizadas '
+                  'para retirarlo o tener contacto con él.',
+                  style: TextStyle(color: AppColors.rojo, fontWeight: FontWeight.bold),
+                ),
+                if (_noAutorizados.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  for (final entrada in _noAutorizados)
+                    Text(
+                      '• ${entrada.nombre}${entrada.motivo.isNotEmpty ? ' (${entrada.motivo})' : ''}',
+                      style: const TextStyle(color: AppColors.rojo),
+                    ),
+                ],
+              ],
             ),
           ),
         ],
@@ -860,6 +928,10 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
             ),
           ),
         ),
+        if (nino.tieneNoAutorizados) ...[
+          const SizedBox(height: 12),
+          _avisoNoAutorizados(),
+        ],
         if (cumpleEnUltimaSemana(nino.fechaNacimiento)) ...[
           const SizedBox(height: 12),
           _avisoCumpleanos(nino),

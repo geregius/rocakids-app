@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/nino.dart';
+import '../models/no_autorizado.dart';
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
@@ -33,6 +34,13 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
   NinoAcudiente? _miRelacion;
   bool _desvinculando = false;
 
+  // Personas NO autorizadas para tener contacto con este niño (custodias,
+  // órdenes de alejamiento, etc.) — ver docstring de `NoAutorizado`.
+  List<NoAutorizado> _noAutorizados = [];
+  bool _cargandoNoAutorizados = true;
+  bool _puedeGestionarNoAutorizados = false;
+  bool _agregandoNoAutorizado = false;
+
   bool get _esAdmin => widget.usuario.rol == RolUsuario.administrador;
 
   @override
@@ -40,19 +48,117 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
     super.initState();
     _nino = widget.nino;
     _verificarPermiso();
+    _cargarNoAutorizados();
   }
 
   Future<void> _verificarPermiso() async {
     final esAdmin = widget.usuario.rol == RolUsuario.administrador;
     final relacion = await AuthService().obtenerMiRelacionConNino(_nino.documentoIdentificacion);
-    final puedeEditar =
-        esAdmin || relacion?.parentescoTipo == 'Padre' || relacion?.parentescoTipo == 'Madre';
+    final esPadreOMadre =
+        relacion?.parentescoTipo == 'Padre' || relacion?.parentescoTipo == 'Madre';
+    final puedeEditar = esAdmin || esPadreOMadre;
     if (mounted) {
       setState(() {
         _puedeEditar = puedeEditar;
         _miRelacion = relacion;
         _cargandoPermiso = false;
+        // Solo liderazgo o el padre/madre vinculado pueden agregar/quitar
+        // personas no autorizadas — no cualquier servidor, por la
+        // sensibilidad legal del dato (decisión de Rafael, 2026-08-21).
+        _puedeGestionarNoAutorizados =
+            esAdmin || esPadreOMadre || widget.usuario.rol.puedeVerAcudientesYNinos;
       });
+    }
+  }
+
+  /// Si no tenemos permiso de lectura, la consulta falla con
+  /// permission-denied — se trata igual que "no hay nada que mostrar",
+  /// no como un error visible (quien abre la ficha sin ese permiso
+  /// simplemente no ve esta sección).
+  Future<void> _cargarNoAutorizados() async {
+    try {
+      final lista = await AuthService().obtenerNoAutorizados(_nino.documentoIdentificacion);
+      if (mounted) {
+        setState(() {
+          _noAutorizados = lista;
+          _cargandoNoAutorizados = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _cargandoNoAutorizados = false);
+    }
+  }
+
+  Future<void> _agregarNoAutorizado() async {
+    final resultado = await showDialog<_DatosNoAutorizado>(
+      context: context,
+      builder: (_) => const _AgregarNoAutorizadoDialog(),
+    );
+    if (resultado == null) return;
+    setState(() => _agregandoNoAutorizado = true);
+    try {
+      await AuthService().agregarNoAutorizado(
+        ninoId: _nino.documentoIdentificacion,
+        nombre: resultado.nombre,
+        documento: resultado.documento,
+        motivo: resultado.motivo,
+        nombreRegistradoPor: widget.usuario.nombreCompleto,
+      );
+      await _cargarNoAutorizados();
+    } on AuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No se pudo guardar: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _agregandoNoAutorizado = false);
+    }
+  }
+
+  Future<void> _quitarNoAutorizado(NoAutorizado entrada) async {
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Quitar de la lista?'),
+        content: Text(
+          '${entrada.nombre} ya no va a aparecer como persona no autorizada '
+          'para ${_nino.nombreCompleto}.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.rojo),
+            child: const Text('Quitar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmado != true) return;
+    try {
+      await AuthService().eliminarNoAutorizado(
+        ninoId: _nino.documentoIdentificacion,
+        entradaId: entrada.id,
+      );
+      await _cargarNoAutorizados();
+    } on AuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No se pudo quitar: $e')));
+      }
     }
   }
 
@@ -212,6 +318,29 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
                 ),
               ),
             ],
+            if (!_cargandoNoAutorizados && _noAutorizados.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _SeccionNoAutorizados(
+                entradas: _noAutorizados,
+                puedeGestionar: _puedeGestionarNoAutorizados,
+                onQuitar: _quitarNoAutorizado,
+              ),
+            ],
+            if (!_cargandoPermiso && _puedeGestionarNoAutorizados) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _agregandoNoAutorizado ? null : _agregarNoAutorizado,
+                style: OutlinedButton.styleFrom(foregroundColor: AppColors.rojo),
+                icon: _agregandoNoAutorizado
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.person_off),
+                label: const Text('Agregar persona NO autorizada'),
+              ),
+            ],
             if (!_cargandoPermiso && _puedeEditar) ...[
               const SizedBox(height: 16),
               OutlinedButton.icon(
@@ -279,6 +408,181 @@ class _FilaDato extends StatelessWidget {
           Expanded(child: Text(valor)),
         ],
       ),
+    );
+  }
+}
+
+/// Bloque rojo con la lista de personas NO autorizadas para tener
+/// contacto con este niño — visible para cualquiera con permiso de
+/// lectura (liderazgo, padre/madre, o quien hace check-in), pero solo
+/// quien tiene [puedeGestionar] ve el botón de quitar cada entrada.
+class _SeccionNoAutorizados extends StatelessWidget {
+  final List<NoAutorizado> entradas;
+  final bool puedeGestionar;
+  final ValueChanged<NoAutorizado> onQuitar;
+
+  const _SeccionNoAutorizados({
+    required this.entradas,
+    required this.puedeGestionar,
+    required this.onQuitar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.rojo.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.rojo, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.person_off, color: AppColors.rojo),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Personas NO autorizadas para retirar/tener contacto con este niño',
+                  style: TextStyle(color: AppColors.rojo, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          for (final entrada in entradas) ...[
+            const Divider(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entrada.nombre,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      if (entrada.documento.isNotEmpty)
+                        Text('Documento: ${entrada.documento}'),
+                      if (entrada.motivo.isNotEmpty) Text(entrada.motivo),
+                      Text(
+                        'Agregado por ${entrada.nombreRegistradoPor.isNotEmpty ? entrada.nombreRegistradoPor : 'alguien del equipo'} '
+                        'el ${_formatearFecha(entrada.fechaRegistro)}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                if (puedeGestionar)
+                  IconButton(
+                    onPressed: () => onQuitar(entrada),
+                    icon: const Icon(Icons.delete_outline, color: AppColors.rojo),
+                    tooltip: 'Quitar de la lista',
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DatosNoAutorizado {
+  final String nombre;
+  final String documento;
+  final String motivo;
+  const _DatosNoAutorizado({
+    required this.nombre,
+    required this.documento,
+    required this.motivo,
+  });
+}
+
+class _AgregarNoAutorizadoDialog extends StatefulWidget {
+  const _AgregarNoAutorizadoDialog();
+
+  @override
+  State<_AgregarNoAutorizadoDialog> createState() =>
+      _AgregarNoAutorizadoDialogState();
+}
+
+class _AgregarNoAutorizadoDialogState extends State<_AgregarNoAutorizadoDialog> {
+  final _nombreController = TextEditingController();
+  final _documentoController = TextEditingController();
+  final _motivoController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nombreController.dispose();
+    _documentoController.dispose();
+    _motivoController.dispose();
+    super.dispose();
+  }
+
+  void _guardar() {
+    final nombre = _nombreController.text.trim();
+    if (nombre.isEmpty) return;
+    Navigator.of(context).pop(
+      _DatosNoAutorizado(
+        nombre: nombre,
+        documento: _documentoController.text.trim(),
+        motivo: _motivoController.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Agregar persona NO autorizada'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Esta persona quedará marcada como NO autorizada para tener '
+              'contacto con este niño. El aviso lo verá cualquiera que haga '
+              'su check-in/check-out.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _nombreController,
+              decoration: const InputDecoration(labelText: 'Nombre completo'),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _documentoController,
+              decoration: const InputDecoration(
+                labelText: 'Documento (opcional)',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _motivoController,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Motivo (opcional, ej. "orden de alejamiento")',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          onPressed: _guardar,
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.rojo),
+          child: const Text('Agregar'),
+        ),
+      ],
     );
   }
 }

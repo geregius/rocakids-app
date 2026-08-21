@@ -181,6 +181,28 @@ service cloud.firestore {
       allow delete: if esAdmin();
     }
 
+    // Personas que NO deben tener contacto con un niño puntual (custodias,
+    // órdenes de alejamiento, etc.) — texto libre, casi nunca vinculado a
+    // una cuenta real del sistema (2026-08-21, pedido de Rafael). Solo
+    // liderazgo (`puedeVerInfoLiderazgo()`) o el padre/madre vinculado
+    // (`esPadreOMadreDe()`) pueden agregar/quitar entradas — NO cualquier
+    // servidor, por la sensibilidad legal del dato. La lectura sí es más
+    // amplia (`puedeRegistrarAsistencia()`): cualquiera que haga check-in
+    // necesita ver la advertencia para no entregar al niño a esa persona.
+    match /ninos/{ninoId}/no_autorizados/{entradaId} {
+      allow create: if request.auth != null
+        && (esAdmin() || puedeVerInfoLiderazgo() || esPadreOMadreDe(ninoId))
+        && request.resource.data.fkIdRegistradoPor == request.auth.uid;
+
+      allow get, list: if esAdmin()
+        || puedeVerInfoLiderazgo()
+        || puedeRegistrarAsistencia()
+        || esPadreOMadreDe(ninoId);
+
+      allow update: if false;
+      allow delete: if esAdmin() || puedeVerInfoLiderazgo() || esPadreOMadreDe(ninoId);
+    }
+
     // Copia mínima de un niño (solo nombre y fecha de nacimiento, sin
     // foto/documento/info médica) para que cualquier cuenta logueada
     // pueda buscarlo por nombre al vincularlo, sin poder "navegar" datos

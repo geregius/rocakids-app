@@ -375,6 +375,7 @@ class _NinoPresenteTile extends StatelessWidget {
         : (nino?.nombreCompleto ?? '(sin datos)');
     final tieneAlertaMedica =
         registro.esVisitante ? registro.alertaMedicaVisitante : (nino?.alertaMedicaFlag ?? false);
+    final tieneNoAutorizados = nino?.tieneNoAutorizados ?? false;
     final fotoUrl = nino?.fotoUrl ?? '';
     final documento = registro.esVisitante
         ? registro.documentoNinoVisitante
@@ -401,19 +402,29 @@ class _NinoPresenteTile extends StatelessWidget {
         ),
         title: Text(nombre),
         subtitle: Text('$documentoTexto · Manilla ${registro.numeroManilla}'),
-        trailing: (diasDeCumpleanos == null && !tieneAlertaMedica)
+        trailing:
+            (diasDeCumpleanos == null && !tieneAlertaMedica && !tieneNoAutorizados)
             ? null
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (diasDeCumpleanos != null) ...[
                     _BadgeCumpleanos(dias: diasDeCumpleanos),
-                    if (tieneAlertaMedica) const SizedBox(width: 6),
+                    if (tieneAlertaMedica || tieneNoAutorizados) const SizedBox(width: 6),
                   ],
-                  if (tieneAlertaMedica)
+                  if (tieneAlertaMedica) ...[
                     const Tooltip(
                       message: 'Tiene condición médica/alergia registrada',
                       child: Icon(Icons.medical_information, color: AppColors.rojo),
+                    ),
+                    if (tieneNoAutorizados) const SizedBox(width: 6),
+                  ],
+                  if (tieneNoAutorizados)
+                    const Tooltip(
+                      message:
+                          'Tiene personas NO autorizadas registradas — revisa su '
+                          'ficha antes de dar salida',
+                      child: Icon(Icons.person_off, color: AppColors.rojo),
                     ),
                 ],
               ),

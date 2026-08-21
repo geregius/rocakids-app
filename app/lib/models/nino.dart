@@ -139,6 +139,12 @@ class Nino {
   // 'Salida', así que "el último movimiento de toda la historia" de un
   // niño puede ser una Entrada de hace meses.
   final bool presente;
+  // Denormalizado junto con la subcolección `no_autorizados` (ver
+  // AuthService.agregarNoAutorizado()/eliminarNoAutorizado()) para que
+  // el check-in y "Menores Recibidos" puedan mostrar la advertencia sin
+  // una consulta extra por niño — ambas pantallas ya cargan el `Nino`
+  // completo de todas formas.
+  final bool tieneNoAutorizados;
 
   const Nino({
     required this.documentoIdentificacion,
@@ -154,6 +160,7 @@ class Nino {
     required this.autorizoFotoFlag,
     this.fotoUrl = '',
     this.presente = false,
+    this.tieneNoAutorizados = false,
   });
 
   String get nombreCompleto => '$nombres $apellidos';
@@ -172,6 +179,7 @@ class Nino {
     'condicionMedica': condicionMedica,
     'autorizoFotoFlag': autorizoFotoFlag,
     'fotoUrl': fotoUrl,
+    'tieneNoAutorizados': tieneNoAutorizados,
   };
 
   factory Nino.fromFirestore(String id, Map<String, dynamic> data) {
@@ -190,6 +198,7 @@ class Nino {
       autorizoFotoFlag: data['autorizoFotoFlag'] as bool? ?? false,
       fotoUrl: data['fotoUrl'] as String? ?? '',
       presente: data['presente'] as bool? ?? false,
+      tieneNoAutorizados: data['tieneNoAutorizados'] as bool? ?? false,
     );
   }
 }

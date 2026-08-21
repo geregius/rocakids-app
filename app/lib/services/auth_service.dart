@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/acudiente.dart';
 import '../models/nino.dart';
+import '../models/no_autorizado.dart';
 import '../models/registro.dart';
 import '../models/usuario_app.dart';
 
@@ -594,6 +595,90 @@ class AuthService {
         .get();
     if (!doc.exists) return null;
     return NinoAcudiente.fromFirestore(doc.id, doc.data()!);
+  }
+
+  /// Personas que NO deben tener contacto con este niño (custodias,
+  /// órdenes de alejamiento, etc.) — texto libre, ver [NoAutorizado].
+  /// Cualquiera que pueda ver la ficha del niño con permiso suficiente
+  /// puede leerlas (`firestore.rules`); si no tiene permiso, esta
+  /// consulta simplemente falla y el llamador debe tratarlo como "no
+  /// hay nada que mostrar" en vez de un error visible.
+  Future<List<NoAutorizado>> obtenerNoAutorizados(String ninoId) async {
+    final snap = await _firestore
+        .collection('ninos')
+        .doc(ninoId)
+        .collection('no_autorizados')
+        .orderBy('fechaRegistro', descending: true)
+        .get();
+    return snap.docs
+        .map((d) => NoAutorizado.fromFirestore(d.id, d.data()))
+        .toList();
+  }
+
+  /// Agrega una persona no autorizada a la lista de este niño. Solo
+  /// liderazgo (admin/columna/líder de ministerio) o el padre/madre
+  /// vinculado pueden hacerlo (`firestore.rules`). Actualiza en el mismo
+  /// batch `ninos/{ninoId}.tieneNoAutorizados` para que el check-in y
+  /// "Menores Recibidos" puedan mostrar la advertencia sin una consulta
+  /// extra (ver docstring del campo en `Nino`).
+  Future<void> agregarNoAutorizado({
+    required String ninoId,
+    required String nombre,
+    required String documento,
+    required String motivo,
+    required String nombreRegistradoPor,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+    final entrada = NoAutorizado(
+      id: '',
+      nombre: nombre,
+      documento: documento,
+      motivo: motivo,
+      fkIdRegistradoPor: user.uid,
+      nombreRegistradoPor: nombreRegistradoPor,
+      fechaRegistro: DateTime.now(),
+    );
+    final ninoRef = _firestore.collection('ninos').doc(ninoId);
+    final batch = _firestore.batch();
+    batch.set(ninoRef.collection('no_autorizados').doc(), entrada.toFirestore());
+    batch.update(ninoRef, {'tieneNoAutorizados': true});
+    try {
+      await batch.commit();
+    } catch (e) {
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException(
+          'No tienes permiso para agregar personas no autorizadas a este niño.',
+        );
+      }
+      throw AuthException('No se pudo guardar: $e');
+    }
+  }
+
+  /// Quita una persona de la lista de no autorizados de este niño.
+  /// Recalcula `tieneNoAutorizados` según si quedan otras entradas.
+  Future<void> eliminarNoAutorizado({
+    required String ninoId,
+    required String entradaId,
+  }) async {
+    final ninoRef = _firestore.collection('ninos').doc(ninoId);
+    try {
+      await ninoRef.collection('no_autorizados').doc(entradaId).delete();
+      final restantes = await ninoRef
+          .collection('no_autorizados')
+          .limit(1)
+          .get();
+      await ninoRef.update({'tieneNoAutorizados': restantes.docs.isNotEmpty});
+    } catch (e) {
+      if (e.toString().contains('permission-denied')) {
+        throw const AuthException(
+          'No tienes permiso para quitar esta entrada.',
+        );
+      }
+      throw AuthException('No se pudo quitar: $e');
+    }
   }
 
   /// Quita el vínculo entre un niño y un acudiente — SIN borrar ni al
@@ -1745,16 +1830,22 @@ class AuthService {
   }
 
   /// Elimina a un niño y todo lo que depende directamente de su
-  /// identidad: sus relaciones con acudientes (`nino_acudiente`) y su
-  /// entrada en el índice de búsqueda (`ninos_busqueda`). A propósito
-  /// NO borra sus `registros` históricos de asistencia — quedan como
-  /// dato histórico aunque el niño ya no exista. **Solo admin**.
+  /// identidad: sus relaciones con acudientes (`nino_acudiente`), su
+  /// entrada en el índice de búsqueda (`ninos_busqueda`) y su lista de
+  /// personas no autorizadas (`no_autorizados`). A propósito NO borra
+  /// sus `registros` históricos de asistencia — quedan como dato
+  /// histórico aunque el niño ya no exista. **Solo admin**.
   Future<void> eliminarNino(String documentoIdentificacion) async {
+    final ninoRef = _firestore.collection('ninos').doc(documentoIdentificacion);
     final relaciones = await _firestore
         .collection('nino_acudiente')
         .where('fk_idNino', isEqualTo: documentoIdentificacion)
         .get();
+    final noAutorizados = await ninoRef.collection('no_autorizados').get();
     final batch = _firestore.batch();
+    for (final doc in noAutorizados.docs) {
+      batch.delete(doc.reference);
+    }
     for (final doc in relaciones.docs) {
       batch.delete(doc.reference);
     }

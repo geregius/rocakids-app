@@ -1,6 +1,6 @@
 # RocaKids — Estado del Proyecto (guía de continuación)
 
-**Última actualización:** 2026-08-20
+**Última actualización:** 2026-08-21
 **Propósito de este documento:** que una conversación nueva (u otra persona) pueda retomar el desarrollo sin perder contexto. Resume qué existe, qué funciona, cómo está armado, y qué falta.
 
 Documentos relacionados en `docs/`:
@@ -126,7 +126,7 @@ Solo contiene `{uid}`. Existe únicamente para que las reglas de seguridad bloqu
 ### `ninos/{documentoIdentificacion}` — el ID del documento ES la llave primaria
 El **ID del documento en Firestore** es el documento real del menor, o si no tiene, la llave interna generada según el SOP §3.2 (`fechaNacimiento-PRIMERNOMBRE-PRIMERAPELLIDO`, ver `generarLlaveInterna()` en `lib/models/nino.dart`). Esto previene duplicados de la misma forma que `acudientes_documentos`, sin necesitar una colección aparte.
 
-Campos: `tipoIdentificacion`, `identificacionMenor`, `nombres`, `apellidos`, `fechaNacimiento`, `genero`, `estadoRegistro`, `alertaMedicaFlag`, `condicionMedica`, `autorizoFotoFlag`, `fotoUrl`.
+Campos: `tipoIdentificacion`, `identificacionMenor`, `nombres`, `apellidos`, `fechaNacimiento`, `genero`, `estadoRegistro`, `alertaMedicaFlag`, `condicionMedica`, `autorizoFotoFlag`, `fotoUrl`, `tieneNoAutorizados` (bool, ver subcolección `no_autorizados` más abajo).
 
 **Edición (2026-08-14):** solo un admin, o el acudiente vinculado con `parentescoTipo` **Padre o Madre** (no tíos/abuelos/otros autorizados), puede editar `nombres`, `apellidos`, `fechaNacimiento`, `genero`, `autorizoFotoFlag`, `alertaMedicaFlag`, `condicionMedica` — desde "Editar información" en `nino_detalle_sheet.dart` (`editar_nino_sheet.dart`). A propósito **NO** se puede editar así `tipoIdentificacion`/`identificacionMenor` (cambiarlos movería la llave primaria del documento — una migración más delicada, no soportada todavía) ni `estadoRegistro`/`fotoUrl` (quedan admin-only). Ver `esPadreOMadreDe()` en `firestore.rules` — depende de que `nino_acudiente` tenga ID determinístico (ver abajo).
 
@@ -141,6 +141,20 @@ Campos: `tipoIdentificacion`, `identificacionMenor`, `nombres`, `apellidos`, `fe
 | Santiago | 9-10 años |
 
 RocaKids solo recibe niños de 2 a 10 años (`edadMinimaRegistro`/`edadMaximaRegistro` en `nino.dart`) — el registro de un niño fuera de ese rango queda bloqueado con un mensaje de error, tanto en el registro inicial de acudiente (`sign_up_acudiente_screen.dart`) como al agregar un hijo adicional (`agregar_hijo_screen.dart`). El campo de fecha de nacimiento en ambos formularios usa `SelectorFechaNacimiento` (día/mes/año en dropdowns en vez de un calendario, con el año acotado al rango plausible 2-10 años) y muestra la edad y el grupo calculados en vivo mientras se llena.
+
+### `ninos/{ninoId}/no_autorizados/{entradaId}` — personas NO autorizadas (2026-08-21)
+Pedido de Rafael: los padres (y liderazgo) necesitan poder registrar que una persona puntual **NO** debe tener contacto con su hijo (custodias en disputa, órdenes de alejamiento, etc.). A propósito **no** es un vínculo a una cuenta del sistema (como `nino_acudiente`) sino texto libre — casi nunca esa persona está registrada como acudiente en RocaKids.
+
+Campos (`lib/models/no_autorizado.dart`): `nombre`, `documento` (opcional), `motivo` (opcional), `fkIdRegistradoPor`, `nombreRegistradoPor`, `fechaRegistro`.
+
+- **Quién puede agregar/quitar:** solo liderazgo (`puedeVerInfoLiderazgo()`: admin/columna/líder de ministerio) o el padre/madre vinculado al niño (`esPadreOMadreDe()`) — **no** cualquier servidor, por la sensibilidad legal del dato (decisión explícita de Rafael).
+- **Quién puede ver la advertencia:** más amplio — cualquiera que pueda hacer check-in/check-out (`puedeRegistrarAsistencia()`), además de liderazgo y el padre/madre. Sin esto la lista no serviría de nada: el punto es que el servidor que recibe/entrega al niño se entere.
+- **Denormalizado:** `ninos/{ninoId}.tieneNoAutorizados` (bool) se actualiza en el mismo batch que cada `AuthService.agregarNoAutorizado()`/`eliminarNoAutorizado()`, para que "Registro de asistencia" y "Menores Recibidos" puedan mostrar la advertencia sin una consulta extra por niño (ambas pantallas ya cargan el `Nino` completo).
+- **Dónde se ve:**
+  - Ficha del niño (`nino_detalle_sheet.dart`): bloque rojo con la lista completa (nombre, documento, motivo, quién lo agregó y cuándo) + botón "Agregar persona NO autorizada" (solo si tienes permiso).
+  - Registro de asistencia (`registro_asistencia_screen.dart`): aviso rojo al seleccionar al niño, con los nombres si ya se alcanzaron a cargar en segundo plano (solo se pide esa consulta si `tieneNoAutorizados` es `true`).
+  - Menores Recibidos (`ninos_presentes_screen.dart`): ícono rojo (`person_off`) junto al de alerta médica/cumpleaños en la tarjeta del niño.
+- `AuthService.eliminarNino()` también borra esta subcolección al borrar al niño.
 
 ### `ninos_busqueda/{documentoIdentificacion}` — índice de búsqueda por nombre (mismo ID que `ninos`)
 Copia mínima de cada niño: **solo** `nombres`, `apellidos`, `fechaNacimiento` — a propósito SIN foto, documento real ni info médica. Se escribe junto con `ninos` en el mismo batch al registrar un niño (`registrarAcudienteConNino`, `registrarNinoAdicional` en `auth_service.dart`).
