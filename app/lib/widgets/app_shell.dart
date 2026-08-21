@@ -11,6 +11,7 @@ import '../screens/cambiar_password_sheet.dart';
 import '../screens/cumpleanos_ninos_screen.dart';
 import '../screens/cumpleanos_servidores_screen.dart';
 import '../screens/home_screen.dart';
+import '../screens/manual_usuario_screen.dart';
 import '../screens/modo_emergencia_screen.dart';
 import '../screens/modulo_en_construccion_screen.dart';
 import '../screens/ninos_presentes_screen.dart';
@@ -163,11 +164,20 @@ class AppShell extends StatelessWidget {
           label: 'Modo emergencia',
           onTap: () => _irA(context, _EmergenciaScreenWrapper(usuario: usuario)),
         ),
+      // Cualquier usuario logueado (servidor o acudiente) puede abrir el
+      // manual — pedido de Rafael, 2026-08-20. A diferencia de
+      // "Dashboard" o "Acudientes y Niños", el manual no expone ningún
+      // dato sensible, así que no hay razón para acotarlo por rol.
+      _ItemMenu(
+        icon: Icons.menu_book,
+        label: 'Manual de usuario',
+        separadorAntes: true,
+        onTap: () => _irA(context, ManualUsuarioScreen(usuario: usuario)),
+      ),
       if (esServidor)
         _ItemMenu(
           icon: Icons.person,
           label: 'Mi perfil',
-          separadorAntes: true,
           onTap: () => showModalBottomSheet<void>(
             context: context,
             isScrollControlled: true,
@@ -180,7 +190,6 @@ class AppShell extends StatelessWidget {
       _ItemMenu(
         icon: Icons.lock,
         label: 'Cambiar contraseña',
-        separadorAntes: !esServidor,
         onTap: () => showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
