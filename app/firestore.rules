@@ -412,6 +412,23 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Videos tutoriales de YouTube (2026-08-22, "Video Tutoriales" dentro
+    // de "Manual de usuario") — solo se guarda el enlace y datos de
+    // texto, el video en sí lo sigue sirviendo YouTube. Cualquier cuenta
+    // logueada puede verlos (mismo criterio que el manual en PDF: no
+    // expone ningún dato sensible); solo un admin puede agregar/editar/
+    // borrar — Rafael copia los enlaces de YouTube él mismo.
+    match /videos_tutoriales/{videoId} {
+      allow get, list: if request.auth != null;
+      allow create: if esAdmin()
+        && esTextoNoVacioAcotado(request.resource.data.get('youtubeUrl', ''), 300)
+        && esTextoNoVacioAcotado(request.resource.data.get('youtubeId', ''), 20)
+        && esTextoNoVacioAcotado(request.resource.data.get('titulo', ''), 200)
+        && esTextoAcotado(request.resource.data.get('descripcion', ''), 500)
+        && request.resource.data.get('audiencias', []) is list;
+      allow update, delete: if esAdmin();
+    }
+
     // Todo lo demás queda cerrado por defecto hasta que se definan
     // las reglas de cada módulo (campañas, etc).
     match /{document=**} {

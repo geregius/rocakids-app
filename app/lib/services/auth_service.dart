@@ -9,10 +9,12 @@ import 'package:http/http.dart' as http;
 
 import '../models/acudiente.dart';
 import '../models/gestion.dart';
+import '../models/manual_contenido.dart';
 import '../models/nino.dart';
 import '../models/no_autorizado.dart';
 import '../models/registro.dart';
 import '../models/usuario_app.dart';
+import '../models/video_tutorial.dart';
 
 class AuthException implements Exception {
   final String mensaje;
@@ -1961,6 +1963,74 @@ class AuthService {
     final ref = _storage.ref('ninos_fotos/$ninoDocId/foto.$extension');
     await ref.putData(bytes, _metadataDeFoto(extension));
     return ref.getDownloadURL();
+  }
+
+  /// Todos los videos tutoriales ("Video Tutoriales", 2026-08-22),
+  /// ordenados del más nuevo al más viejo. Visible para cualquier cuenta
+  /// logueada — el filtro por audiencia (acudientes/servidores/
+  /// liderazgo) se aplica en la pantalla, no acá, para no necesitar un
+  /// índice compuesto por cada combinación posible de `array-contains`.
+  Stream<List<VideoTutorial>> listarVideosTutoriales() {
+    return _firestore
+        .collection('videos_tutoriales')
+        .orderBy('creadoEn', descending: true)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => VideoTutorial.fromFirestore(d.id, d.data()))
+              .toList(),
+        );
+  }
+
+  /// Agrega un video tutorial nuevo. **Solo admin** (`firestore.rules`).
+  /// El título ya viene resuelto desde YouTube (ver
+  /// `utils/youtube_helper.dart`) — acá solo se guarda.
+  Future<void> crearVideoTutorial({
+    required String youtubeUrl,
+    required String youtubeId,
+    required String titulo,
+    required String descripcion,
+    required List<AudienciaManual> audiencias,
+  }) async {
+    await _firestore.collection('videos_tutoriales').add({
+      ...VideoTutorial(
+        id: '',
+        youtubeUrl: youtubeUrl,
+        youtubeId: youtubeId,
+        titulo: titulo,
+        descripcion: descripcion,
+        audiencias: audiencias,
+        creadoEn: DateTime.now(),
+      ).toFirestore(),
+      'creadoEn': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Edita un video tutorial existente. **Solo admin**.
+  Future<void> editarVideoTutorial({
+    required String id,
+    required String youtubeUrl,
+    required String youtubeId,
+    required String titulo,
+    required String descripcion,
+    required List<AudienciaManual> audiencias,
+  }) async {
+    await _firestore.collection('videos_tutoriales').doc(id).update(
+      VideoTutorial(
+        id: id,
+        youtubeUrl: youtubeUrl,
+        youtubeId: youtubeId,
+        titulo: titulo,
+        descripcion: descripcion,
+        audiencias: audiencias,
+        creadoEn: DateTime.now(),
+      ).toFirestore(),
+    );
+  }
+
+  /// **Solo admin**.
+  Future<void> eliminarVideoTutorial(String id) async {
+    await _firestore.collection('videos_tutoriales').doc(id).delete();
   }
 
   /// Sin esto, Storage guarda el archivo como `application/octet-stream`

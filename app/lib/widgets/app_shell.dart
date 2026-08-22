@@ -12,7 +12,7 @@ import '../screens/cumpleanos_ninos_screen.dart';
 import '../screens/cumpleanos_servidores_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/informacion_app_sheet.dart';
-import '../screens/manual_usuario_screen.dart';
+import '../screens/manual_inicio_screen.dart';
 import '../screens/modo_emergencia_screen.dart';
 import '../screens/modulo_en_construccion_screen.dart';
 import '../screens/ninos_presentes_screen.dart';
@@ -173,7 +173,7 @@ class AppShell extends StatelessWidget {
         icon: Icons.menu_book,
         label: 'Manual de usuario',
         separadorAntes: true,
-        onTap: () => _irA(context, ManualUsuarioScreen(usuario: usuario)),
+        onTap: () => _irA(context, ManualInicioScreen(usuario: usuario)),
       ),
       if (esServidor)
         _ItemMenu(
