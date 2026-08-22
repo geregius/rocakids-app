@@ -159,24 +159,26 @@ class AuthService {
     }
   }
 
-  /// Auto-registro de un ACUDIENTE junto con su primer niño y la relación
-  /// entre ambos. A diferencia del servidor, el acudiente obtiene acceso
-  /// inmediato (rol "usuario_externo", sin aprobación de un admin).
+  /// Auto-registro: crea SOLO la cuenta de un acudiente nuevo (auth +
+  /// perfil), sin vincular ningún niño todavía. A diferencia del
+  /// servidor, el acudiente obtiene acceso inmediato (rol
+  /// "usuario_externo", sin aprobación de un admin) — a propósito NO usa
+  /// una app de Firebase secundaria (a diferencia de
+  /// [crearAcudienteNuevoDesdeServidor]): acá no hay ninguna sesión
+  /// previa que proteger, la cuenta recién creada SÍ debe quedar como la
+  /// sesión activa.
   ///
-  /// Los tres documentos se crean en un solo batch atómico. El ID del
-  /// niño es su "llave interna" (documento, o fecha+nombre+apellido si
-  /// no tiene) — así las reglas de seguridad rechazan automáticamente
-  /// un documento duplicado (ver firestore.rules).
-  Future<void> registrarAcudienteConNino({
+  /// El wizard de auto-registro (`sign_up_acudiente_screen.dart`,
+  /// 2026-08-21, soporte de varios niños) llama esto una sola vez y
+  /// luego [registrarNinoAdicional] por cada niño — mismo patrón de
+  /// composición que "Registrar familia" en vez de un único método
+  /// combinado de "acudiente + un niño".
+  Future<String> crearAcudienteNuevo({
     required String correo,
     required String password,
     required Acudiente acudiente,
-    required Nino nino,
-    required String parentescoTipo,
     Uint8List? fotoAcudienteBytes,
     String? fotoAcudienteExt,
-    Uint8List? fotoNinoBytes,
-    String? fotoNinoExt,
   }) async {
     UserCredential? credential;
     try {
@@ -186,21 +188,13 @@ class AuthService {
       );
       final uid = credential.user!.uid;
 
-      // Las fotos se suben aquí (no antes) porque hasta ahora no existía
+      // La foto se sube aquí (no antes) porque hasta ahora no existía
       // sesión con la que Storage pudiera autorizar la subida.
       String fotoAcudienteUrl = '';
       if (fotoAcudienteBytes != null && fotoAcudienteExt != null) {
         fotoAcudienteUrl = await subirFotoAcudiente(
           fotoAcudienteBytes,
           fotoAcudienteExt,
-        );
-      }
-      String fotoNinoUrl = '';
-      if (fotoNinoBytes != null && fotoNinoExt != null) {
-        fotoNinoUrl = await subirFotoNino(
-          nino.documentoIdentificacion,
-          fotoNinoBytes,
-          fotoNinoExt,
         );
       }
 
@@ -223,39 +217,8 @@ class AuthService {
             .doc(acudiente.numeroDocumento),
         {'uid': uid},
       );
-      batch.set(
-        _firestore.collection('ninos').doc(nino.documentoIdentificacion),
-        {
-          ...nino.toFirestore(),
-          if (fotoNinoUrl.isNotEmpty) 'fotoUrl': fotoNinoUrl,
-        },
-      );
-      batch.set(
-        _firestore
-            .collection('ninos_busqueda')
-            .doc(nino.documentoIdentificacion),
-        NinoBusqueda(
-          documentoIdentificacion: nino.documentoIdentificacion,
-          nombres: nino.nombres,
-          apellidos: nino.apellidos,
-          fechaNacimiento: nino.fechaNacimiento,
-        ).toFirestore(),
-      );
-      batch.set(
-        _firestore
-            .collection('nino_acudiente')
-            .doc('${nino.documentoIdentificacion}_$uid'),
-        NinoAcudiente(
-          id: '',
-          fkIdNino: nino.documentoIdentificacion,
-          fkIdAcudiente: uid,
-          parentescoTipo: parentescoTipo,
-          autorizacionFormulario: 'Sí',
-          autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
-          esRepresentanteLegalFlag: true,
-        ).toFirestore(),
-      );
       await batch.commit();
+      return uid;
     } on FirebaseAuthException catch (e) {
       if (e.code == 'email-already-in-use') {
         throw const AuthException(
@@ -266,9 +229,9 @@ class AuthService {
       }
       throw AuthException(_mensajeDeErrorRegistro(e.code));
     } catch (e) {
-      // Si el batch falla (ej. documento del niño duplicado), no dejamos
-      // una cuenta de acceso huérfana sin perfil: la eliminamos para que
-      // la persona pueda corregir el dato e intentar de nuevo.
+      // Si el batch falla (ej. documento ya registrado), no dejamos una
+      // cuenta de acceso huérfana sin perfil: la eliminamos para que la
+      // persona pueda corregir el dato e intentar de nuevo.
       if (credential?.user != null) {
         try {
           await credential!.user!.delete();
