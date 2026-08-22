@@ -27,16 +27,23 @@ class AcudientePortalScreen extends StatefulWidget {
 
 class _AcudientePortalScreenState extends State<AcudientePortalScreen> {
   late Future<Acudiente?> _acudienteFuture;
+  // Se lanza EN PARALELO con _acudienteFuture desde el inicio, no después
+  // de que ese resuelva — ambas consultas son independientes (dependen
+  // solo del uid de la sesión), así que esperarlas una tras otra sumaba
+  // un viaje de red completo sin necesidad antes de mostrar la lista.
+  late Future<List<Nino>> _hijosFuture;
   final _listaKey = GlobalKey<_ListaDeHijosState>();
 
   @override
   void initState() {
     super.initState();
     _acudienteFuture = AuthService().obtenerMiAcudiente();
+    _hijosFuture = AuthService().obtenerMisHijos();
   }
 
   void _recargar() => setState(() {
     _acudienteFuture = AuthService().obtenerMiAcudiente();
+    _hijosFuture = AuthService().obtenerMisHijos();
   });
 
   @override
@@ -55,7 +62,11 @@ class _AcudientePortalScreenState extends State<AcudientePortalScreen> {
         } else if (!tieneAcudiente) {
           body = _SinPerfilAcudiente(usuario: widget.usuario, onListo: _recargar);
         } else {
-          body = _ListaDeHijos(key: _listaKey, usuario: widget.usuario);
+          body = _ListaDeHijos(
+            key: _listaKey,
+            usuario: widget.usuario,
+            hijosInicialFuture: _hijosFuture,
+          );
         }
 
         return AppShell(
@@ -77,7 +88,12 @@ class _AcudientePortalScreenState extends State<AcudientePortalScreen> {
 
 class _ListaDeHijos extends StatefulWidget {
   final UsuarioApp usuario;
-  const _ListaDeHijos({super.key, required this.usuario});
+  // Future ya en vuelo desde el padre (lanzada en paralelo con la
+  // consulta del perfil de acudiente) — se usa solo la primera vez, para
+  // no repetir esa consulta; una recarga posterior (agregar hijo, etc.)
+  // sí pide una nueva.
+  final Future<List<Nino>> hijosInicialFuture;
+  const _ListaDeHijos({super.key, required this.usuario, required this.hijosInicialFuture});
 
   @override
   State<_ListaDeHijos> createState() => _ListaDeHijosState();
@@ -89,7 +105,7 @@ class _ListaDeHijosState extends State<_ListaDeHijos> {
   @override
   void initState() {
     super.initState();
-    _cargarHijos();
+    _hijosFuture = widget.hijosInicialFuture;
   }
 
   void _cargarHijos() {

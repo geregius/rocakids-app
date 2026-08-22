@@ -285,29 +285,31 @@ class AuthService {
     }
   }
 
-  /// Lo mismo que [registrarAcudienteConNino], pero hecho por un
-  /// SERVIDOR (cualquier rol operativo, ver AppShell) en nombre de una
-  /// familia — ej. en la mesa de registro de un servicio, cuando el papá o la mamá
-  /// no puede hacerlo desde su propio celular.
+  /// Crea SOLO la cuenta de un acudiente nuevo (auth + perfil), hecho por
+  /// un SERVIDOR en nombre de una familia — ej. en la mesa de registro de
+  /// un servicio. A propósito NO vincula ningún niño todavía: el wizard
+  /// de "Registrar familia" (2026-08-21, soporte de varios niños por
+  /// registro) resuelve primero el uid del acudiente (este método si es
+  /// nuevo, o el ya existente si se encontró por documento) y luego
+  /// vincula cada niño por separado con [registrarNinoAdicional] o
+  /// [vincularNinoAcudienteExistentes] — así no hace falta un método
+  /// combinado por cada combinación de "acudiente nuevo/existente x niño
+  /// nuevo/existente x cuántos niños".
   ///
-  /// La diferencia clave: quien llama YA tiene su propia sesión abierta
-  /// (el maestro) y no se puede perder. Crear la cuenta nueva con la app
-  /// de Firebase "de siempre" dejaría al maestro logueado como la
-  /// familia nueva en vez de como él mismo (así es como funciona
-  /// `createUserWithEmailAndPassword`: inicia sesión automáticamente con
-  /// la cuenta que acaba de crear). Para evitarlo, todo este registro
-  /// ocurre en una app de Firebase secundaria y temporal — el maestro
-  /// nunca deja de estar en su propia sesión.
-  Future<void> registrarAcudienteConNinoDesdeServidor({
+  /// La diferencia clave con crear la cuenta "normal": quien llama YA
+  /// tiene su propia sesión abierta (el servidor) y no se puede perder.
+  /// Crear la cuenta nueva con la app de Firebase "de siempre" dejaría al
+  /// servidor logueado como la familia nueva en vez de como él mismo
+  /// (así es como funciona `createUserWithEmailAndPassword`: inicia
+  /// sesión automáticamente con la cuenta que acaba de crear). Para
+  /// evitarlo, esto ocurre en una app de Firebase secundaria y temporal —
+  /// el servidor nunca deja de estar en su propia sesión.
+  Future<String> crearAcudienteNuevoDesdeServidor({
     required String correo,
     required String password,
     required Acudiente acudiente,
-    required Nino nino,
-    required String parentescoTipo,
     Uint8List? fotoAcudienteBytes,
     String? fotoAcudienteExt,
-    Uint8List? fotoNinoBytes,
-    String? fotoNinoExt,
   }) async {
     final app = await Firebase.initializeApp(
       name: 'registroTemporal-${DateTime.now().microsecondsSinceEpoch}',
@@ -331,14 +333,6 @@ class AuthService {
         await ref.putData(fotoAcudienteBytes, _metadataDeFoto(fotoAcudienteExt));
         fotoAcudienteUrl = await ref.getDownloadURL();
       }
-      String fotoNinoUrl = '';
-      if (fotoNinoBytes != null && fotoNinoExt != null) {
-        final ref = storage.ref(
-          'ninos_fotos/${nino.documentoIdentificacion}/foto.$fotoNinoExt',
-        );
-        await ref.putData(fotoNinoBytes, _metadataDeFoto(fotoNinoExt));
-        fotoNinoUrl = await ref.getDownloadURL();
-      }
 
       final batch = firestore.batch();
       batch.set(firestore.collection('usuarios').doc(uid), {
@@ -359,39 +353,8 @@ class AuthService {
             .doc(acudiente.numeroDocumento),
         {'uid': uid},
       );
-      batch.set(
-        firestore.collection('ninos').doc(nino.documentoIdentificacion),
-        {
-          ...nino.toFirestore(),
-          if (fotoNinoUrl.isNotEmpty) 'fotoUrl': fotoNinoUrl,
-        },
-      );
-      batch.set(
-        firestore
-            .collection('ninos_busqueda')
-            .doc(nino.documentoIdentificacion),
-        NinoBusqueda(
-          documentoIdentificacion: nino.documentoIdentificacion,
-          nombres: nino.nombres,
-          apellidos: nino.apellidos,
-          fechaNacimiento: nino.fechaNacimiento,
-        ).toFirestore(),
-      );
-      batch.set(
-        firestore
-            .collection('nino_acudiente')
-            .doc('${nino.documentoIdentificacion}_$uid'),
-        NinoAcudiente(
-          id: '',
-          fkIdNino: nino.documentoIdentificacion,
-          fkIdAcudiente: uid,
-          parentescoTipo: parentescoTipo,
-          autorizacionFormulario: 'Sí',
-          autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
-          esRepresentanteLegalFlag: true,
-        ).toFirestore(),
-      );
       await batch.commit();
+      return uid;
     } on FirebaseAuthException catch (e) {
       if (e.code == 'email-already-in-use') {
         throw const AuthException(
@@ -413,7 +376,7 @@ class AuthService {
           'Este número de documento ya se encuentra registrado en el sistema.',
         );
       }
-      throw AuthException('No se pudo completar el registro: $e');
+      throw AuthException('No se pudo crear la cuenta del acudiente: $e');
     } finally {
       try {
         await auth.signOut();
@@ -525,7 +488,12 @@ class AuthService {
     }
   }
 
-  /// Los niños vinculados al acudiente logueado.
+  /// Los niños vinculados al acudiente logueado. Las fichas se piden en
+  /// paralelo (`Future.wait`), no una por una en un `for` secuencial —
+  /// con varios hijos, cada consulta secuencial sumaba su propia latencia
+  /// de red una detrás de otra, mismo patrón ya corregido antes en
+  /// `registro_asistencia_screen.dart` (ver
+  /// [[feature-optimizacion-registro-ingreso]] en la memoria).
   Future<List<Nino>> obtenerMisHijos() async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -536,16 +504,17 @@ class AuthService {
         .where('fk_idAcudiente', isEqualTo: user.uid)
         .get();
 
-    final ninos = <Nino>[];
-    for (final rel in relaciones.docs) {
-      final ninoId = rel.data()['fk_idNino'] as String?;
-      if (ninoId == null) continue;
-      final ninoDoc = await _firestore.collection('ninos').doc(ninoId).get();
-      if (ninoDoc.exists) {
-        ninos.add(Nino.fromFirestore(ninoDoc.id, ninoDoc.data()!));
-      }
-    }
-    return ninos;
+    final ninoIds = relaciones.docs
+        .map((rel) => rel.data()['fk_idNino'] as String?)
+        .whereType<String>()
+        .toList();
+    final ninoDocs = await Future.wait(
+      ninoIds.map((id) => _firestore.collection('ninos').doc(id).get()),
+    );
+    return [
+      for (final doc in ninoDocs)
+        if (doc.exists) Nino.fromFirestore(doc.id, doc.data()!),
+    ];
   }
 
   /// Índice liviano (solo nombre y fecha de nacimiento, ver [NinoBusqueda])
@@ -1680,121 +1649,6 @@ class AuthService {
     }
   }
 
-  /// Lo mismo que [registrarAcudienteConNinoDesdeServidor], pero para
-  /// cuando el ACUDIENTE es nuevo y el NIÑO ya existe en el sistema (ej.
-  /// "Registrar familia" cuando el papá quiere su propia cuenta para un
-  /// niño que ya registró la mamá). Mismo truco de la app de Firebase
-  /// secundaria y temporal para no perder la sesión de quien llama.
-  Future<void> vincularAcudienteNuevoANinoExistenteDesdeServidor({
-    required String correo,
-    required String password,
-    required Acudiente acudiente,
-    required String documentoNino,
-    required String parentescoTipo,
-    Uint8List? fotoAcudienteBytes,
-    String? fotoAcudienteExt,
-  }) async {
-    // Se valida ANTES de crear la cuenta nueva, con la sesión propia de
-    // quien llama — así, si el documento del niño está mal escrito, no
-    // queda una cuenta huérfana que haya que borrar después.
-    final ninoDoc = await _firestore
-        .collection('ninos')
-        .doc(documentoNino)
-        .get();
-    if (!ninoDoc.exists) {
-      throw const AuthException(
-        'No se encontró ningún niño con ese documento.',
-      );
-    }
-    final nino = Nino.fromFirestore(ninoDoc.id, ninoDoc.data()!);
-
-    final app = await Firebase.initializeApp(
-      name: 'registroTemporal-${DateTime.now().microsecondsSinceEpoch}',
-      options: Firebase.app().options,
-    );
-    final auth = FirebaseAuth.instanceFor(app: app);
-    final firestore = FirebaseFirestore.instanceFor(app: app);
-    final storage = FirebaseStorage.instanceFor(app: app);
-
-    UserCredential? credential;
-    try {
-      credential = await auth.createUserWithEmailAndPassword(
-        email: correo.trim(),
-        password: password,
-      );
-      final uid = credential.user!.uid;
-
-      String fotoAcudienteUrl = '';
-      if (fotoAcudienteBytes != null && fotoAcudienteExt != null) {
-        final ref = storage.ref('acudientes_fotos/$uid/foto.$fotoAcudienteExt');
-        await ref.putData(fotoAcudienteBytes, _metadataDeFoto(fotoAcudienteExt));
-        fotoAcudienteUrl = await ref.getDownloadURL();
-      }
-
-      final batch = firestore.batch();
-      batch.set(firestore.collection('usuarios').doc(uid), {
-        'correo': correo.trim(),
-        'nombre': acudiente.nombres,
-        'apellido': acudiente.apellidos,
-        'rol': RolUsuario.usuarioExterno.valorFirestore,
-        'activo': true,
-        'creadoEn': FieldValue.serverTimestamp(),
-      });
-      batch.set(firestore.collection('acudientes').doc(uid), {
-        ...acudiente.toFirestore(),
-        if (fotoAcudienteUrl.isNotEmpty) 'fotoSeguridadUrl': fotoAcudienteUrl,
-      });
-      batch.set(
-        firestore
-            .collection('acudientes_documentos')
-            .doc(acudiente.numeroDocumento),
-        {'uid': uid},
-      );
-      batch.set(
-        firestore.collection('nino_acudiente').doc('${documentoNino}_$uid'),
-        NinoAcudiente(
-          id: '',
-          fkIdNino: documentoNino,
-          fkIdAcudiente: uid,
-          parentescoTipo: parentescoTipo,
-          autorizacionFormulario: 'Sí',
-          autorizacionImagen: nino.autorizoFotoFlag ? 'Sí' : 'No',
-          esRepresentanteLegalFlag: false,
-        ).toFirestore(),
-      );
-      await batch.commit();
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'email-already-in-use') {
-        throw const AuthException(
-          'Ya existe una cuenta con este correo. Pídele a la familia que '
-          'inicie sesión y use "Mis hijos" para vincularse a este niño.',
-        );
-      }
-      throw AuthException(_mensajeDeErrorRegistro(e.code));
-    } catch (e) {
-      if (credential?.user != null) {
-        try {
-          await credential!.user!.delete();
-        } catch (_) {
-          // Nada más que hacer: la app secundaria se elimina igual abajo.
-        }
-      }
-      if (e.toString().contains('permission-denied')) {
-        throw const AuthException(
-          'Este número de documento ya se encuentra registrado en el sistema.',
-        );
-      }
-      throw AuthException('No se pudo completar el registro: $e');
-    } finally {
-      try {
-        await auth.signOut();
-      } catch (_) {}
-      try {
-        await app.delete();
-      } catch (_) {}
-    }
-  }
-
   /// Todos los acudientes registrados, para el panel "Acudientes y
   /// Niños". Puede listar TODO `acudientes` un admin, o cualquier rol
   /// que haga check-in/out (`puedeRegistrarAsistencia()`, ver
@@ -1838,22 +1692,24 @@ class AuthService {
   /// Los niños vinculados a un acudiente puntual (misma lógica que
   /// [obtenerMisHijos], pero para CUALQUIER acudiente — usado desde el
   /// panel admin y desde el check-in al mostrar la ficha de un acudiente).
+  /// Mismo fetch en paralelo que [obtenerMisHijos].
   Future<List<Nino>> obtenerHijosDeAcudiente(String acudienteUid) async {
     final relaciones = await _firestore
         .collection('nino_acudiente')
         .where('fk_idAcudiente', isEqualTo: acudienteUid)
         .get();
 
-    final ninos = <Nino>[];
-    for (final rel in relaciones.docs) {
-      final ninoId = rel.data()['fk_idNino'] as String?;
-      if (ninoId == null) continue;
-      final ninoDoc = await _firestore.collection('ninos').doc(ninoId).get();
-      if (ninoDoc.exists) {
-        ninos.add(Nino.fromFirestore(ninoDoc.id, ninoDoc.data()!));
-      }
-    }
-    return ninos;
+    final ninoIds = relaciones.docs
+        .map((rel) => rel.data()['fk_idNino'] as String?)
+        .whereType<String>()
+        .toList();
+    final ninoDocs = await Future.wait(
+      ninoIds.map((id) => _firestore.collection('ninos').doc(id).get()),
+    );
+    return [
+      for (final doc in ninoDocs)
+        if (doc.exists) Nino.fromFirestore(doc.id, doc.data()!),
+    ];
   }
 
   /// Edita los datos de contacto/documento de un acudiente. Las reglas de

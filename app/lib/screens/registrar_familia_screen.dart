@@ -16,13 +16,16 @@ import '../widgets/app_shell.dart';
 /// familia en su nombre — ej. en la mesa de registro de un servicio,
 /// cuando el papá o la mamá no puede hacerlo desde su propio celular.
 ///
-/// "Formulario inteligente" (2026-08-17): el acudiente y el niño pueden
-/// ser nuevos O ya existir en el sistema, en cualquier combinación —
-/// ej. un niño nuevo para un acudiente que ya tiene cuenta, o un
-/// acudiente nuevo (papá) para un niño que ya registró la mamá. Buscar
-/// por documento antes de llenar el resto evita duplicar cuentas o
-/// fichas. Ver [AuthService] para los 4 métodos que cubren cada
-/// combinación.
+/// "Formulario inteligente": el acudiente y cada niño pueden ser nuevos
+/// O ya existir en el sistema, en cualquier combinación. Buscar primero
+/// evita duplicar cuentas o fichas.
+///
+/// Wizard de 3 pasos con transición deslizante (`PageView`, 2026-08-21,
+/// pedido de Rafael): 1) datos del acudiente, 2) uno o varios niños
+/// (cada uno con su propio parentesco — cubre el caso de un acudiente
+/// que es padre de uno y tío de otro en el mismo registro), 3) resumen
+/// en tarjetas antes de confirmar. Antes era un solo formulario largo de
+/// scroll continuo.
 class RegistrarFamiliaScreen extends StatefulWidget {
   final UsuarioApp usuario;
 
@@ -32,12 +35,43 @@ class RegistrarFamiliaScreen extends StatefulWidget {
   State<RegistrarFamiliaScreen> createState() => _RegistrarFamiliaScreenState();
 }
 
-class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _authService = AuthService();
+/// Datos de un niño dentro del wizard — cada tarjeta de "Registro del o
+/// los menores" tiene su propia instancia, con sus propios controladores
+/// (no se pueden compartir entre tarjetas).
+class _MenorFormData {
+  final busquedaController = TextEditingController();
+  final identificacionMenorController = TextEditingController();
+  final nombresController = TextEditingController();
+  final apellidosController = TextEditingController();
+  final condicionMedicaController = TextEditingController();
+  String? tipoIdentificacionMenor;
+  String? genero;
+  String? parentesco;
+  DateTime? fechaNacimiento;
+  bool autorizaFoto = false;
+  bool tieneCondicionMedica = false;
+  Uint8List? fotoBytes;
+  String? fotoExt;
+  NinoBusqueda? encontrado;
+  List<NinoBusqueda> resultadosBusqueda = [];
 
-  // Acudiente — búsqueda por documento (no hay búsqueda por nombre para
-  // acudientes, a propósito, por privacidad).
+  void dispose() {
+    busquedaController.dispose();
+    identificacionMenorController.dispose();
+    nombresController.dispose();
+    apellidosController.dispose();
+    condicionMedicaController.dispose();
+  }
+}
+
+class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
+  final _authService = AuthService();
+  final _pageController = PageController();
+  int _currentStep = 0;
+
+  // Paso 1 — acudiente. Búsqueda por documento (no hay búsqueda por
+  // nombre para acudientes, a propósito, por privacidad).
+  final _formKeyAcudiente = GlobalKey<FormState>();
   final _numeroDocumentoController = TextEditingController();
   final _nombresController = TextEditingController();
   final _apellidosController = TextEditingController();
@@ -48,37 +82,19 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
   Acudiente? _acudienteEncontrado;
   bool _buscandoAcudiente = false;
   String? _notaBusquedaAcudiente;
-
-  // Niño — búsqueda por nombre (reutiliza ninos_busqueda, igual que
-  // Registro de asistencia / Agregar hijo).
-  final _busquedaNinoController = TextEditingController();
-  final _identificacionMenorController = TextEditingController();
-  final _nombresNinoController = TextEditingController();
-  final _apellidosNinoController = TextEditingController();
-  final _condicionMedicaController = TextEditingController();
-  String? _tipoIdentificacionMenor;
-  String? _genero;
-  DateTime? _fechaNacimiento;
-  bool _autorizaFoto = false;
-  bool _tieneCondicionMedica = false;
-  bool _cargandoIndiceNinos = true;
-  List<NinoBusqueda> _indiceNinos = [];
-  List<NinoBusqueda> _resultadosNino = [];
-  // `NinoBusqueda`, no `Nino` completo — ver docstring de
-  // `_seleccionarNino()`: a propósito no se vuelve a consultar Firebase
-  // al seleccionar un niño, ya trae todo lo necesario (nombre, edad, ID).
-  NinoBusqueda? _ninoEncontrado;
-
-  String? _parentesco;
   bool _mostrarPassword = false;
-  bool _cargando = false;
-  String? _error;
-  String? _ultimaFamiliaRegistrada;
-
   Uint8List? _fotoAcudienteBytes;
   String? _fotoAcudienteExt;
-  Uint8List? _fotoNinoBytes;
-  String? _fotoNinoExt;
+
+  // Paso 2 — uno o varios niños. Búsqueda por nombre (reutiliza
+  // ninos_busqueda, igual que Registro de asistencia / Agregar hijo).
+  bool _cargandoIndiceNinos = true;
+  List<NinoBusqueda> _indiceNinos = [];
+  List<_MenorFormData> _menores = [_MenorFormData()];
+
+  bool _cargando = false;
+  String? _error;
+  String? _resumenFamiliaRegistrada;
 
   @override
   void initState() {
@@ -108,13 +124,72 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
     _telefonoController.dispose();
     _correoController.dispose();
     _passwordController.dispose();
-    _busquedaNinoController.dispose();
-    _identificacionMenorController.dispose();
-    _nombresNinoController.dispose();
-    _apellidosNinoController.dispose();
-    _condicionMedicaController.dispose();
+    for (final m in _menores) {
+      m.dispose();
+    }
+    _pageController.dispose();
     super.dispose();
   }
+
+  // ---- Navegación entre pasos ----
+
+  void _irAPaso(int paso) {
+    _pageController.animateToPage(
+      paso,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _siguientePaso() {
+    if (_currentStep == 0) {
+      if (!_formKeyAcudiente.currentState!.validate()) return;
+    } else if (_currentStep == 1) {
+      final error = _validarMenores();
+      if (error != null) {
+        setState(() => _error = error);
+        return;
+      }
+    }
+    setState(() => _error = null);
+    _irAPaso(_currentStep + 1);
+  }
+
+  String? _validarMenores() {
+    if (_menores.isEmpty) return 'Agrega al menos un niño.';
+    for (var i = 0; i < _menores.length; i++) {
+      final m = _menores[i];
+      final n = i + 1;
+      if (m.parentesco == null) return 'Selecciona el parentesco del niño $n.';
+      if (m.encontrado != null) continue;
+      if (m.tipoIdentificacionMenor == null) {
+        return 'Selecciona el tipo de documento del niño $n.';
+      }
+      if (m.tipoIdentificacionMenor != 'No tiene documento' &&
+          m.identificacionMenorController.text.trim().isEmpty) {
+        return 'Ingresa el número de documento del niño $n.';
+      }
+      if (m.nombresController.text.trim().isEmpty ||
+          m.apellidosController.text.trim().isEmpty) {
+        return 'Completa el nombre del niño $n.';
+      }
+      if (m.fechaNacimiento == null) {
+        return 'Selecciona la fecha de nacimiento del niño $n.';
+      }
+      if (grupoParaEdad(calcularEdad(m.fechaNacimiento!)) == null) {
+        return 'RocaKids recibe niños de $edadMinimaRegistro a '
+            '$edadMaximaRegistro años (niño $n).';
+      }
+      if (m.genero == null) return 'Selecciona el género del niño $n.';
+      if (m.tieneCondicionMedica &&
+          m.condicionMedicaController.text.trim().isEmpty) {
+        return 'Describe la condición médica del niño $n.';
+      }
+    }
+    return null;
+  }
+
+  // ---- Acciones del paso 1 (acudiente) ----
 
   Future<void> _elegirFotoAcudiente() async {
     final archivo = await elegirFotoConCamaraOGaleria(context);
@@ -123,18 +198,6 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
     setState(() {
       _fotoAcudienteBytes = bytes;
       _fotoAcudienteExt = archivo.name.contains('.')
-          ? archivo.name.split('.').last
-          : 'jpg';
-    });
-  }
-
-  Future<void> _elegirFotoNino() async {
-    final archivo = await elegirFotoConCamaraOGaleria(context);
-    if (archivo == null) return;
-    final bytes = await archivo.readAsBytes();
-    setState(() {
-      _fotoNinoBytes = bytes;
-      _fotoNinoExt = archivo.name.contains('.')
           ? archivo.name.split('.').last
           : 'jpg';
     });
@@ -178,98 +241,91 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
     });
   }
 
-  void _buscarNinoPorNombre(String texto) {
+  // ---- Acciones del paso 2 (niños) ----
+
+  void _agregarMenor() => setState(() => _menores.add(_MenorFormData()));
+
+  void _quitarMenor(_MenorFormData m) {
     setState(() {
-      _resultadosNino = texto.trim().isEmpty
+      _menores.remove(m);
+      m.dispose();
+    });
+  }
+
+  Future<void> _elegirFotoMenor(_MenorFormData m) async {
+    final archivo = await elegirFotoConCamaraOGaleria(context);
+    if (archivo == null) return;
+    final bytes = await archivo.readAsBytes();
+    setState(() {
+      m.fotoBytes = bytes;
+      m.fotoExt = archivo.name.contains('.') ? archivo.name.split('.').last : 'jpg';
+    });
+  }
+
+  void _buscarNinoPorNombre(_MenorFormData m, String texto) {
+    setState(() {
+      m.resultadosBusqueda = texto.trim().isEmpty
           ? []
           : _indiceNinos.where((n) => n.coincideBusqueda(texto)).take(15).toList();
     });
   }
 
-  /// A propósito NO vuelve a consultar Firebase: el resultado tocado
-  /// (`NinoBusqueda`, del índice `ninos_busqueda` ya cargado) ya trae
-  /// todo lo que hace falta acá — nombre, edad (vía `fechaNacimiento`) y
-  /// el ID para crear la relación. Antes se pedía la ficha completa del
-  /// niño (`obtenerNinoPorDocumento`) solo para tener su foto en la
-  /// tarjeta de confirmación; se decidió (2026-08-19, con Rafael)
-  /// mostrarla sin foto a cambio de que la selección sea instantánea —
-  /// esa consulta era justo la que se sentía lenta en datos móviles.
-  void _seleccionarNino(NinoBusqueda resultado) {
+  void _seleccionarNino(_MenorFormData m, NinoBusqueda resultado) {
+    final yaAgregadoEnOtraTarjeta = _menores.any(
+      (otro) =>
+          otro != m &&
+          otro.encontrado?.documentoIdentificacion == resultado.documentoIdentificacion,
+    );
+    if (yaAgregadoEnOtraTarjeta) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ya agregaste a este niño en otra tarjeta.')),
+      );
+      return;
+    }
     setState(() {
-      _ninoEncontrado = resultado;
-      _resultadosNino = [];
-      _busquedaNinoController.text = resultado.nombreCompleto;
+      m.encontrado = resultado;
+      m.resultadosBusqueda = [];
+      m.busquedaController.text = resultado.nombreCompleto;
     });
   }
 
-  void _olvidarNinoEncontrado() {
+  void _olvidarNinoEncontrado(_MenorFormData m) {
     setState(() {
-      _ninoEncontrado = null;
-      _busquedaNinoController.clear();
-      _resultadosNino = [];
+      m.encontrado = null;
+      m.busquedaController.clear();
+      m.resultadosBusqueda = [];
     });
   }
 
-  void _reiniciarFormulario() {
-    _formKey.currentState?.reset();
-    _numeroDocumentoController.clear();
-    _nombresController.clear();
-    _apellidosController.clear();
-    _telefonoController.clear();
-    _correoController.clear();
-    _passwordController.clear();
-    _busquedaNinoController.clear();
-    _identificacionMenorController.clear();
-    _nombresNinoController.clear();
-    _apellidosNinoController.clear();
-    _condicionMedicaController.clear();
-    setState(() {
-      _tipoDocumento = null;
-      _acudienteEncontrado = null;
-      _notaBusquedaAcudiente = null;
-      _ninoEncontrado = null;
-      _resultadosNino = [];
-      _tipoIdentificacionMenor = null;
-      _genero = null;
-      _parentesco = null;
-      _fechaNacimiento = null;
-      _autorizaFoto = false;
-      _tieneCondicionMedica = false;
-      _fotoAcudienteBytes = null;
-      _fotoAcudienteExt = null;
-      _fotoNinoBytes = null;
-      _fotoNinoExt = null;
-      _ultimaFamiliaRegistrada = null;
-    });
-  }
+  // ---- Envío ----
 
-  Nino _construirNinoNuevo() {
+  Nino _construirNinoNuevo(_MenorFormData m) {
     final tieneDocumento =
-        _tipoIdentificacionMenor != 'No tiene documento' &&
-        _identificacionMenorController.text.trim().isNotEmpty;
+        m.tipoIdentificacionMenor != 'No tiene documento' &&
+        m.identificacionMenorController.text.trim().isNotEmpty;
     final documentoIdentificacion = tieneDocumento
-        ? _identificacionMenorController.text.trim().toUpperCase()
+        ? m.identificacionMenorController.text.trim().toUpperCase()
         : generarLlaveInterna(
-            fechaNacimiento: _fechaNacimiento!,
-            nombres: _nombresNinoController.text,
-            apellidos: _apellidosNinoController.text,
+            fechaNacimiento: m.fechaNacimiento!,
+            nombres: m.nombresController.text,
+            apellidos: m.apellidosController.text,
           );
     return Nino(
       documentoIdentificacion: documentoIdentificacion,
-      tipoIdentificacion: _tipoIdentificacionMenor!,
+      tipoIdentificacion: m.tipoIdentificacionMenor!,
       identificacionMenor: tieneDocumento
-          ? _identificacionMenorController.text.trim()
+          ? m.identificacionMenorController.text.trim()
           : '',
-      nombres: _nombresNinoController.text.trim(),
-      apellidos: _apellidosNinoController.text.trim(),
-      fechaNacimiento: _fechaNacimiento!,
-      genero: _genero!,
+      nombres: m.nombresController.text.trim(),
+      apellidos: m.apellidosController.text.trim(),
+      fechaNacimiento: m.fechaNacimiento!,
+      genero: m.genero!,
       estadoRegistro: 'Activo',
-      alertaMedicaFlag: _tieneCondicionMedica,
-      condicionMedica: _tieneCondicionMedica
-          ? _condicionMedicaController.text.trim()
+      alertaMedicaFlag: m.tieneCondicionMedica,
+      condicionMedica: m.tieneCondicionMedica
+          ? m.condicionMedicaController.text.trim()
           : '',
-      autorizoFotoFlag: _autorizaFoto,
+      autorizoFotoFlag: m.autorizaFoto,
     );
   }
 
@@ -286,23 +342,15 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
   }
 
   Future<void> _registrar() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    final acudienteExistente = _acudienteEncontrado;
-    final ninoExistente = _ninoEncontrado;
-
-    if (ninoExistente == null) {
-      if (_fechaNacimiento == null) {
-        setState(() => _error = 'Selecciona la fecha de nacimiento del niño.');
-        return;
-      }
-      if (grupoParaEdad(calcularEdad(_fechaNacimiento!)) == null) {
-        setState(
-          () => _error =
-              'RocaKids recibe niños de $edadMinimaRegistro a $edadMaximaRegistro años.',
-        );
-        return;
-      }
+    if (!_formKeyAcudiente.currentState!.validate()) {
+      _irAPaso(0);
+      return;
+    }
+    final errorMenores = _validarMenores();
+    if (errorMenores != null) {
+      setState(() => _error = errorMenores);
+      _irAPaso(1);
+      return;
     }
 
     setState(() {
@@ -311,62 +359,49 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
     });
 
     try {
-      String nombreFamilia;
-
-      if (acudienteExistente == null && ninoExistente == null) {
-        // Ambos nuevos: flujo original completo.
-        final acudiente = _construirAcudienteNuevo();
-        final nino = _construirNinoNuevo();
-        await _authService.registrarAcudienteConNinoDesdeServidor(
-          correo: _correoController.text,
-          password: _passwordController.text,
-          acudiente: acudiente,
-          nino: nino,
-          parentescoTipo: _parentesco!,
-          fotoAcudienteBytes: _fotoAcudienteBytes,
-          fotoAcudienteExt: _fotoAcudienteExt,
-          fotoNinoBytes: _fotoNinoBytes,
-          fotoNinoExt: _fotoNinoExt,
-        );
-        nombreFamilia = acudiente.nombreCompleto;
-      } else if (acudienteExistente != null && ninoExistente == null) {
-        // Acudiente ya existe, niño nuevo.
-        final nino = _construirNinoNuevo();
-        await _authService.registrarNinoAdicional(
-          nino: nino,
-          parentescoTipo: _parentesco!,
-          acudienteUid: acudienteExistente.uid,
-          fotoNinoBytes: _fotoNinoBytes,
-          fotoNinoExt: _fotoNinoExt,
-        );
-        nombreFamilia = acudienteExistente.nombreCompleto;
-      } else if (acudienteExistente == null && ninoExistente != null) {
-        // Acudiente nuevo, niño ya existe.
-        final acudiente = _construirAcudienteNuevo();
-        await _authService.vincularAcudienteNuevoANinoExistenteDesdeServidor(
-          correo: _correoController.text,
-          password: _passwordController.text,
-          acudiente: acudiente,
-          documentoNino: ninoExistente.documentoIdentificacion,
-          parentescoTipo: _parentesco!,
-          fotoAcudienteBytes: _fotoAcudienteBytes,
-          fotoAcudienteExt: _fotoAcudienteExt,
-        );
-        nombreFamilia = acudiente.nombreCompleto;
+      String acudienteUid;
+      String nombreAcudiente;
+      if (_acudienteEncontrado != null) {
+        acudienteUid = _acudienteEncontrado!.uid;
+        nombreAcudiente = _acudienteEncontrado!.nombreCompleto;
       } else {
-        // Ambos ya existen: solo falta el vínculo.
-        await _authService.vincularNinoAcudienteExistentes(
-          documentoNino: ninoExistente!.documentoIdentificacion,
-          acudienteUid: acudienteExistente!.uid,
-          parentescoTipo: _parentesco!,
+        final acudienteNuevo = _construirAcudienteNuevo();
+        acudienteUid = await _authService.crearAcudienteNuevoDesdeServidor(
+          correo: _correoController.text,
+          password: _passwordController.text,
+          acudiente: acudienteNuevo,
+          fotoAcudienteBytes: _fotoAcudienteBytes,
+          fotoAcudienteExt: _fotoAcudienteExt,
         );
-        nombreFamilia = acudienteExistente.nombreCompleto;
+        nombreAcudiente = acudienteNuevo.nombreCompleto;
+      }
+
+      final nombresMenores = <String>[];
+      for (final m in _menores) {
+        if (m.encontrado != null) {
+          await _authService.vincularNinoAcudienteExistentes(
+            documentoNino: m.encontrado!.documentoIdentificacion,
+            acudienteUid: acudienteUid,
+            parentescoTipo: m.parentesco!,
+          );
+          nombresMenores.add(m.encontrado!.nombreCompleto);
+        } else {
+          final nino = _construirNinoNuevo(m);
+          await _authService.registrarNinoAdicional(
+            nino: nino,
+            parentescoTipo: m.parentesco!,
+            acudienteUid: acudienteUid,
+            fotoNinoBytes: m.fotoBytes,
+            fotoNinoExt: m.fotoExt,
+          );
+          nombresMenores.add(nino.nombreCompleto);
+        }
       }
 
       if (mounted) {
         setState(() {
           _cargando = false;
-          _ultimaFamiliaRegistrada = nombreFamilia;
+          _resumenFamiliaRegistrada = '$nombreAcudiente — ${nombresMenores.join(", ")}';
         });
       }
     } on AuthException catch (e) {
@@ -377,75 +412,176 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
     }
   }
 
-  String? _requerido(String? v) =>
-      (v == null || v.trim().isEmpty) ? 'Requerido' : null;
+  void _reiniciarFormulario() {
+    _formKeyAcudiente.currentState?.reset();
+    _numeroDocumentoController.clear();
+    _nombresController.clear();
+    _apellidosController.clear();
+    _telefonoController.clear();
+    _correoController.clear();
+    _passwordController.clear();
+    for (final m in _menores) {
+      m.dispose();
+    }
+    setState(() {
+      _tipoDocumento = null;
+      _acudienteEncontrado = null;
+      _notaBusquedaAcudiente = null;
+      _fotoAcudienteBytes = null;
+      _fotoAcudienteExt = null;
+      _menores = [_MenorFormData()];
+      _error = null;
+      _resumenFamiliaRegistrada = null;
+      _currentStep = 0;
+    });
+    _pageController.jumpToPage(0);
+  }
+
+  String? _requerido(String? v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null;
 
   @override
   Widget build(BuildContext context) {
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Registrar familia',
-      body: _buildContenido(context),
+      body: _resumenFamiliaRegistrada != null
+          ? _buildExito(context)
+          : Column(
+              children: [
+                _buildEncabezadoPasos(context),
+                Expanded(
+                  child: PageView(
+                    controller: _pageController,
+                    physics: const NeverScrollableScrollPhysics(),
+                    onPageChanged: (i) => setState(() => _currentStep = i),
+                    children: [
+                      _buildPasoAcudiente(context),
+                      _buildPasoMenores(context),
+                      _buildPasoResumen(context),
+                    ],
+                  ),
+                ),
+                _buildBarraNavegacion(context),
+              ],
+            ),
     );
   }
 
-  Widget _buildContenido(BuildContext context) {
-    if (_ultimaFamiliaRegistrada != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.check_circle,
-                color: AppColors.azulMarino,
-                size: 56,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '¡Familia de $_ultimaFamiliaRegistrada registrada!',
-                style: Theme.of(context).textTheme.titleLarge,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Si se creó una cuenta nueva, ya pueden iniciar sesión con el '
-                'correo y la contraseña que ingresaste.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _reiniciarFormulario,
-                child: const Text('Registrar otra familia'),
-              ),
-            ],
-          ),
+  Widget _buildExito(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.check_circle, color: AppColors.azulMarino, size: 56),
+            const SizedBox(height: 16),
+            Text(
+              '¡Familia registrada!',
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(_resumenFamiliaRegistrada!, textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            const Text(
+              'Si se creó una cuenta nueva, ya pueden iniciar sesión con el '
+              'correo y la contraseña que ingresaste.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _reiniciarFormulario,
+              child: const Text('Registrar otra familia'),
+            ),
+          ],
         ),
-      );
-    }
+      ),
+    );
+  }
 
+  Widget _buildEncabezadoPasos(BuildContext context) {
+    const titulos = ['Datos del acudiente', 'Registro del o los menores', 'Resumen'];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: List.generate(3, (i) {
+              final activo = i <= _currentStep;
+              return Expanded(
+                child: Container(
+                  margin: EdgeInsets.only(right: i < 2 ? 6 : 0),
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: activo
+                        ? AppColors.azulMarino
+                        : AppColors.azulMarino.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Paso ${_currentStep + 1} de 3 · ${titulos[_currentStep]}',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBarraNavegacion(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+        child: Row(
+          children: [
+            if (_currentStep > 0)
+              TextButton.icon(
+                onPressed: _cargando ? null : () => _irAPaso(_currentStep - 1),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Atrás'),
+              ),
+            const Spacer(),
+            ElevatedButton(
+              onPressed: _cargando ? null : (_currentStep < 2 ? _siguientePaso : _registrar),
+              child: _cargando
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text(_currentStep < 2 ? 'Siguiente' : 'Confirmar y registrar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---- Paso 1 ----
+
+  Widget _buildPasoAcudiente(BuildContext context) {
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 480),
           child: Form(
-            key: _formKey,
+            key: _formKeyAcudiente,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  'Busca primero al acudiente y al niño por si ya existen en el '
-                  'sistema — así no se duplican cuentas ni fichas. Si no existen, '
-                  'llena sus datos para registrarlos.',
+                  'Si el acudiente ya tiene cuenta, busca su documento primero '
+                  'para no duplicarla.',
                 ),
-                const SizedBox(height: 20),
-                Text(
-                  'Datos del acudiente',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 if (_acudienteEncontrado != null)
                   _TarjetaEncontrado(
                     icono: Icons.person,
@@ -459,16 +595,9 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                 else if (_buscandoAcudiente)
                   const _TarjetaCargando(mensaje: 'Buscando el documento...')
                 else ...[
-                  const Text(
-                    'Si el acudiente ya tiene cuenta, busca su documento primero.',
-                    style: TextStyle(fontSize: 13, color: AppColors.textoPrincipal),
-                  ),
-                  const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: _tipoDocumento,
-                    decoration: const InputDecoration(
-                      labelText: 'Tipo de documento',
-                    ),
+                    decoration: const InputDecoration(labelText: 'Tipo de documento'),
                     items: tiposDocumentoAcudiente
                         .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                         .toList(),
@@ -483,9 +612,7 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                         child: TextFormField(
                           controller: _numeroDocumentoController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Número de documento',
-                          ),
+                          decoration: const InputDecoration(labelText: 'Número de documento'),
                           validator: _requerido,
                         ),
                       ),
@@ -507,10 +634,7 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                   ),
                   if (_notaBusquedaAcudiente != null) ...[
                     const SizedBox(height: 4),
-                    Text(
-                      _notaBusquedaAcudiente!,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
+                    Text(_notaBusquedaAcudiente!, style: Theme.of(context).textTheme.bodySmall),
                   ],
                   const SizedBox(height: 16),
                   Center(
@@ -520,9 +644,7 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                           onTap: _elegirFotoAcudiente,
                           child: CircleAvatar(
                             radius: 40,
-                            backgroundColor: AppColors.azulClaro.withValues(
-                              alpha: 0.2,
-                            ),
+                            backgroundColor: AppColors.azulClaro.withValues(alpha: 0.2),
                             backgroundImage: _fotoAcudienteBytes != null
                                 ? MemoryImage(_fotoAcudienteBytes!)
                                 : null,
@@ -557,22 +679,16 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                   TextFormField(
                     controller: _telefonoController,
                     keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Teléfono / WhatsApp',
-                    ),
+                    decoration: const InputDecoration(labelText: 'Teléfono / WhatsApp'),
                     validator: _requerido,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _correoController,
                     keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Correo electrónico',
-                    ),
+                    decoration: const InputDecoration(labelText: 'Correo electrónico'),
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Ingresa el correo';
-                      }
+                      if (v == null || v.trim().isEmpty) return 'Ingresa el correo';
                       if (!v.contains('@')) return 'Correo inválido';
                       return null;
                     },
@@ -583,20 +699,14 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                     obscureText: !_mostrarPassword,
                     decoration: InputDecoration(
                       labelText: 'Contraseña',
-                      helperText:
-                          'Defínela junto con la familia — la van a necesitar.',
+                      helperText: 'Defínela junto con la familia — la van a necesitar.',
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _mostrarPassword
-                              ? Icons.visibility_off
-                              : Icons.visibility,
+                          _mostrarPassword ? Icons.visibility_off : Icons.visibility,
                           color: AppColors.azulMarino,
                         ),
-                        tooltip: _mostrarPassword
-                            ? 'Ocultar contraseña'
-                            : 'Mostrar contraseña',
-                        onPressed: () =>
-                            setState(() => _mostrarPassword = !_mostrarPassword),
+                        tooltip: _mostrarPassword ? 'Ocultar contraseña' : 'Mostrar contraseña',
+                        onPressed: () => setState(() => _mostrarPassword = !_mostrarPassword),
                       ),
                     ),
                     validator: (v) {
@@ -606,224 +716,316 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
                     },
                   ),
                 ],
-                const SizedBox(height: 28),
-                Text(
-                  'Datos del niño',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 12),
-                if (_ninoEncontrado != null)
-                  _TarjetaEncontrado(
-                    icono: Icons.child_care,
-                    titulo: 'Niño encontrado',
-                    nombre: _ninoEncontrado!.nombreCompleto,
-                    subtitulo:
-                        '${calcularEdad(_ninoEncontrado!.fechaNacimiento)} años',
-                    fotoUrl: '',
-                    onCambiar: _olvidarNinoEncontrado,
-                  )
-                else ...[
-                  const Text(
-                    'Si el niño ya está registrado, búscalo por nombre primero.',
-                    style: TextStyle(fontSize: 13, color: AppColors.textoPrincipal),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _busquedaNinoController,
-                    enabled: !_cargandoIndiceNinos,
-                    decoration: InputDecoration(
-                      labelText: 'Buscar niño por nombre',
-                      suffixIcon: _cargandoIndiceNinos
-                          ? const Padding(
-                              padding: EdgeInsets.all(14),
-                              child: SizedBox(
-                                height: 16,
-                                width: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            )
-                          : const Icon(Icons.search),
-                    ),
-                    onChanged: _buscarNinoPorNombre,
-                  ),
-                  if (_resultadosNino.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 220),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: AppColors.azulClaro.withValues(alpha: 0.4),
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _resultadosNino.length,
-                        itemBuilder: (context, i) {
-                          final r = _resultadosNino[i];
-                          return ListTile(
-                            dense: true,
-                            title: Text(r.nombreCompleto),
-                            subtitle: Text('${calcularEdad(r.fechaNacimiento)} años'),
-                            onTap: () => _seleccionarNino(r),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Center(
-                    child: Column(
-                      children: [
-                        GestureDetector(
-                          onTap: _elegirFotoNino,
-                          child: CircleAvatar(
-                            radius: 40,
-                            backgroundColor: AppColors.amarillo.withValues(
-                              alpha: 0.3,
-                            ),
-                            backgroundImage: _fotoNinoBytes != null
-                                ? MemoryImage(_fotoNinoBytes!)
-                                : null,
-                            child: _fotoNinoBytes == null
-                                ? const Icon(Icons.add_a_photo, size: 28)
-                                : null,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _fotoNinoBytes == null
-                              ? 'Foto del niño (opcional)'
-                              : 'Toca para cambiarla',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: _tipoIdentificacionMenor,
-                    decoration: const InputDecoration(
-                      labelText: 'Tipo de documento del niño',
-                    ),
-                    items: tiposIdentificacionMenor
-                        .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                        .toList(),
-                    onChanged: (v) =>
-                        setState(() => _tipoIdentificacionMenor = v),
-                    validator: (v) => v == null ? 'Requerido' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _identificacionMenorController,
-                    decoration: const InputDecoration(
-                      labelText: 'Número de documento del niño',
-                    ),
-                    validator: (v) =>
-                        _tipoIdentificacionMenor == 'No tiene documento'
-                        ? null
-                        : _requerido(v),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _nombresNinoController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombres del niño',
-                    ),
-                    validator: _requerido,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _apellidosNinoController,
-                    decoration: const InputDecoration(
-                      labelText: 'Apellidos del niño',
-                    ),
-                    validator: _requerido,
-                  ),
-                  const SizedBox(height: 16),
-                  SelectorFechaNacimiento(
-                    value: _fechaNacimiento,
-                    onChanged: (v) => setState(() => _fechaNacimiento = v),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: _genero,
-                    decoration: const InputDecoration(labelText: 'Género'),
-                    items: generos
-                        .map((g) => DropdownMenuItem(value: g, child: Text(g)))
-                        .toList(),
-                    onChanged: (v) => setState(() => _genero = v),
-                    validator: (v) => v == null ? 'Requerido' : null,
-                  ),
-                  const SizedBox(height: 8),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: const Text('¿Autoriza el uso de imagen del niño?'),
-                    value: _autorizaFoto,
-                    onChanged: (v) => setState(() => _autorizaFoto = v ?? false),
-                  ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: const Text(
-                      '¿Presenta alguna condición médica o alergia?',
-                    ),
-                    value: _tieneCondicionMedica,
-                    onChanged: (v) =>
-                        setState(() => _tieneCondicionMedica = v ?? false),
-                  ),
-                  if (_tieneCondicionMedica) ...[
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _condicionMedicaController,
-                      maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'Detalle de la condición médica / alergia',
-                      ),
-                      validator: (v) =>
-                          _tieneCondicionMedica ? _requerido(v) : null,
-                    ),
-                  ],
-                ],
-                const SizedBox(height: 20),
-                DropdownButtonFormField<String>(
-                  initialValue: _parentesco,
-                  decoration: const InputDecoration(
-                    labelText: 'Parentesco del acudiente con el niño',
-                  ),
-                  items: parentescos
-                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _parentesco = v),
-                  validator: (v) => v == null ? 'Requerido' : null,
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    _error!,
-                    style: const TextStyle(color: AppColors.rojo),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: _cargando ? null : _registrar,
-                  child: _cargando
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Registrar'),
-                ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ---- Paso 2 ----
+
+  Widget _buildPasoMenores(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Si el niño ya está registrado, búscalo por nombre primero. '
+                'Puedes agregar más de uno si son hermanos.',
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!, style: const TextStyle(color: AppColors.rojo)),
+              ],
+              const SizedBox(height: 16),
+              for (var i = 0; i < _menores.length; i++) ...[
+                _buildTarjetaMenor(context, _menores[i], i),
+                const SizedBox(height: 16),
+              ],
+              OutlinedButton.icon(
+                onPressed: _agregarMenor,
+                icon: const Icon(Icons.add),
+                label: const Text('Agregar otro niño'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTarjetaMenor(BuildContext context, _MenorFormData m, int index) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Niño ${index + 1}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                if (_menores.length > 1)
+                  IconButton(
+                    onPressed: () => _quitarMenor(m),
+                    icon: const Icon(Icons.delete_outline, color: AppColors.rojo),
+                    tooltip: 'Quitar niño',
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (m.encontrado != null)
+              _TarjetaEncontrado(
+                icono: Icons.child_care,
+                titulo: 'Niño encontrado',
+                nombre: m.encontrado!.nombreCompleto,
+                subtitulo: '${calcularEdad(m.encontrado!.fechaNacimiento)} años',
+                fotoUrl: '',
+                onCambiar: () => _olvidarNinoEncontrado(m),
+              )
+            else ...[
+              TextFormField(
+                controller: m.busquedaController,
+                enabled: !_cargandoIndiceNinos,
+                decoration: InputDecoration(
+                  labelText: 'Buscar niño por nombre',
+                  suffixIcon: _cargandoIndiceNinos
+                      ? const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : const Icon(Icons.search),
+                ),
+                onChanged: (texto) => _buscarNinoPorNombre(m, texto),
+              ),
+              if (m.resultadosBusqueda.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 220),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.azulClaro.withValues(alpha: 0.4)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: m.resultadosBusqueda.length,
+                    itemBuilder: (context, i) {
+                      final r = m.resultadosBusqueda[i];
+                      return ListTile(
+                        dense: true,
+                        title: Text(r.nombreCompleto),
+                        subtitle: Text('${calcularEdad(r.fechaNacimiento)} años'),
+                        onTap: () => _seleccionarNino(m, r),
+                      );
+                    },
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              Center(
+                child: Column(
+                  children: [
+                    GestureDetector(
+                      onTap: () => _elegirFotoMenor(m),
+                      child: CircleAvatar(
+                        radius: 40,
+                        backgroundColor: AppColors.amarillo.withValues(alpha: 0.3),
+                        backgroundImage: m.fotoBytes != null ? MemoryImage(m.fotoBytes!) : null,
+                        child: m.fotoBytes == null
+                            ? const Icon(Icons.add_a_photo, size: 28)
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      m.fotoBytes == null ? 'Foto del niño (opcional)' : 'Toca para cambiarla',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: m.tipoIdentificacionMenor,
+                decoration: const InputDecoration(labelText: 'Tipo de documento del niño'),
+                items: tiposIdentificacionMenor
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                    .toList(),
+                onChanged: (v) => setState(() => m.tipoIdentificacionMenor = v),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: m.identificacionMenorController,
+                decoration: const InputDecoration(labelText: 'Número de documento del niño'),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: m.nombresController,
+                decoration: const InputDecoration(labelText: 'Nombres del niño'),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: m.apellidosController,
+                decoration: const InputDecoration(labelText: 'Apellidos del niño'),
+              ),
+              const SizedBox(height: 16),
+              SelectorFechaNacimiento(
+                value: m.fechaNacimiento,
+                onChanged: (v) => setState(() => m.fechaNacimiento = v),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: m.genero,
+                decoration: const InputDecoration(labelText: 'Género'),
+                items: generos.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                onChanged: (v) => setState(() => m.genero = v),
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text('¿Autoriza el uso de imagen del niño?'),
+                value: m.autorizaFoto,
+                onChanged: (v) => setState(() => m.autorizaFoto = v ?? false),
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text('¿Presenta alguna condición médica o alergia?'),
+                value: m.tieneCondicionMedica,
+                onChanged: (v) => setState(() => m.tieneCondicionMedica = v ?? false),
+              ),
+              if (m.tieneCondicionMedica) ...[
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: m.condicionMedicaController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Detalle de la condición médica / alergia',
+                  ),
+                ),
+              ],
+            ],
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: m.parentesco,
+              decoration: const InputDecoration(labelText: 'Parentesco con el acudiente'),
+              items: parentescos.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
+              onChanged: (v) => setState(() => m.parentesco = v),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---- Paso 3 ----
+
+  Widget _buildPasoResumen(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Revisa los datos antes de confirmar.'),
+              const SizedBox(height: 16),
+              Text('Acudiente', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              _buildResumenAcudiente(context),
+              const SizedBox(height: 20),
+              Text(
+                _menores.length > 1 ? 'Niños' : 'Niño',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              for (var i = 0; i < _menores.length; i++) ...[
+                _buildResumenMenor(context, _menores[i], i),
+                const SizedBox(height: 8),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: const TextStyle(color: AppColors.rojo),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResumenAcudiente(BuildContext context) {
+    final encontrado = _acudienteEncontrado;
+    final nombre = encontrado?.nombreCompleto ??
+        '${_nombresController.text} ${_apellidosController.text}'.trim();
+    final documento = encontrado != null
+        ? '${encontrado.tipoDocumento}: ${encontrado.numeroDocumento}'
+        : '${_tipoDocumento ?? ''}: ${_numeroDocumentoController.text}';
+    final fotoUrlExistente = encontrado?.fotoSeguridadUrl ?? '';
+    return Card(
+      color: AppColors.azulClaro.withValues(alpha: 0.1),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: AppColors.azulClaro.withValues(alpha: 0.3),
+          backgroundImage: fotoUrlExistente.isNotEmpty
+              ? NetworkImage(fotoUrlExistente)
+              : (_fotoAcudienteBytes != null ? MemoryImage(_fotoAcudienteBytes!) : null)
+                  as ImageProvider?,
+          child: fotoUrlExistente.isEmpty && _fotoAcudienteBytes == null
+              ? const Icon(Icons.person)
+              : null,
+        ),
+        title: Text(nombre.trim().isEmpty ? '—' : nombre),
+        subtitle: Text(
+          '$documento\n${encontrado != null ? "Cuenta ya existente" : "Se creará una cuenta nueva"}',
+        ),
+        isThreeLine: true,
+        trailing: TextButton(onPressed: () => _irAPaso(0), child: const Text('Editar')),
+      ),
+    );
+  }
+
+  Widget _buildResumenMenor(BuildContext context, _MenorFormData m, int index) {
+    final encontrado = m.encontrado;
+    final nombre = encontrado?.nombreCompleto ??
+        '${m.nombresController.text} ${m.apellidosController.text}'.trim();
+    final fecha = encontrado?.fechaNacimiento ?? m.fechaNacimiento;
+    final edadTxt = fecha != null ? '${calcularEdad(fecha)} años' : '';
+    return Card(
+      color: AppColors.amarillo.withValues(alpha: 0.08),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: AppColors.amarillo.withValues(alpha: 0.3),
+          backgroundImage: m.fotoBytes != null ? MemoryImage(m.fotoBytes!) : null,
+          child: m.fotoBytes == null ? const Icon(Icons.child_care) : null,
+        ),
+        title: Text(nombre.isEmpty ? 'Niño ${index + 1}' : nombre),
+        subtitle: Text(
+          '$edadTxt · ${encontrado != null ? "Ya registrado" : "Se creará una ficha nueva"}\n'
+          'Parentesco: ${m.parentesco ?? "—"}',
+        ),
+        isThreeLine: true,
+        trailing: TextButton(onPressed: () => _irAPaso(1), child: const Text('Editar')),
       ),
     );
   }
@@ -832,8 +1034,7 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
 /// Ocupa el mismo lugar donde aparecerá `_TarjetaEncontrado` (o el
 /// formulario de "nuevo") mientras se espera la respuesta de la
 /// búsqueda — para que quede claro que algo está pasando, en vez de que
-/// el formulario de "nuevo" se quede quieto sin ningún aviso (pedido de
-/// Rafael, 2026-08-19: la espera se sentía como que "no pasaba nada").
+/// el formulario de "nuevo" se quede quieto sin ningún aviso.
 class _TarjetaCargando extends StatelessWidget {
   final String mensaje;
   const _TarjetaCargando({required this.mensaje});
