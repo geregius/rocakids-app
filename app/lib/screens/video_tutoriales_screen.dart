@@ -173,7 +173,7 @@ class _ListaVideos extends StatelessWidget {
       itemCount: videos.length,
       itemBuilder: (context, i) {
         final video = videos[i];
-        return _TarjetaVideo(
+        return _FilaVideo(
           video: video,
           esAdmin: esAdmin,
           onEditar: () => onEditar(video),
@@ -184,34 +184,101 @@ class _ListaVideos extends StatelessWidget {
   }
 }
 
-/// Cada tarjeta trae su propio `YoutubePlayerController` — necesario
-/// para que `YoutubePlayerThumbnail` (miniatura tocable, del paquete
-/// `youtube_player_iframe`) solo cargue el reproductor real de ESE video
-/// cuando alguien lo toca, no los N videos de la lista de una vez.
-class _TarjetaVideo extends StatefulWidget {
+/// Una fila liviana por video: título + botón "Ver" (pedido de Rafael,
+/// 2026-08-22, en vez de la miniatura incrustada en la lista que se veía
+/// en blanco). El reproductor real solo se crea al tocar "Ver", en la
+/// hoja inferior (`_ReproductorVideoSheet`) — nunca hay más de UN
+/// `YoutubePlayerController` vivo a la vez, en vez de uno por cada video
+/// de la lista.
+class _FilaVideo extends StatelessWidget {
   final VideoTutorial video;
   final bool esAdmin;
   final VoidCallback onEditar;
   final VoidCallback onEliminar;
 
-  const _TarjetaVideo({
+  const _FilaVideo({
     required this.video,
     required this.esAdmin,
     required this.onEditar,
     required this.onEliminar,
   });
 
+  void _verVideo(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ReproductorVideoSheet(video: video),
+    );
+  }
+
   @override
-  State<_TarjetaVideo> createState() => _TarjetaVideoState();
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        contentPadding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
+        leading: CircleAvatar(
+          backgroundColor: AppColors.azulMarino.withValues(alpha: 0.1),
+          child: const Icon(Icons.play_arrow, color: AppColors.azulMarino),
+        ),
+        title: Text(
+          video.titulo,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: video.descripcion.isNotEmpty
+            ? Text(video.descripcion, maxLines: 2, overflow: TextOverflow.ellipsis)
+            : null,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (esAdmin) ...[
+              IconButton(
+                onPressed: onEditar,
+                icon: const Icon(Icons.edit, size: 20),
+                tooltip: 'Editar',
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
+                onPressed: onEliminar,
+                icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.rojo),
+                tooltip: 'Eliminar',
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+            FilledButton(onPressed: () => _verVideo(context), child: const Text('Ver')),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _TarjetaVideoState extends State<_TarjetaVideo> {
+/// Hoja que sube desde abajo con el video reproduciéndose — se crea un
+/// `YoutubePlayerController` nuevo cada vez que se abre y se cierra
+/// (`close()`) al salir, para no dejar reproductores vivos de fondo.
+class _ReproductorVideoSheet extends StatefulWidget {
+  final VideoTutorial video;
+
+  const _ReproductorVideoSheet({required this.video});
+
+  @override
+  State<_ReproductorVideoSheet> createState() => _ReproductorVideoSheetState();
+}
+
+class _ReproductorVideoSheetState extends State<_ReproductorVideoSheet> {
   late final YoutubePlayerController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = YoutubePlayerController.fromVideoId(videoId: widget.video.youtubeId);
+    _controller = YoutubePlayerController.fromVideoId(
+      videoId: widget.video.youtubeId,
+      autoPlay: true,
+      params: const YoutubePlayerParams(showFullscreenButton: true),
+    );
   }
 
   @override
@@ -222,54 +289,51 @@ class _TarjetaVideoState extends State<_TarjetaVideo> {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 20),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          YoutubePlayerThumbnail(controller: _controller),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.superficie,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 4, 4),
+                child: Row(
                   children: [
                     Expanded(
                       child: Text(
                         widget.video.titulo,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.azulMarino,
-                        ),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (widget.esAdmin) ...[
-                      IconButton(
-                        onPressed: widget.onEditar,
-                        icon: const Icon(Icons.edit, size: 20),
-                        tooltip: 'Editar',
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      IconButton(
-                        onPressed: widget.onEliminar,
-                        icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.rojo),
-                        tooltip: 'Eliminar',
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ],
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                      tooltip: 'Cerrar',
+                    ),
                   ],
                 ),
-                if (widget.video.descripcion.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(widget.video.descripcion),
-                ],
-              ],
-            ),
+              ),
+              AspectRatio(aspectRatio: 16 / 9, child: YoutubePlayer(controller: _controller)),
+              if (widget.video.descripcion.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(widget.video.descripcion),
+                )
+              else
+                const SizedBox(height: 12),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
