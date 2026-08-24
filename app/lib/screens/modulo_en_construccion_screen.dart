@@ -4,12 +4,11 @@ import '../models/usuario_app.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_shell.dart';
 import 'ninos_presentes_screen.dart';
-import 'registro_asistencia_screen.dart';
 
 /// "Inicio" para roles de servidor *distintos* a administrador. Antes
 /// era solo un mensaje de "módulo en construcción" — la mayoría de sus
 /// herramientas reales YA existen (Registro de asistencia, Menores
-/// Recibidos, etc.), solo no se veían desde acá. Rediseñado 2026-08-21
+/// Registrados, etc.), solo no se veían desde acá. Rediseñado 2026-08-21
 /// (pedido de Rafael, "algo atractivo, que no genere dificultad ni haga
 /// más lenta la app") con saludo según la hora del día y accesos
 /// directos a las 2 pantallas que usa CUALQUIER rol de servidor — a
@@ -55,27 +54,19 @@ class ModuloEnConstruccionScreen extends StatelessWidget {
               const SizedBox(height: 28),
               Text('Accesos rápidos', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 12),
+              // "Registro de asistencia" ya no es un acceso aparte
+              // (2026-08-24) — se une dentro de "Menores Registrados",
+              // que ahora tiene su propio botón "+" para eso mismo.
               Wrap(
                 spacing: 16,
                 runSpacing: 16,
                 children: [
                   _TarjetaAcceso(
-                    icono: Icons.assignment_turned_in,
-                    color: AppColors.azulMarino,
-                    titulo: 'Registro de asistencia',
-                    subtitulo: 'Recibe un niño en el salón',
-                    onTap: () => Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(
-                        builder: (_) => RegistroAsistenciaScreen(usuario: usuario),
-                      ),
-                    ),
-                  ),
-                  _TarjetaAcceso(
                     icono: Icons.fact_check,
                     color: AppColors.amarillo,
                     colorTexto: AppColors.textoPrincipal,
-                    titulo: 'Menores Recibidos',
-                    subtitulo: 'Quiénes están en el salón ahora',
+                    titulo: 'Menores Registrados',
+                    subtitulo: 'Quiénes están en el salón, o registra uno nuevo',
                     onTap: () => Navigator.of(context).pushReplacement(
                       MaterialPageRoute(
                         builder: (_) => NinosPresentesScreen(usuario: usuario),

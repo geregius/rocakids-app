@@ -9,15 +9,21 @@ import '../utils/escaner_qr.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/foto_avatar.dart';
 import 'nino_detalle_sheet.dart';
+import 'registro_asistencia_screen.dart';
 
 const _sinGrupo = 'Sin grupo';
 
-/// Sección "Menores Recibidos", para los roles principales (ver
-/// `usuario.rol.esRolDeServidor`): quiénes están AHORA MISMO en el
-/// salón (no todos los que pasaron hoy), subdivididos por grupo de
-/// edad, cada grupo con su total. Una vista histórica del día completo
-/// (incluyendo quien ya salió) queda pendiente para más adelante —
-/// decisión explícita de Rafael, 2026-08-15.
+/// Sección "Menores Registrados" (nombre hasta 2026-08-24: "Menores
+/// Recibidos" — Rafael pidió unirla con "Registro de asistencia", que
+/// dejó de ser un ítem de menú aparte y ahora se abre con el botón "+"
+/// de acá, apilado encima con `Navigator.push`. Es la MISMA pantalla
+/// sin ningún cambio interno, así que no hay ningún costo de
+/// rendimiento nuevo — antes se llegaba desde el menú, ahora desde este
+/// botón), para los roles principales (ver `usuario.rol.esRolDeServidor`):
+/// quiénes están AHORA MISMO en el salón (no todos los que pasaron hoy),
+/// subdivididos por grupo de edad, cada grupo con su total. Una vista
+/// histórica del día completo (incluyendo quien ya salió) queda
+/// pendiente para más adelante — decisión explícita de Rafael, 2026-08-15.
 ///
 /// "Presente" = el último movimiento de HOY de ese niño fue "Entrada".
 /// Los niños VISITANTES (sin cuenta previa) se cuentan también: como
@@ -97,7 +103,7 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
   /// o escanear la manilla, 2026-08-18).
   Future<void> _darSalida(
     Registro entrada, {
-    String observacion = 'Salida registrada deslizando la tarjeta en Menores Recibidos.',
+    String observacion = 'Salida registrada deslizando la tarjeta en Menores Registrados.',
   }) async {
     setState(() => _ocultosOptimista.add(entrada.id));
     final salida = Registro(
@@ -201,7 +207,7 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
     if (confirmar == true) {
       await _darSalida(
         registro,
-        observacion: 'Salida registrada escaneando la manilla en Menores Recibidos.',
+        observacion: 'Salida registrada escaneando la manilla en Menores Registrados.',
       );
     }
   }
@@ -227,11 +233,35 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
   Widget build(BuildContext context) {
     return AppShell(
       usuario: widget.usuario,
-      seccionActiva: 'Menores Recibidos',
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _escanearYDarSalida,
-        icon: const Icon(Icons.photo_camera),
-        label: const Text('Salida por manilla'),
+      seccionActiva: 'Menores Registrados',
+      // Dos acciones flotantes (2026-08-24): "+" para registrar una
+      // nueva entrada (antes vivía en el ítem de menú aparte "Registro
+      // de asistencia", ahora abre exactamente la misma pantalla con
+      // `Navigator.push`) y "Salida por manilla" que ya existía. Cada
+      // `FloatingActionButton` en pantalla necesita su propio `heroTag`
+      // — si no, Flutter lanza un error de tags duplicados.
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'salidaPorManilla',
+            onPressed: _escanearYDarSalida,
+            icon: const Icon(Icons.photo_camera),
+            label: const Text('Salida por manilla'),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            heroTag: 'nuevaAsistencia',
+            tooltip: 'Registrar una nueva asistencia',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => RegistroAsistenciaScreen(usuario: widget.usuario),
+              ),
+            ),
+            child: const Icon(Icons.add),
+          ),
+        ],
       ),
       body: StreamBuilder<List<Registro>>(
               stream: _authService.registrosDeHoy(),

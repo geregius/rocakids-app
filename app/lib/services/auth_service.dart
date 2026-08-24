@@ -555,7 +555,8 @@ class AuthService {
   /// vinculado pueden hacerlo (`firestore.rules`). Actualiza en el mismo
   /// batch `ninos/{ninoId}.tieneNoAutorizados` para que el check-in y
   /// "Menores Recibidos" puedan mostrar la advertencia sin una consulta
-  /// extra (ver docstring del campo en `Nino`).
+  /// extra (ver docstring del campo en `Nino`). "Menores Recibidos" se
+  /// renombró a "Menores Registrados" el 2026-08-24.
   Future<void> agregarNoAutorizado({
     required String ninoId,
     required String nombre,

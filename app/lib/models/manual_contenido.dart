@@ -107,22 +107,24 @@ const manualCapitulos = <ManualCapitulo>[
         ],
       ),
       ManualSeccion(
-        titulo: 'Registro de asistencia (entradas)',
-        imagen: 'registro_asistencia.png',
-        puntos: [
-          'Busca al niño por nombre para registrar su ENTRADA.',
-          'Si es la primera vez que viene y no tiene ficha, usa "Es la primera vez que viene (visitante)".',
-          'Si el niño no tiene documento registrado, la app te deja continuar igual, con una advertencia — no es obligatorio para poder recibirlo.',
-          'No se puede duplicar una entrada: si el niño ya está presente, la app te avisa y no muestra el botón de registrar — la salida se hace desde "Menores Recibidos".',
-        ],
-      ),
-      ManualSeccion(
-        titulo: 'Menores Recibidos (salidas)',
+        titulo: 'Menores Registrados (quién está presente)',
         imagen: 'menores_recibidos.png',
         puntos: [
           'Vista en vivo de quién está presente ahora mismo, agrupada por grupo de edad (José, David, Judá, Daniel, Santiago).',
+          'El botón "+" abre el registro de una nueva ENTRADA (ver siguiente sección) — ya no es una opción aparte en el menú.',
           'Desliza la tarjeta de un niño para registrar su SALIDA, eligiendo quién lo retira de la lista de acudientes vinculados.',
           'Si la persona que retira tiene una restricción de seguridad, la app te lo advierte en rojo antes de confirmar.',
+        ],
+      ),
+      ManualSeccion(
+        titulo: 'Registrar una entrada',
+        imagen: 'registro_asistencia.png',
+        puntos: [
+          'Se abre con el botón "+" de "Menores Registrados".',
+          'Busca al niño por nombre para registrar su ENTRADA.',
+          'Si es la primera vez que viene y no tiene ficha, usa "Es la primera vez que viene (visitante)".',
+          'Si el niño no tiene documento registrado, la app te deja continuar igual, con una advertencia — no es obligatorio para poder recibirlo.',
+          'No se puede duplicar una entrada: si el niño ya está presente, la app te avisa y no muestra el botón de registrar — la salida se hace desde "Menores Registrados".',
         ],
       ),
       ManualSeccion(

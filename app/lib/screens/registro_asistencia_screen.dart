@@ -731,6 +731,14 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   Widget build(BuildContext context) {
     return AppShell(
       usuario: widget.usuario,
+      // 2026-08-24: ya no es un ítem de menú aparte — se llega acá con
+      // el botón "+" de "Menores Registrados" (`Navigator.push`, no
+      // desde el menú). Se deja este texto como título de la barra
+      // superior porque describe mejor esta pantalla puntual que
+      // "Menores Registrados"; el único efecto secundario es que en
+      // pantallas anchas el menú lateral no resalta ningún ítem
+      // mientras se está aquí (no hay ninguno con esta etiqueta) — un
+      // detalle cosmético menor, sin ningún impacto funcional.
       seccionActiva: 'Registro de asistencia',
       body: Center(
         child: SingleChildScrollView(
@@ -1042,7 +1050,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
                 Expanded(
                   child: Text(
                     'Este niño ya tiene una entrada registrada hoy. Para darle '
-                    'salida, ve a "Menores Recibidos" y desliza su tarjeta.',
+                    'salida, ve a "Menores Registrados" y desliza su tarjeta.',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),

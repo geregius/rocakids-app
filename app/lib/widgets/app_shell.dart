@@ -17,7 +17,6 @@ import '../screens/modo_emergencia_screen.dart';
 import '../screens/modulo_en_construccion_screen.dart';
 import '../screens/ninos_presentes_screen.dart';
 import '../screens/registrar_familia_screen.dart';
-import '../screens/registro_asistencia_screen.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 
@@ -93,17 +92,17 @@ class AppShell extends StatelessWidget {
         label: 'Mis hijos',
         onTap: () => _irA(context, AcudientePortalScreen(usuario: usuario)),
       ),
-      if (esServidor)
-        _ItemMenu(
-          icon: Icons.assignment_turned_in,
-          label: 'Registro de asistencia',
-          onTap: () =>
-              _irA(context, RegistroAsistenciaScreen(usuario: usuario)),
-        ),
+      // "Registro de asistencia" (2026-08-24, pedido de Rafael) dejó de
+      // ser un ítem de menú aparte — se une acá, dentro de "Menores
+      // Registrados": el botón "+" de esa pantalla abre exactamente la
+      // misma pantalla (`RegistroAsistenciaScreen`, sin ningún cambio),
+      // solo que apilada sobre esta con `Navigator.push` en vez de desde
+      // el menú. Cero impacto de rendimiento — es la misma pantalla, con
+      // el mismo costo, solo que ya no aparece dos veces en el menú.
       if (esServidor)
         _ItemMenu(
           icon: Icons.fact_check,
-          label: 'Menores Recibidos',
+          label: 'Menores Registrados',
           onTap: () => _irA(context, NinosPresentesScreen(usuario: usuario)),
         ),
       if (esServidor)
