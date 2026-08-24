@@ -12,7 +12,13 @@ import '../widgets/foto_avatar.dart';
 import 'nino_detalle_sheet.dart';
 import 'registro_asistencia_screen.dart';
 
-const _sinGrupo = 'Sin grupo';
+// "Sin grupo" hasta 2026-08-24. En la práctica SIEMPRE significa
+// "mayor de 11 años" (`grupoParaEdad()` devuelve null a partir de esa
+// edad) — nunca "menor de 2": el selector de fecha de nacimiento no
+// deja registrar a nadie por debajo del mínimo (`edadMinimaRegistro`),
+// así que un niño activo en el sistema no puede tener menos de 2 años.
+// Pedido de Rafael: renombrarlo para que sea explícito.
+const _sinGrupo = 'Mayores de 11 años';
 
 /// Sección "Menores Registrados" (nombre hasta 2026-08-24: "Menores
 /// Recibidos" — Rafael pidió unirla con "Registro de asistencia", que
@@ -345,6 +351,11 @@ class _GrupoSection extends StatelessWidget {
             title: Text(
               rangoEdad != null
                   ? 'Grupo $nombre · $rangoEdad (${registros.length})'
+                  // "Mayores de 11 años" ya se lee bien solo — con el
+                  // prefijo "Grupo" delante quedaría raro ("Grupo
+                  // Mayores de 11 años").
+                  : nombre == _sinGrupo
+                  ? '$nombre (${registros.length})'
                   : 'Grupo $nombre (${registros.length})',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: AppColors.azulMarino,

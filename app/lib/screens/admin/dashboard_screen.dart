@@ -892,6 +892,15 @@ class _BloqueHoyState extends State<_BloqueHoy> {
         final yaSalieron = entradasHoy.length - presentes.length;
         final visitantes = entradasHoy.where((r) => r.esVisitante).length;
         final sinDocumento = entradasHoy.where(_sinDocumento).length;
+        // `grupoEdad` queda vacío al registrar la Entrada de un niño (no
+        // visitante — un visitante siempre elige uno de los 5 grupos)
+        // cuya edad ya no cae en ninguno (`grupoParaEdad()` devuelve
+        // null a partir de 11 años; menos de 2 no puede pasar, el
+        // selector de fecha de nacimiento no deja registrar a nadie por
+        // debajo del mínimo). 2026-08-24, pedido de Rafael.
+        final mayoresDeOnce = entradasHoy
+            .where((r) => !r.esVisitante && r.grupoEdad.isEmpty)
+            .length;
 
         final porGrupo = <String, int>{for (final g in gruposEdad) g: 0};
         final porServicio = <String, int>{
@@ -937,6 +946,11 @@ class _BloqueHoyState extends State<_BloqueHoy> {
                   valor: '$sinDocumento',
                   icono: Icons.badge_outlined,
                   destacar: sinDocumento > 0,
+                ),
+                _StatTile(
+                  etiqueta: 'Mayores de 11 años',
+                  valor: '$mayoresDeOnce',
+                  icono: Icons.groups,
                 ),
               ],
             ),

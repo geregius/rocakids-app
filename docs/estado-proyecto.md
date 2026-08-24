@@ -370,6 +370,20 @@ Mismo pedido que la sección 5.11, mismo hilo: Rafael pidió también un botón 
 
 ---
 
+## 5.13. "Mayores de 11 años" — Dashboard y "Menores Registrados" (2026-08-24)
+
+Pedido de Rafael: una tarjeta en el bloque "Hoy" del Dashboard con cuántos niños **mayores de 11 años** se registraron ese día, y en "Menores Registrados" usar esa misma etiqueta en vez de "Sin grupo".
+
+**Por qué "Sin grupo" en la práctica SIEMPRE significa "mayor de 11" (nunca "menor de 2")**: `grupoParaEdad()` (`models/nino.dart`) devuelve `null` fuera del rango 2-10 años, y `registro_asistencia_screen.dart` guarda `grupoEdad: grupoParaEdad(edad) ?? ''` al registrar la Entrada — pero el selector de fecha de nacimiento (`selector_fecha_nacimiento.dart`) **no deja elegir una fecha que dé menos de `edadMinimaRegistro` (2) años** al registrar a un niño nuevo, así que ningún niño activo en el sistema puede tener menos de 2 años. Con el tiempo, un niño registrado a los 10 sigue envejeciendo (la edad se calcula en vivo, nunca se guarda fija) hasta salir del rango — de ahí que aparezcan "mayores de 11" en el día a día, sin que la app se lo impida (la "graduación" formal, sección 5.x de arriba, es un ajuste manual aparte). Los niños VISITANTES nunca caen acá: su formulario obliga a elegir uno de los 5 grupos, no hay opción "sin grupo" para ellos.
+
+**Cambios**:
+- Dashboard, bloque "Hoy": nueva tarjeta "Mayores de 11 años" — cuenta las Entradas de hoy de niños (no visitantes) con `grupoEdad` vacío. Mismo ícono ya usado (`Icons.groups`, el de "Recibidos hoy" en el mismo bloque) — sin ícono nuevo, sin riesgo de tree-shaking.
+- "Menores Registrados" (`ninos_presentes_screen.dart`): la constante `_sinGrupo` pasó de `'Sin grupo'` a `'Mayores de 11 años'` — afecta el agrupamiento y el título de la tarjeta (se ajustó para no decir "Grupo Mayores de 11 años", que sonaba raro).
+
+Cero cambios en Firestore/reglas — ambos leen datos que ya se guardaban.
+
+---
+
 ## 6. Pantallas construidas (`lib/screens/`)
 
 ### `widgets/app_shell.dart` — estructura de navegación (2026-08-14)
