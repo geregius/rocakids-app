@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/nino.dart';
+import '../models/registro.dart';
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
@@ -16,23 +17,27 @@ const _mayoresDeOnce = 'Mayores de 11 años';
 /// Sección "Cumpleaños niños" (2026-08-18, renombrada 2026-08-19 al
 /// agregar la versión de servidores) — para todos los roles principales
 /// (`usuario.rol.esRolDeServidor`, mismo conjunto que "Registro de
-/// asistencia"): niños que cumplen años hoy o cumplieron en los últimos
-/// 7 días (`AuthService.obtenerNinosQueCumplieronEstaSemana`), para
-/// poder felicitarlos.
+/// asistencia"): de los niños que cumplen años hoy o cumplieron en los
+/// últimos 7 días (`AuthService.obtenerNinosQueCumplieronEstaSemana`),
+/// muestra solo los que están PRESENTES HOY — para que el servidor sepa
+/// a quién felicitar mientras está ahí, no una lista genérica de
+/// cumpleaños de niños que ni siquiera vinieron.
 ///
-/// **2026-08-24 (pedido de Rafael):** dos cambios, SOLO en esta
-/// pantalla — no se tocó `AuthService.obtenerNinosQueCumplieronEstaSemana`
-/// (que ya filtraba `estadoRegistro == 'Activo'`, sigue igual) ni,
-/// mucho menos, la Cloud Function `correoCumpleanosDiario`
-/// (`app/functions/index.js`), que tiene su propia consulta en Node.js
-/// completamente aparte y ni siquiera pasa por este código Dart — el
-/// correo automático de cumpleaños sigue exactamente igual:
-/// 1. Se filtra a solo niños "registrados" en el sentido de que ya
-///    asistieron alguna vez (`Nino.totalEntradas > 0`) — un niño dado de
-///    alta pero que nunca vino no aparece acá.
-/// 2. Se agrupan por grupo de edad (José/David/Judá/Daniel/Santiago),
-///    igual que "Menores Registrados", con los "mayores de 11" en su
-///    propio grupo al final.
+/// **2026-08-24 (pedido de Rafael, dos vueltas el mismo día):**
+/// - No se tocó `AuthService.obtenerNinosQueCumplieronEstaSemana` (sigue
+///   igual) ni, mucho menos, la Cloud Function `correoCumpleanosDiario`
+///   (`app/functions/index.js`), que tiene su propia consulta en
+///   Node.js completamente aparte — el correo automático sigue exacto.
+/// - **Primera vuelta:** se filtró a niños con `totalEntradas > 0` (ya
+///   asistieron alguna vez) y se agruparon por grupo de edad.
+/// - **Segunda vuelta, reemplaza el filtro anterior:** Rafael aclaró
+///   que el objetivo real es mostrar a quién felicitar EN EL MOMENTO,
+///   así que el filtro pasó de "alguna vez asistió" a "está presente
+///   HOY" — mismo criterio de presencia que "Menores Registrados"
+///   (`calcularPresentes()`, `models/registro.dart`), vía
+///   `AuthService.registrosDeHoy()`. Como consecuencia, `totalEntradas`
+///   ya no hace falta revisarlo aparte: estar presente hoy ya implica
+///   tener al menos una Entrada.
 class CumpleanosNinosScreen extends StatefulWidget {
   final UsuarioApp usuario;
 
@@ -44,12 +49,12 @@ class CumpleanosNinosScreen extends StatefulWidget {
 
 class _CumpleanosNinosScreenState extends State<CumpleanosNinosScreen> {
   final _authService = AuthService();
-  late Future<List<Nino>> _futuro;
+  late Future<List<Nino>> _futuroCumpleaneros;
 
   @override
   void initState() {
     super.initState();
-    _futuro = _authService.obtenerNinosQueCumplieronEstaSemana();
+    _futuroCumpleaneros = _authService.obtenerNinosQueCumplieronEstaSemana();
   }
 
   int _comparar(Nino a, Nino b) {
@@ -79,35 +84,68 @@ class _CumpleanosNinosScreenState extends State<CumpleanosNinosScreen> {
       usuario: widget.usuario,
       seccionActiva: 'Cumpleaños niños',
       body: FutureBuilder<List<Nino>>(
-        future: _futuro,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+        future: _futuroCumpleaneros,
+        builder: (context, snapshotCumpleaneros) {
+          if (snapshotCumpleaneros.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+          if (snapshotCumpleaneros.hasError) {
+            return Center(child: Text('Error: ${snapshotCumpleaneros.error}'));
           }
-          // Solo niños que ya asistieron al menos una vez — pedido de
-          // Rafael, para no felicitar/mostrar a alguien que se dio de
-          // alta pero nunca vino.
-          final ninos = [...?snapshot.data].where((n) => n.totalEntradas > 0).toList();
-
-          if (ninos.isEmpty) {
+          final cumpleaneros = snapshotCumpleaneros.data ?? [];
+          if (cumpleaneros.isEmpty) {
             return const Center(
-              child: Text('Ningún niño registrado ha cumplido años en la última semana.'),
+              child: Text('Ningún niño ha cumplido años en la última semana.'),
             );
           }
 
-          final grupos = _agruparPorEdad(ninos);
-          final ordenados = [...gruposEdad, if (grupos.containsKey(_mayoresDeOnce)) _mayoresDeOnce];
+          // Reactivo (StreamBuilder, no Future) porque "quién está
+          // presente" cambia en vivo durante el día — si un niño de
+          // cumpleaños entra o sale, la lista se actualiza sola.
+          return StreamBuilder<List<Registro>>(
+            stream: _authService.registrosDeHoy(),
+            builder: (context, snapshotRegistros) {
+              if (snapshotRegistros.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshotRegistros.hasError) {
+                return Center(child: Text('Error: ${snapshotRegistros.error}'));
+              }
+              final presentes = calcularPresentes(snapshotRegistros.data ?? []);
+              final presentesPorNino = {
+                for (final r in presentes)
+                  if (!r.esVisitante) r.fkIdNino: r,
+              };
+              final ninos = cumpleaneros
+                  .where((n) => presentesPorNino.containsKey(n.documentoIdentificacion))
+                  .toList();
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              for (final grupo in ordenados)
-                if (grupos[grupo] != null)
-                  _GrupoCumpleanosSection(nombre: grupo, ninos: grupos[grupo]!, usuario: widget.usuario),
-            ],
+              if (ninos.isEmpty) {
+                return const Center(
+                  child: Text('Ningún niño presente hoy está de cumpleaños.'),
+                );
+              }
+
+              final grupos = _agruparPorEdad(ninos);
+              final ordenados = [
+                ...gruposEdad,
+                if (grupos.containsKey(_mayoresDeOnce)) _mayoresDeOnce,
+              ];
+
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  for (final grupo in ordenados)
+                    if (grupos[grupo] != null)
+                      _GrupoCumpleanosSection(
+                        nombre: grupo,
+                        ninos: grupos[grupo]!,
+                        usuario: widget.usuario,
+                        presentesPorNino: presentesPorNino,
+                      ),
+                ],
+              );
+            },
           );
         },
       ),
@@ -119,11 +157,13 @@ class _GrupoCumpleanosSection extends StatelessWidget {
   final String nombre;
   final List<Nino> ninos;
   final UsuarioApp usuario;
+  final Map<String, Registro> presentesPorNino;
 
   const _GrupoCumpleanosSection({
     required this.nombre,
     required this.ninos,
     required this.usuario,
+    required this.presentesPorNino,
   });
 
   @override
@@ -152,7 +192,13 @@ class _GrupoCumpleanosSection extends StatelessWidget {
             ),
             children: [
               const Divider(height: 1),
-              for (final n in ninos) _CumpleanosNinoTile(nino: n, usuario: usuario),
+              for (final n in ninos)
+                _CumpleanosNinoTile(
+                  nino: n,
+                  usuario: usuario,
+                  acudienteQueLoTrajoHoyId: presentesPorNino[n.documentoIdentificacion]
+                      ?.fkIdAcudienteContacto,
+                ),
             ],
           ),
         ),
@@ -164,8 +210,13 @@ class _GrupoCumpleanosSection extends StatelessWidget {
 class _CumpleanosNinoTile extends StatelessWidget {
   final Nino nino;
   final UsuarioApp usuario;
+  final String? acudienteQueLoTrajoHoyId;
 
-  const _CumpleanosNinoTile({required this.nino, required this.usuario});
+  const _CumpleanosNinoTile({
+    required this.nino,
+    required this.usuario,
+    required this.acudienteQueLoTrajoHoyId,
+  });
 
   String _etiquetaFecha() {
     final dias = diasDesdeCumpleanos(nino.fechaNacimiento);
@@ -184,7 +235,11 @@ class _CumpleanosNinoTile extends StatelessWidget {
       onTap: () => showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
-        builder: (_) => NinoDetalleSheet(nino: nino, usuario: usuario),
+        builder: (_) => NinoDetalleSheet(
+          nino: nino,
+          usuario: usuario,
+          acudienteQueLoTrajoHoyId: acudienteQueLoTrajoHoyId,
+        ),
       ),
       leading: CircleAvatar(
         radius: 24,
