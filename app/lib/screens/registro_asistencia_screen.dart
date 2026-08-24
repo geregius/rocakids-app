@@ -969,6 +969,29 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
             ),
           ),
         ],
+        if (!nino.autorizoFotoFlag) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.rojo.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.no_photography, color: AppColors.rojo),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'NO autoriza uso de imagen — no tomarle fotos ni videos.',
+                    style: TextStyle(color: AppColors.rojo, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         if (nino.identificacionMenor.isEmpty) ...[
           const SizedBox(height: 16),
           _avisoSinDocumento(),

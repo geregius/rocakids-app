@@ -336,6 +336,18 @@ Pedido de Rafael, sobre "Totales del sistema": junto a "Servidores activos" (cu�
 
 ---
 
+## 5.10. Advertencia de "NO autoriza uso de imagen" (2026-08-24)
+
+Pedido de Rafael: una advertencia visible cuando un niño NO tiene autorización de uso de imagen (`Nino.autorizoFotoFlag == false`, ya existía como campo — se llena en el registro y se edita desde "Editar información"; antes solo se veía como texto plano "Sí/No" en la ficha). No es un campo nuevo, solo se le agregó una señal visual en 3 lugares donde un servidor puede terminar tomándole una foto sin darse cuenta:
+
+- **"Menores Registrados"** (pedido explícito, el lugar principal): ícono `Icons.no_photography` en rojo junto a la tarjeta del niño en la lista de presentes — mismo patrón que la alerta médica y "personas NO autorizadas" (`_NinoPresenteTile`). Los niños VISITANTES nunca lo muestran — no tienen ficha (`Nino`), así que no hay ningún dato de autorización que consultar para ellos.
+- **"Registro de asistencia"**, al seleccionar el niño para registrar su entrada — mismo aviso en rojo que la alerta médica, mismo lugar en la pantalla.
+- **Ficha del niño** (`nino_detalle_sheet.dart`, se abre desde "Mis hijos", "Menores Registrados", "Acudientes y Niños"): se mantiene la fila de texto "Autoriza uso de imagen: Sí/No" de siempre, y además aparece el mismo aviso en rojo cuando es "No".
+
+Cero cambios en Firestore/reglas — el campo y su edición ya existían, esto es solo la señal visual que faltaba.
+
+---
+
 ## 6. Pantallas construidas (`lib/screens/`)
 
 ### `widgets/app_shell.dart` — estructura de navegación (2026-08-14)

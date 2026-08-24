@@ -406,6 +406,11 @@ class _NinoPresenteTile extends StatelessWidget {
     final tieneAlertaMedica =
         registro.esVisitante ? registro.alertaMedicaVisitante : (nino?.alertaMedicaFlag ?? false);
     final tieneNoAutorizados = nino?.tieneNoAutorizados ?? false;
+    // Los visitantes no tienen ficha (`Nino`), así que no hay ningún
+    // registro de autorización de imagen que consultar para ellos — la
+    // advertencia solo aplica a niños con ficha completa (2026-08-24,
+    // pedido de Rafael).
+    final noAutorizaImagen = nino != null && !nino.autorizoFotoFlag;
     final fotoUrl = nino?.fotoUrl ?? '';
     final documento = registro.esVisitante
         ? registro.documentoNinoVisitante
@@ -433,28 +438,39 @@ class _NinoPresenteTile extends StatelessWidget {
         title: Text(nombre),
         subtitle: Text('$documentoTexto · Manilla ${registro.numeroManilla}'),
         trailing:
-            (diasDeCumpleanos == null && !tieneAlertaMedica && !tieneNoAutorizados)
+            (diasDeCumpleanos == null &&
+                !tieneAlertaMedica &&
+                !tieneNoAutorizados &&
+                !noAutorizaImagen)
             ? null
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (diasDeCumpleanos != null) ...[
                     _BadgeCumpleanos(dias: diasDeCumpleanos),
-                    if (tieneAlertaMedica || tieneNoAutorizados) const SizedBox(width: 6),
+                    if (tieneAlertaMedica || tieneNoAutorizados || noAutorizaImagen)
+                      const SizedBox(width: 6),
                   ],
                   if (tieneAlertaMedica) ...[
                     const Tooltip(
                       message: 'Tiene condición médica/alergia registrada',
                       child: Icon(Icons.medical_information, color: AppColors.rojo),
                     ),
-                    if (tieneNoAutorizados) const SizedBox(width: 6),
+                    if (tieneNoAutorizados || noAutorizaImagen) const SizedBox(width: 6),
                   ],
-                  if (tieneNoAutorizados)
+                  if (tieneNoAutorizados) ...[
                     const Tooltip(
                       message:
                           'Tiene personas NO autorizadas registradas — revisa su '
                           'ficha antes de dar salida',
                       child: Icon(Icons.person_off, color: AppColors.rojo),
+                    ),
+                    if (noAutorizaImagen) const SizedBox(width: 6),
+                  ],
+                  if (noAutorizaImagen)
+                    const Tooltip(
+                      message: 'NO autoriza uso de imagen — no tomarle fotos ni videos',
+                      child: Icon(Icons.no_photography, color: AppColors.rojo),
                     ),
                 ],
               ),

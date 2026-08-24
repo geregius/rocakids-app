@@ -365,6 +365,29 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
             _FilaDato('Género', nino.genero),
             _FilaDato('Estado', nino.estadoRegistro),
             _FilaDato('Autoriza uso de imagen', nino.autorizoFotoFlag ? 'Sí' : 'No'),
+            if (!nino.autorizoFotoFlag) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.rojo.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.no_photography, color: AppColors.rojo),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'NO autoriza uso de imagen — no tomarle fotos ni videos.',
+                        style: TextStyle(color: AppColors.rojo, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (nino.alertaMedicaFlag) ...[
               const SizedBox(height: 12),
               Container(
