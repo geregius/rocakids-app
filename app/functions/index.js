@@ -223,6 +223,17 @@ function hoyEnBogota() {
   return {mes: bogota.getUTCMonth(), dia: bogota.getUTCDate()};
 }
 
+/**
+ * "MM-DD" de hoy en hora de Bogotá — mismo formato exacto que
+ * `mesDiaDe()` en el lado Dart (`lib/models/nino.dart`), que es lo que
+ * arma el campo `mesDiaNacimiento` guardado en cada `ninos/{id}` al
+ * registrar/editar su fecha de nacimiento.
+ */
+function mesDiaHoyBogota() {
+  const {mes, dia} = hoyEnBogota();
+  return `${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
 function plantillaCorreoCumpleanos(nombreNino, versiculo) {
   const nombreNinoSeguro = escapeHtml(nombreNino);
   return `
@@ -293,14 +304,28 @@ async function correosDeAcudientesDe(ninoId) {
 }
 
 async function enviarCorreosCumpleanosDeHoy() {
-  const {mes, dia} = hoyEnBogota();
-  const snap = await db.collection('ninos').where('estadoRegistro', '==', 'Activo').get();
-  const cumpleaneros = snap.docs.filter((doc) => {
-    const fecha = doc.data().fechaNacimiento;
-    if (!fecha) return false;
-    const f = fecha.toDate();
-    return f.getUTCMonth() === mes && f.getUTCDate() === dia;
-  });
+  // 2026-08-24: corrige un bug de raíz reportado por Rafael — el correo
+  // llegaba un día TARDE (un niño que cumplió ayer en hora Bogotá
+  // recibía el correo hoy). Antes esta función releía
+  // `fechaNacimiento.toDate().getUTCMonth()/getUTCDate()` acá mismo, un
+  // cálculo DISTINTO del que usa `mesDiaDe()` en Dart para guardar
+  // `mesDiaNacimiento` al registrar/editar al niño — cualquier
+  // corrimiento de zona horaria al convertir el `Timestamp` original
+  // (ej. datos migrados desde el sistema anterior) podía desincronizar
+  // los dos cálculos. La pantalla "Cumpleaños niños" de la app SIEMPRE
+  // usó `mesDiaNacimiento` (`AuthService.obtenerNinosQueCumplieronEstaSemana()`)
+  // y mostraba la fecha correcta — usar ese mismo campo acá elimina
+  // cualquier posibilidad de que las dos partes de la app calculen un
+  // día distinto para la misma fecha de nacimiento. Como beneficio
+  // extra, ahora el filtro lo hace Firestore (`where`) en vez de traer
+  // TODOS los niños "Activo" para filtrar en el cliente.
+  const mesDiaHoy = mesDiaHoyBogota();
+  const snap = await db
+      .collection('ninos')
+      .where('estadoRegistro', '==', 'Activo')
+      .where('mesDiaNacimiento', '==', mesDiaHoy)
+      .get();
+  const cumpleaneros = snap.docs;
 
   if (cumpleaneros.length === 0) {
     console.log('Correo de cumpleaños: nadie cumple años hoy.');
