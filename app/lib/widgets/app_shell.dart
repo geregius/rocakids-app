@@ -31,7 +31,7 @@ const _anchoMenuFijo = 800.0;
 /// pantalla se envuelve en este shell y le pasa su propio contenido
 /// como [body], más el nombre de su sección en [seccionActiva] (para
 /// que quede resaltada en el menú y como título de la barra superior).
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   final UsuarioApp usuario;
   final String seccionActiva;
   final Widget body;
@@ -44,6 +44,25 @@ class AppShell extends StatelessWidget {
     required this.body,
     this.floatingActionButton,
   });
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  // Se incrementa cada vez que se toca "Actualizar" en la barra superior
+  // (2026-08-24, pedido de Rafael: varias fallas de conexión dejaban una
+  // pantalla "trabada", y la única forma de recuperarla era salir a otro
+  // ítem del menú y volver — eso destruye y recrea desde cero el widget
+  // de esa pantalla, lo que reinicia cualquier consulta/stream). Envolver
+  // `body` en un `KeyedSubtree` con esta cifra como key (ver
+  // `_buildNormal`) logra EXACTAMENTE lo mismo con un botón, sin navegar
+  // a ningún lado. Mismo motivo por el que, igual que saliendo y
+  // volviendo, un formulario a medio llenar se perdería con este botón
+  // — no es un caso nuevo.
+  int _refreshTick = 0;
+
+  void _refrescar() => setState(() => _refreshTick++);
 
   void _irA(BuildContext context, Widget pantalla) {
     Navigator.of(
@@ -72,6 +91,7 @@ class AppShell extends StatelessWidget {
   }
 
   List<_ItemMenu> _items(BuildContext context) {
+    final usuario = widget.usuario;
     final esAdmin = usuario.rol == RolUsuario.administrador;
     final esServidor = usuario.rol.esRolDeServidor;
 
@@ -231,6 +251,7 @@ class AppShell extends StatelessWidget {
     // widget que envuelve TODAS las pantallas autenticadas, para que
     // ninguna pantalla existente tenga que acordarse de revisar esto
     // por su cuenta.
+    final usuario = widget.usuario;
     return StreamBuilder<bool>(
       stream: AuthService().emergenciaActivaStream(),
       builder: (context, snapshot) {
@@ -281,6 +302,21 @@ class AppShell extends StatelessWidget {
   }
 
   Widget _buildNormal(BuildContext context) {
+    final usuario = widget.usuario;
+    final seccionActiva = widget.seccionActiva;
+    final floatingActionButton = widget.floatingActionButton;
+    // `KeyedSubtree` con una key que cambia en cada toque de "Actualizar"
+    // fuerza a Flutter a destruir y reconstruir todo el contenido de la
+    // pantalla desde cero — ver el porqué en el docstring de
+    // `_refreshTick`.
+    final body = KeyedSubtree(key: ValueKey(_refreshTick), child: widget.body);
+    final accionActualizar = [
+      IconButton(
+        onPressed: _refrescar,
+        icon: const Icon(Icons.refresh),
+        tooltip: 'Actualizar esta pantalla',
+      ),
+    ];
     final items = _items(context);
     final esAncho = MediaQuery.of(context).size.width >= _anchoMenuFijo;
 
@@ -298,7 +334,7 @@ class AppShell extends StatelessWidget {
             const VerticalDivider(width: 1),
             Expanded(
               child: Scaffold(
-                appBar: AppBar(title: Text(seccionActiva)),
+                appBar: AppBar(title: Text(seccionActiva), actions: accionActualizar),
                 body: body,
                 floatingActionButton: floatingActionButton,
               ),
@@ -309,7 +345,7 @@ class AppShell extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(seccionActiva)),
+      appBar: AppBar(title: Text(seccionActiva), actions: accionActualizar),
       drawer: Drawer(
         child: _Menu(
           usuario: usuario,
