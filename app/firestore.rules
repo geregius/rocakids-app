@@ -96,11 +96,14 @@ service cloud.firestore {
         && esTextoNoVacioAcotado(request.resource.data.get('apellido', ''), 100)
         && request.resource.data.get('activo', true) == true;
 
-      // Un admin puede editar cualquier cosa. El propio dueño del
-      // perfil puede completarlo/editarlo (documento, teléfono, EPS,
-      // grupo sanguíneo, contacto de emergencia, foto), pero NUNCA
-      // puede cambiar su propio rol, estado activo o correo por esta vía.
-      allow update: if esAdmin() || (
+      // Un admin, o columna/líder de ministerio (`puedeVerInfoLiderazgo()`,
+      // 2026-08-24, "Gestión de Servidores" — control total, mismo
+      // criterio que `puedeGestionarServidores` en la app), puede editar
+      // cualquier cosa. El propio dueño del perfil puede completarlo/
+      // editarlo (documento, teléfono, EPS, grupo sanguíneo, contacto de
+      // emergencia, foto), pero NUNCA puede cambiar su propio rol, estado
+      // activo o correo por esta vía.
+      allow update: if esAdmin() || puedeVerInfoLiderazgo() || (
         request.auth != null && request.auth.uid == uid &&
         request.resource.data.rol == resource.data.rol &&
         request.resource.data.activo == resource.data.activo &&
@@ -109,7 +112,7 @@ service cloud.firestore {
           resource.data.get('fechaVerificacionAntecedentes', null)
       );
 
-      allow delete: if esAdmin();
+      allow delete: if esAdmin() || puedeVerInfoLiderazgo();
     }
 
     // Reserva de unicidad de documento de acudiente: doc ID = numeroDocumento.

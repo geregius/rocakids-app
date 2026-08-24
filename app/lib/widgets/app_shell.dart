@@ -147,7 +147,12 @@ class AppShell extends StatelessWidget {
           onTap: () =>
               _irA(context, AdminAcudientesNinosScreen(usuario: usuario)),
         ),
-      if (esAdmin)
+      // Solo administrador, columna y líder de ministerio (2026-08-24,
+      // pedido explícito de Rafael, mismo criterio que "Acudientes y
+      // Niños"/"Modo emergencia") — a diferencia de esas dos, acá el
+      // control es total (cambiar rol, activar/desactivar, eliminar),
+      // no solo lectura. Ver `puedeGestionarServidores`.
+      if (usuario.rol.puedeGestionarServidores)
         _ItemMenu(
           icon: Icons.people,
           label: 'Gestión de Servidores',

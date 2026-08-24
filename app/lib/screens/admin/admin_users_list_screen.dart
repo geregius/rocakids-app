@@ -14,6 +14,11 @@ class AdminUsersListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authService = AuthService();
+    // Quien abre esta pantalla ya tiene `puedeGestionarServidores` (se
+    // exige en el menú de `AppShell`), así que acá siempre es true — se
+    // recalcula igual, en vez de asumirlo, para no depender de ese
+    // único punto de entrada.
+    final puedeGestionar = usuario.rol.puedeGestionarServidores;
 
     return AppShell(
       usuario: usuario,
@@ -45,11 +50,11 @@ class AdminUsersListScreen extends StatelessWidget {
             children: [
               if (pendientes.isNotEmpty) ...[
                 _Seccion(titulo: 'Pendientes de aprobación (${pendientes.length})'),
-                ...pendientes.map((u) => _UsuarioTile(usuario: u)),
+                ...pendientes.map((u) => _UsuarioTile(usuario: u, puedeGestionar: puedeGestionar)),
                 const Divider(height: 24),
               ],
               _Seccion(titulo: 'Todos los usuarios (${resto.length})'),
-              ...resto.map((u) => _UsuarioTile(usuario: u)),
+              ...resto.map((u) => _UsuarioTile(usuario: u, puedeGestionar: puedeGestionar)),
             ],
           );
         },
@@ -76,7 +81,8 @@ class _Seccion extends StatelessWidget {
 
 class _UsuarioTile extends StatelessWidget {
   final UsuarioApp usuario;
-  const _UsuarioTile({required this.usuario});
+  final bool puedeGestionar;
+  const _UsuarioTile({required this.usuario, required this.puedeGestionar});
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +106,7 @@ class _UsuarioTile extends StatelessWidget {
         showModalBottomSheet(
           context: context,
           isScrollControlled: true,
-          builder: (_) => UserEditSheet(usuario: usuario, esAdmin: true),
+          builder: (_) => UserEditSheet(usuario: usuario, esAdmin: puedeGestionar),
         );
       },
     );

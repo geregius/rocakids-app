@@ -126,6 +126,18 @@ enum RolUsuario {
   /// puede OPERAR salidas durante una emergencia" — eso es cualquier
   /// rol de servidor, ver [esRolDeServidor] y `AppShell`.
   bool get puedeActivarModoEmergencia => puedeVerAcudientesYNinos;
+
+  /// Quién puede ver y administrar "Gestión de Servidores" — cambiar
+  /// rol (incluido asignar "Administrador"), activar/desactivar cuenta,
+  /// registrar verificación de antecedentes y eliminar servidores
+  /// (2026-08-24, pedido explícito de Rafael: admin, columna y líder de
+  /// ministerio quedan con el mismo control total que un administrador
+  /// en esta pantalla; líder de escuela de siervos NO). A diferencia de
+  /// [puedeVerAcudientesYNinos] y [puedeVerDashboard], que solo acotan
+  /// LECTURA, este también controla ESCRITURA — debe quedar
+  /// sincronizado con `allow update, delete` de `usuarios/{uid}` en
+  /// firestore.rules.
+  bool get puedeGestionarServidores => puedeVerAcudientesYNinos;
 }
 
 const gruposSanguineos = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
