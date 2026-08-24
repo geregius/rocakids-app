@@ -73,13 +73,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
   Future<void> _elegirFoto() async {
     try {
-      final archivo = await elegirFotoConCamaraOGaleria(context);
-      if (archivo == null) return;
+      final foto = await elegirFotoConCamaraOGaleria(context);
+      if (foto == null) return;
 
       setState(() => _subiendoFoto = true);
-      final bytes = await archivo.readAsBytes();
-      final extension = archivo.name.contains('.') ? archivo.name.split('.').last : 'jpg';
-      final url = await _authService.subirFotoServidor(bytes, extension);
+      final url = await _authService.subirFotoServidor(foto.bytes, foto.extension);
       setState(() => _fotoUrl = url);
     } catch (e) {
       if (mounted) {

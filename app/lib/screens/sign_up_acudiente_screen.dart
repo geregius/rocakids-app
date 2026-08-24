@@ -152,14 +152,11 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
   // ---- Acciones del paso 1 ----
 
   Future<void> _elegirFotoAcudiente() async {
-    final archivo = await elegirFotoConCamaraOGaleria(context);
-    if (archivo == null) return;
-    final bytes = await archivo.readAsBytes();
+    final foto = await elegirFotoConCamaraOGaleria(context);
+    if (foto == null) return;
     setState(() {
-      _fotoAcudienteBytes = bytes;
-      _fotoAcudienteExt = archivo.name.contains('.')
-          ? archivo.name.split('.').last
-          : 'jpg';
+      _fotoAcudienteBytes = foto.bytes;
+      _fotoAcudienteExt = foto.extension;
     });
   }
 
@@ -175,12 +172,11 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
   }
 
   Future<void> _elegirFotoMenor(_MenorFormData m) async {
-    final archivo = await elegirFotoConCamaraOGaleria(context);
-    if (archivo == null) return;
-    final bytes = await archivo.readAsBytes();
+    final foto = await elegirFotoConCamaraOGaleria(context);
+    if (foto == null) return;
     setState(() {
-      m.fotoBytes = bytes;
-      m.fotoExt = archivo.name.contains('.') ? archivo.name.split('.').last : 'jpg';
+      m.fotoBytes = foto.bytes;
+      m.fotoExt = foto.extension;
     });
   }
 

@@ -47,6 +47,7 @@ dependencies:
   printing: ^5.15.0
   firebase_app_check: ^0.4.6
   youtube_player_iframe: ^6.0.2
+  image: ^4.9.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

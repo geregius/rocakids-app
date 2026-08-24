@@ -504,12 +504,11 @@ class _SalidaEmergenciaSheetState extends State<_SalidaEmergenciaSheet> {
   }
 
   Future<void> _tomarFoto() async {
-    final archivo = await tomarFotoConCamara();
-    if (archivo == null) return;
-    final bytes = await archivo.readAsBytes();
+    final foto = await tomarFotoConCamara(context);
+    if (foto == null) return;
     setState(() {
-      _fotoBytes = bytes;
-      _fotoExt = archivo.name.contains('.') ? archivo.name.split('.').last : 'jpg';
+      _fotoBytes = foto.bytes;
+      _fotoExt = foto.extension;
     });
   }
 
