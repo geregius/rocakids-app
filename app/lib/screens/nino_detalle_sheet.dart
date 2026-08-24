@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../models/acudiente.dart';
 import '../models/gestion.dart';
 import '../models/nino.dart';
 import '../models/no_autorizado.dart';
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/llamar_telefono.dart';
 import '../widgets/confirmar_eliminar.dart';
 import '../widgets/gestion_dialog.dart';
 import 'editar_nino_sheet.dart';
@@ -18,8 +20,22 @@ import 'editar_nino_sheet.dart';
 class NinoDetalleSheet extends StatefulWidget {
   final Nino nino;
   final UsuarioApp usuario;
+  // Uid del acudiente que lo trajo HOY (`Registro.fkIdAcudienteContacto`
+  // de la entrada de hoy) — solo lo pasa `ninos_presentes_screen.dart`
+  // ("Menores Registrados", 2026-08-24, pedido de Rafael), que es la
+  // única pantalla con esa información a mano. Se usa para poner a esa
+  // persona primero en "Acudientes" y marcarla como "Lo trajo hoy".
+  // Queda vacío/null desde cualquier otro punto de entrada (Mis hijos,
+  // Acudientes y Niños, Cumpleaños, Dashboard) — ahí simplemente no hay
+  // ningún acudiente priorizado.
+  final String? acudienteQueLoTrajoHoyId;
 
-  const NinoDetalleSheet({super.key, required this.nino, required this.usuario});
+  const NinoDetalleSheet({
+    super.key,
+    required this.nino,
+    required this.usuario,
+    this.acudienteQueLoTrajoHoyId,
+  });
 
   @override
   State<NinoDetalleSheet> createState() => _NinoDetalleSheetState();
@@ -52,7 +68,17 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
   bool _esLiderazgo = false;
   bool _registrandoGestion = false;
 
+  // Acudientes vinculados a este niño, con teléfono para poder llamar
+  // directo (2026-08-24, pedido de Rafael). Solo se cargan/muestran para
+  // roles de servidor (`esRolDeServidor`) — un acudiente viendo a su
+  // propio hijo desde "Mis hijos" NO ve esta sección, para no exponerle
+  // el teléfono de otros acudientes vinculados al mismo niño sin que lo
+  // haya pedido.
+  List<Acudiente> _acudientes = [];
+  bool _cargandoAcudientes = true;
+
   bool get _esAdmin => widget.usuario.rol == RolUsuario.administrador;
+  bool get _muestraAcudientes => widget.usuario.rol.esRolDeServidor;
 
   @override
   void initState() {
@@ -61,6 +87,35 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
     _verificarPermiso();
     _cargarNoAutorizados();
     _cargarGestiones();
+    if (_muestraAcudientes) {
+      _cargarAcudientes();
+    } else {
+      _cargandoAcudientes = false;
+    }
+  }
+
+  Future<void> _cargarAcudientes() async {
+    try {
+      final lista = await AuthService().obtenerAcudientesDeNino(
+        _nino.documentoIdentificacion,
+      );
+      // El que lo trajo hoy va primero, para priorizarlo en la lista —
+      // pedido explícito de Rafael.
+      lista.sort((a, b) {
+        final aEsHoy = a.uid == widget.acudienteQueLoTrajoHoyId;
+        final bEsHoy = b.uid == widget.acudienteQueLoTrajoHoyId;
+        if (aEsHoy != bEsHoy) return aEsHoy ? -1 : 1;
+        return a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase());
+      });
+      if (mounted) {
+        setState(() {
+          _acudientes = lista;
+          _cargandoAcudientes = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _cargandoAcudientes = false);
+    }
   }
 
   Future<void> _verificarPermiso() async {
@@ -365,6 +420,13 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
             _FilaDato('Género', nino.genero),
             _FilaDato('Estado', nino.estadoRegistro),
             _FilaDato('Autoriza uso de imagen', nino.autorizoFotoFlag ? 'Sí' : 'No'),
+            if (_muestraAcudientes && !_cargandoAcudientes && _acudientes.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _SeccionAcudientes(
+                acudientes: _acudientes,
+                acudienteQueLoTrajoHoyId: widget.acudienteQueLoTrajoHoyId,
+              ),
+            ],
             if (!nino.autorizoFotoFlag) ...[
               const SizedBox(height: 12),
               Container(
@@ -544,6 +606,114 @@ class _SeccionGestiones extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Acudientes vinculados a este niño, con botón de llamar directo
+/// (2026-08-24, pedido de Rafael). El que lo trajo hoy (si se conoce)
+/// aparece primero y con una insignia — ver docstring de
+/// `NinoDetalleSheet.acudienteQueLoTrajoHoyId`.
+class _SeccionAcudientes extends StatelessWidget {
+  final List<Acudiente> acudientes;
+  final String? acudienteQueLoTrajoHoyId;
+
+  const _SeccionAcudientes({
+    required this.acudientes,
+    required this.acudienteQueLoTrajoHoyId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.superficie,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.azulClaro.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.family_restroom, color: AppColors.azulMarino),
+              const SizedBox(width: 8),
+              Text(
+                'Acudientes',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          for (final a in acudientes) ...[
+            const Divider(height: 16),
+            _FilaAcudiente(
+              acudiente: a,
+              loTrajoHoy: a.uid == acudienteQueLoTrajoHoyId,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FilaAcudiente extends StatelessWidget {
+  final Acudiente acudiente;
+  final bool loTrajoHoy;
+
+  const _FilaAcudiente({required this.acudiente, required this.loTrajoHoy});
+
+  @override
+  Widget build(BuildContext context) {
+    final telefono = acudiente.telefonoCelular;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      acudiente.nombreCompleto,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  if (loTrajoHoy) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.azulMarino,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        'Lo trajo hoy',
+                        style: TextStyle(color: Colors.white, fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              Text(
+                telefono.isNotEmpty ? telefono : 'Sin teléfono registrado',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+        if (telefono.isNotEmpty)
+          IconButton(
+            onPressed: () => llamarTelefono(context, telefono),
+            icon: const Icon(Icons.call, color: AppColors.azulMarino),
+            tooltip: 'Llamar a $telefono',
+          ),
+      ],
     );
   }
 }

@@ -6,6 +6,7 @@ import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/escaner_qr.dart';
+import '../utils/llamar_telefono.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/foto_avatar.dart';
 import 'nino_detalle_sheet.dart';
@@ -386,7 +387,11 @@ class _NinoPresenteTile extends StatelessWidget {
       showModalBottomSheet<bool>(
         context: context,
         isScrollControlled: true,
-        builder: (_) => NinoDetalleSheet(nino: nino, usuario: usuario),
+        builder: (_) => NinoDetalleSheet(
+          nino: nino,
+          usuario: usuario,
+          acudienteQueLoTrajoHoyId: registro.fkIdAcudienteContacto,
+        ),
       );
     } else if (registro.esVisitante) {
       showModalBottomSheet<void>(
@@ -596,7 +601,25 @@ class _VisitanteDetalleSheet extends StatelessWidget {
           _FilaDato('Entró a las', horaTexto),
           _FilaDato('Adulto que lo trajo', registro.nombreAcudienteContacto),
           if (registro.telefonoAcudienteVisitante.isNotEmpty)
-            _FilaDato('Teléfono', registro.telefonoAcudienteVisitante),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(
+                    width: 140,
+                    child: Text('Teléfono', style: TextStyle(fontSize: 12)),
+                  ),
+                  Expanded(child: Text(registro.telefonoAcudienteVisitante)),
+                  IconButton(
+                    onPressed: () => llamarTelefono(context, registro.telefonoAcudienteVisitante),
+                    icon: const Icon(Icons.call, color: AppColors.azulMarino),
+                    tooltip: 'Llamar a ${registro.telefonoAcudienteVisitante}',
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+            ),
           if (registro.alertaMedicaVisitante) ...[
             const SizedBox(height: 12),
             Container(
