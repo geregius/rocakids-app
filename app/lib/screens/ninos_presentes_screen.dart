@@ -77,6 +77,17 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
   // limpiar este set.
   final Set<String> _ocultosOptimista = {};
 
+  // Botón "Retirar a todos" (2026-08-24, pedido explícito de Rafael) —
+  // solo liderazgo, mismo criterio que "Acudientes y Niños"/"Modo
+  // emergencia" (`puedeVerAcudientesYNinos`). No es un permiso nuevo en
+  // `firestore.rules`: cualquier rol de servidor ya podía registrar una
+  // Salida individual (deslizando la tarjeta); esto solo agrega, del
+  // lado de la app, la conveniencia de hacerlo para todos de una vez —
+  // por eso se restringe a liderazgo, no por falta de permiso real sino
+  // porque es una acción masiva de alto impacto si se toca sin querer.
+  bool get _esLiderazgo => widget.usuario.rol.puedeVerAcudientesYNinos;
+  bool _retirandoATodos = false;
+
   void _asegurarNinosCargados(Iterable<String> ids) {
     final faltantes = ids
         .where((id) => !_ninosPorId.containsKey(id) && !_pidiendo.contains(id))
@@ -142,6 +153,55 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
           SnackBar(content: Text('No se pudo registrar la salida: $e')),
         );
       }
+    }
+  }
+
+  /// Da salida a TODOS los niños presentes ahora mismo, uno por uno con
+  /// [_darSalida] (mismo criterio de siempre: se entrega a la misma
+  /// persona que quedó registrada en su entrada) — pedido explícito de
+  /// Rafael, para que liderazgo pueda cerrar el salón de una sola vez en
+  /// vez de deslizar tarjeta por tarjeta. Pide confirmación primero por
+  /// ser una acción masiva sin forma de deshacerla.
+  Future<void> _retirarATodos(List<Registro> presentes) async {
+    if (presentes.isEmpty || _retirandoATodos) return;
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Retirar a todos los niños presentes?'),
+        content: Text(
+          'Se va a registrar la salida de los ${presentes.length} niños que están '
+          'presentes ahora mismo, cada uno con el mismo acudiente que quedó '
+          'registrado en su entrada. Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.rojo),
+            child: const Text('Retirar a todos'),
+          ),
+        ],
+      ),
+    );
+    if (confirmado != true) return;
+
+    setState(() => _retirandoATodos = true);
+    await Future.wait(
+      presentes.map(
+        (entrada) => _darSalida(
+          entrada,
+          observacion: 'Salida masiva registrada por liderazgo desde Menores Registrados.',
+        ),
+      ),
+    );
+    if (mounted) {
+      setState(() => _retirandoATodos = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Se registró la salida de todos los niños presentes.')),
+      );
     }
   }
 
@@ -298,9 +358,30 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
                 return ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    Text(
-                      'Total presentes: ${presentes.length}',
-                      style: Theme.of(context).textTheme.titleLarge,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Total presentes: ${presentes.length}',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ),
+                        if (_esLiderazgo)
+                          OutlinedButton.icon(
+                            onPressed: _retirandoATodos
+                                ? null
+                                : () => _retirarATodos(presentes),
+                            style: OutlinedButton.styleFrom(foregroundColor: AppColors.rojo),
+                            icon: _retirandoATodos
+                                ? const SizedBox(
+                                    height: 16,
+                                    width: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.logout),
+                            label: const Text('Retirar a todos'),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     for (final grupo in ordenados)
