@@ -124,10 +124,11 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
       if (m.tipoIdentificacionMenor == null) {
         return 'Selecciona el tipo de documento del niño $n.';
       }
-      if (m.tipoIdentificacionMenor != 'No tiene documento' &&
-          m.identificacionMenorController.text.trim().isEmpty) {
-        return 'Ingresa el número de documento del niño $n.';
-      }
+      // El número de documento NUNCA es obligatorio para registrar a un
+      // niño (2026-08-24, pedido explícito de Rafael) — aunque se haya
+      // elegido un tipo de documento real (no "No tiene documento"), se
+      // puede dejar el número en blanco si no se tiene a la mano en el
+      // momento.
       if (m.nombresController.text.trim().isEmpty ||
           m.apellidosController.text.trim().isEmpty) {
         return 'Completa el nombre del niño $n.';
@@ -609,7 +610,9 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
             const SizedBox(height: 16),
             TextFormField(
               controller: m.identificacionMenorController,
-              decoration: const InputDecoration(labelText: 'Número de documento del niño'),
+              decoration: const InputDecoration(
+                labelText: 'Número de documento del niño (opcional)',
+              ),
             ),
             const SizedBox(height: 16),
             TextFormField(

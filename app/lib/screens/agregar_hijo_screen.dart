@@ -446,8 +446,10 @@ class _NuevoNinoFormState extends State<_NuevoNinoForm> {
           const SizedBox(height: 16),
           TextFormField(
             controller: _identificacionMenorController,
-            decoration: const InputDecoration(labelText: 'Número de documento'),
-            validator: (v) => _tipoIdentificacion == 'No tiene documento' ? null : _requerido(v),
+            decoration: const InputDecoration(labelText: 'Número de documento (opcional)'),
+            // NUNCA es obligatorio (2026-08-24, pedido explícito de
+            // Rafael) — ni siquiera si se eligió un tipo de documento
+            // real: se puede dejar en blanco si no se tiene a la mano.
           ),
           const SizedBox(height: 16),
           TextFormField(
