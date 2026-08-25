@@ -256,7 +256,9 @@ class _ReutilizarDatosServidorState extends State<_ReutilizarDatosServidor> {
       await AuthService().crearPerfilAcudienteDesdeServidor(widget.usuario);
       widget.onListo();
     } on AuthException catch (e) {
-      setState(() => _error = e.mensaje);
+      if (mounted) setState(() => _error = e.mensaje);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'No se pudo completar: $e');
     } finally {
       if (mounted) setState(() => _cargando = false);
     }
@@ -413,7 +415,9 @@ class _RegistroAcudienteFormState extends State<_RegistroAcudienteForm> {
       );
       widget.onListo();
     } on AuthException catch (e) {
-      setState(() => _error = e.mensaje);
+      if (mounted) setState(() => _error = e.mensaje);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'No se pudo completar el perfil: $e');
     } finally {
       if (mounted) setState(() => _cargando = false);
     }

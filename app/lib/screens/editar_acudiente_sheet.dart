@@ -71,7 +71,9 @@ class _EditarAcudienteSheetState extends State<EditarAcudienteSheet> {
       );
       if (mounted) Navigator.of(context).pop(true);
     } on AuthException catch (e) {
-      setState(() => _error = e.mensaje);
+      if (mounted) setState(() => _error = e.mensaje);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'No se pudo guardar: $e');
     } finally {
       if (mounted) setState(() => _guardando = false);
     }

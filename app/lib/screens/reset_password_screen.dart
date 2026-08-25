@@ -60,6 +60,17 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         _errorVerificacion = e.mensaje;
         _verificando = false;
       });
+    } catch (e) {
+      // Antes solo se atrapaba `AuthException` — cualquier otro error
+      // (de red, por ejemplo) dejaba `_verificando` en `true` para
+      // siempre: la pantalla se quedaba en el spinner inicial sin
+      // ninguna forma de reintentar (2026-08-25, mismo bug corregido
+      // en "Registrar familia"/"Registro de Acudiente").
+      if (!mounted) return;
+      setState(() {
+        _errorVerificacion = 'No se pudo verificar el enlace: $e';
+        _verificando = false;
+      });
     }
   }
 
@@ -79,7 +90,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       if (!mounted) return;
       setState(() => _completado = true);
     } on AuthException catch (e) {
-      setState(() => _error = e.mensaje);
+      if (mounted) setState(() => _error = e.mensaje);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'No se pudo guardar la nueva contraseña: $e');
     } finally {
       if (mounted) setState(() => _guardando = false);
     }

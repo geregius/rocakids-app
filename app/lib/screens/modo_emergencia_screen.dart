@@ -99,6 +99,15 @@ class _ModoEmergenciaBodyState extends State<ModoEmergenciaBody> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
       }
+    } catch (e) {
+      // Antes solo se atrapaba `AuthException` — cualquier otro error
+      // fallaba en silencio, sin avisar que el modo NO quedó activado
+      // (2026-08-25, mismo bug corregido en otras pantallas).
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo activar el modo emergencia: $e')),
+        );
+      }
     }
   }
 
@@ -129,6 +138,16 @@ class _ModoEmergenciaBodyState extends State<ModoEmergenciaBody> {
     } on AuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
+      }
+    } catch (e) {
+      // Antes solo se atrapaba `AuthException` — cualquier otro error
+      // fallaba en silencio, sin avisar que el modo NO quedó
+      // desactivado (2026-08-25, mismo bug corregido en otras
+      // pantallas).
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo desactivar el modo emergencia: $e')),
+        );
       }
     }
   }

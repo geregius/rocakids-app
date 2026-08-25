@@ -183,7 +183,9 @@ class _VincularNinoFormState extends State<_VincularNinoForm> {
         if (mounted) Navigator.of(context).pop();
       }
     } on AuthException catch (e) {
-      setState(() => _error = e.mensaje);
+      if (mounted) setState(() => _error = e.mensaje);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'No se pudo vincular al niño: $e');
     } finally {
       if (mounted) setState(() => _cargando = false);
     }
@@ -396,7 +398,9 @@ class _NuevoNinoFormState extends State<_NuevoNinoForm> {
       );
       if (mounted) Navigator.of(context).pop();
     } on AuthException catch (e) {
-      setState(() => _error = e.mensaje);
+      if (mounted) setState(() => _error = e.mensaje);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'No se pudo registrar al niño: $e');
     } finally {
       if (mounted) setState(() => _cargando = false);
     }

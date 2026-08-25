@@ -50,10 +50,24 @@ class _CambiarPasswordSheetState extends State<CambiarPasswordSheet> {
         );
       }
     } on AuthException catch (e) {
-      setState(() {
-        _error = e.mensaje;
-        _guardando = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.mensaje;
+          _guardando = false;
+        });
+      }
+    } catch (e) {
+      // Antes solo se atrapaba `AuthException` — cualquier otro error
+      // dejaba `_guardando` en `true` para siempre, sin mensaje y sin
+      // que el botón volviera a responder (2026-08-25, mismo bug
+      // corregido en "Registrar familia"/"Registro de Acudiente",
+      // aplicado también acá).
+      if (mounted) {
+        setState(() {
+          _error = 'No se pudo cambiar la contraseña: $e';
+          _guardando = false;
+        });
+      }
     }
   }
 

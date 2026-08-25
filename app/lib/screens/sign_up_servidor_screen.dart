@@ -50,7 +50,9 @@ class _SignUpServidorScreenState extends State<SignUpServidorScreen> {
       );
       if (mounted) await _mostrarConfirmacion();
     } on AuthException catch (e) {
-      setState(() => _error = e.mensaje);
+      if (mounted) setState(() => _error = e.mensaje);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'No se pudo completar el registro: $e');
     } finally {
       if (mounted) setState(() => _cargando = false);
     }

@@ -46,7 +46,9 @@ class _LoginScreenState extends State<LoginScreen> {
       // No navegamos manualmente: el AuthGate en main.dart reacciona
       // al cambio de estado de autenticación.
     } on AuthException catch (e) {
-      setState(() => _error = e.mensaje);
+      if (mounted) setState(() => _error = e.mensaje);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'No se pudo iniciar sesión: $e');
     } finally {
       if (mounted) setState(() => _cargando = false);
     }
@@ -119,6 +121,11 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.mensaje)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo enviar el correo: $e')));
     } finally {
       if (mounted) setState(() => _enviandoRecuperacion = false);
     }
