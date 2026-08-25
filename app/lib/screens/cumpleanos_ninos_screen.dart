@@ -196,8 +196,7 @@ class _GrupoCumpleanosSection extends StatelessWidget {
                 _CumpleanosNinoTile(
                   nino: n,
                   usuario: usuario,
-                  acudienteQueLoTrajoHoyId: presentesPorNino[n.documentoIdentificacion]
-                      ?.fkIdAcudienteContacto,
+                  registroDeHoy: presentesPorNino[n.documentoIdentificacion],
                 ),
             ],
           ),
@@ -210,12 +209,12 @@ class _GrupoCumpleanosSection extends StatelessWidget {
 class _CumpleanosNinoTile extends StatelessWidget {
   final Nino nino;
   final UsuarioApp usuario;
-  final String? acudienteQueLoTrajoHoyId;
+  final Registro? registroDeHoy;
 
   const _CumpleanosNinoTile({
     required this.nino,
     required this.usuario,
-    required this.acudienteQueLoTrajoHoyId,
+    required this.registroDeHoy,
   });
 
   String _etiquetaFecha() {
@@ -238,7 +237,7 @@ class _CumpleanosNinoTile extends StatelessWidget {
         builder: (_) => NinoDetalleSheet(
           nino: nino,
           usuario: usuario,
-          acudienteQueLoTrajoHoyId: acudienteQueLoTrajoHoyId,
+          registroDeHoy: registroDeHoy,
         ),
       ),
       leading: CircleAvatar(

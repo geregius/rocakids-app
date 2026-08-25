@@ -4,6 +4,7 @@ import '../models/acudiente.dart';
 import '../models/gestion.dart';
 import '../models/nino.dart';
 import '../models/no_autorizado.dart';
+import '../models/registro.dart';
 import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
@@ -20,21 +21,23 @@ import 'editar_nino_sheet.dart';
 class NinoDetalleSheet extends StatefulWidget {
   final Nino nino;
   final UsuarioApp usuario;
-  // Uid del acudiente que lo trajo HOY (`Registro.fkIdAcudienteContacto`
-  // de la entrada de hoy) — solo lo pasa `ninos_presentes_screen.dart`
-  // ("Menores Registrados", 2026-08-24, pedido de Rafael), que es la
-  // única pantalla con esa información a mano. Se usa para poner a esa
-  // persona primero en "Acudientes" y marcarla como "Lo trajo hoy".
-  // Queda vacío/null desde cualquier otro punto de entrada (Mis hijos,
-  // Acudientes y Niños, Cumpleaños, Dashboard) — ahí simplemente no hay
-  // ningún acudiente priorizado.
-  final String? acudienteQueLoTrajoHoyId;
+  // La Entrada de HOY de este niño (`ninos_presentes_screen.dart`/
+  // `cumpleanos_ninos_screen.dart`, 2026-08-24, pedido de Rafael) — solo
+  // la pasan las pantallas que ya tienen esa información a mano. Se usa
+  // para poner al acudiente que lo trajo primero en "Acudientes" y
+  // marcarlo como "Lo trajo hoy" (`fkIdAcudienteContacto`), y para
+  // mostrar/llamar al contacto "Otro (no está en la lista)" cuando no
+  // fue un acudiente ya vinculado (`nombreAcudienteContacto`/
+  // `telefonoAcudienteContacto`, sin `fkIdAcudienteContacto`). Queda
+  // null desde cualquier otro punto de entrada (Mis hijos, Acudientes y
+  // Niños, Dashboard) — ahí simplemente no hay nadie priorizado.
+  final Registro? registroDeHoy;
 
   const NinoDetalleSheet({
     super.key,
     required this.nino,
     required this.usuario,
-    this.acudienteQueLoTrajoHoyId,
+    this.registroDeHoy,
   });
 
   @override
@@ -80,6 +83,16 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
   bool get _esAdmin => widget.usuario.rol == RolUsuario.administrador;
   bool get _muestraAcudientes => widget.usuario.rol.esRolDeServidor;
 
+  // true si hoy lo entregó/recibió alguien marcado como "Otro (no está
+  // en la lista)" en vez de un acudiente ya vinculado — 2026-08-24,
+  // pedido de Rafael: también poder llamar a esa persona desde acá.
+  bool get _hayContactoOtroHoy {
+    final registro = widget.registroDeHoy;
+    return registro != null &&
+        registro.fkIdAcudienteContacto.isEmpty &&
+        registro.nombreAcudienteContacto.isNotEmpty;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -101,9 +114,10 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
       );
       // El que lo trajo hoy va primero, para priorizarlo en la lista —
       // pedido explícito de Rafael.
+      final acudienteQueLoTrajoHoyId = widget.registroDeHoy?.fkIdAcudienteContacto;
       lista.sort((a, b) {
-        final aEsHoy = a.uid == widget.acudienteQueLoTrajoHoyId;
-        final bEsHoy = b.uid == widget.acudienteQueLoTrajoHoyId;
+        final aEsHoy = a.uid == acudienteQueLoTrajoHoyId;
+        final bEsHoy = b.uid == acudienteQueLoTrajoHoyId;
         if (aEsHoy != bEsHoy) return aEsHoy ? -1 : 1;
         return a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase());
       });
@@ -420,12 +434,11 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
             _FilaDato('Género', nino.genero),
             _FilaDato('Estado', nino.estadoRegistro),
             _FilaDato('Autoriza uso de imagen', nino.autorizoFotoFlag ? 'Sí' : 'No'),
-            if (_muestraAcudientes && !_cargandoAcudientes && _acudientes.isNotEmpty) ...[
+            if (_muestraAcudientes &&
+                !_cargandoAcudientes &&
+                (_acudientes.isNotEmpty || _hayContactoOtroHoy)) ...[
               const SizedBox(height: 12),
-              _SeccionAcudientes(
-                acudientes: _acudientes,
-                acudienteQueLoTrajoHoyId: widget.acudienteQueLoTrajoHoyId,
-              ),
+              _SeccionAcudientes(acudientes: _acudientes, registroDeHoy: widget.registroDeHoy),
             ],
             if (!nino.autorizoFotoFlag) ...[
               const SizedBox(height: 12),
@@ -612,19 +625,23 @@ class _SeccionGestiones extends StatelessWidget {
 
 /// Acudientes vinculados a este niño, con botón de llamar directo
 /// (2026-08-24, pedido de Rafael). El que lo trajo hoy (si se conoce)
-/// aparece primero y con una insignia — ver docstring de
-/// `NinoDetalleSheet.acudienteQueLoTrajoHoyId`.
+/// aparece primero y con una insignia. Si hoy lo trajo alguien marcado
+/// como "Otro (no está en la lista)" en vez de un acudiente vinculado,
+/// esa persona aparece primero de todos con su propio aviso — ver
+/// docstring de `NinoDetalleSheet.registroDeHoy`.
 class _SeccionAcudientes extends StatelessWidget {
   final List<Acudiente> acudientes;
-  final String? acudienteQueLoTrajoHoyId;
+  final Registro? registroDeHoy;
 
-  const _SeccionAcudientes({
-    required this.acudientes,
-    required this.acudienteQueLoTrajoHoyId,
-  });
+  const _SeccionAcudientes({required this.acudientes, required this.registroDeHoy});
 
   @override
   Widget build(BuildContext context) {
+    final registro = registroDeHoy;
+    final esOtro = registro != null &&
+        registro.fkIdAcudienteContacto.isEmpty &&
+        registro.nombreAcudienteContacto.isNotEmpty;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -647,11 +664,21 @@ class _SeccionAcudientes extends StatelessWidget {
               ),
             ],
           ),
+          if (esOtro) ...[
+            const Divider(height: 16),
+            _FilaAcudiente(
+              nombre: registro.nombreAcudienteContacto,
+              telefono: registro.telefonoAcudienteContacto,
+              loTrajoHoy: true,
+              nota: 'No está vinculado en el sistema — registrado hoy como "Otro"',
+            ),
+          ],
           for (final a in acudientes) ...[
             const Divider(height: 16),
             _FilaAcudiente(
-              acudiente: a,
-              loTrajoHoy: a.uid == acudienteQueLoTrajoHoyId,
+              nombre: a.nombreCompleto,
+              telefono: a.telefonoCelular,
+              loTrajoHoy: a.uid == registro?.fkIdAcudienteContacto,
             ),
           ],
         ],
@@ -661,14 +688,20 @@ class _SeccionAcudientes extends StatelessWidget {
 }
 
 class _FilaAcudiente extends StatelessWidget {
-  final Acudiente acudiente;
+  final String nombre;
+  final String telefono;
   final bool loTrajoHoy;
+  final String? nota;
 
-  const _FilaAcudiente({required this.acudiente, required this.loTrajoHoy});
+  const _FilaAcudiente({
+    required this.nombre,
+    required this.telefono,
+    required this.loTrajoHoy,
+    this.nota,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final telefono = acudiente.telefonoCelular;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -680,7 +713,7 @@ class _FilaAcudiente extends StatelessWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      acudiente.nombreCompleto,
+                      nombre,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -704,6 +737,13 @@ class _FilaAcudiente extends StatelessWidget {
                 telefono.isNotEmpty ? telefono : 'Sin teléfono registrado',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              if (nota != null)
+                Text(
+                  nota!,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+                ),
             ],
           ),
         ),

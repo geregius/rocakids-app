@@ -621,6 +621,13 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       setState(() => _error = 'Indica quién entrega/retira al niño.');
       return;
     }
+    // Obligatorio SOLO para "Otro" (2026-08-24, pedido de Rafael) — un
+    // acudiente ya vinculado tiene su teléfono en su propio perfil, no
+    // hace falta pedirlo de nuevo acá.
+    if (_otroAcudiente && _otroTelefonoController.text.trim().isEmpty) {
+      setState(() => _error = 'Ingresa el teléfono de quien entrega/retira.');
+      return;
+    }
 
     setState(() {
       _guardando = true;
@@ -1191,7 +1198,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
               controller: _otroTelefonoController,
               keyboardType: TextInputType.phone,
               decoration: const InputDecoration(
-                labelText: 'Teléfono de quien entrega/retira (opcional)',
+                labelText: 'Teléfono de quien entrega/retira',
               ),
             ),
           ],

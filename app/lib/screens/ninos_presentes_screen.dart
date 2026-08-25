@@ -401,7 +401,7 @@ class _NinoPresenteTile extends StatelessWidget {
         builder: (_) => NinoDetalleSheet(
           nino: nino,
           usuario: usuario,
-          acudienteQueLoTrajoHoyId: registro.fkIdAcudienteContacto,
+          registroDeHoy: registro,
         ),
       );
     } else if (registro.esVisitante) {
