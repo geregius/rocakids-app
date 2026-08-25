@@ -373,16 +373,25 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
         nombreAcudiente = acudienteNuevo.nombreCompleto;
       }
 
-      final nombresMenores = <String>[];
-      for (final m in _menores) {
-        if (m.encontrado != null) {
-          await _authService.vincularNinoAcudienteExistentes(
-            documentoNino: m.encontrado!.documentoIdentificacion,
-            acudienteUid: acudienteUid,
-            parentescoTipo: m.parentesco!,
-          );
-          nombresMenores.add(m.encontrado!.nombreCompleto);
-        } else {
+      // En paralelo (2026-08-24, pedido de Rafael: "optimiza para que no
+      // sea tan demorado") — antes cada niño esperaba a que el anterior
+      // terminara por completo (su propia subida de foto + escritura en
+      // Firestore), así que una familia de 3 niños tardaba ~3 veces lo
+      // que tarda uno solo. Cada niño escribe en SUS PROPIOS documentos
+      // (`ninos/{su documento}`, `ninos_busqueda/{su documento}`,
+      // `nino_acudiente/{su documento}_{uid del acudiente}`) — nunca el
+      // mismo documento que otro niño de la misma familia, así que no
+      // hay ningún riesgo de que se pisen entre sí corriendo a la vez.
+      final nombresMenores = await Future.wait(
+        _menores.map((m) async {
+          if (m.encontrado != null) {
+            await _authService.vincularNinoAcudienteExistentes(
+              documentoNino: m.encontrado!.documentoIdentificacion,
+              acudienteUid: acudienteUid,
+              parentescoTipo: m.parentesco!,
+            );
+            return m.encontrado!.nombreCompleto;
+          }
           final nino = _construirNinoNuevo(m);
           await _authService.registrarNinoAdicional(
             nino: nino,
@@ -391,9 +400,9 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
             fotoNinoBytes: m.fotoBytes,
             fotoNinoExt: m.fotoExt,
           );
-          nombresMenores.add(nino.nombreCompleto);
-        }
-      }
+          return nino.nombreCompleto;
+        }),
+      );
 
       if (mounted) {
         setState(() {
@@ -402,10 +411,25 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
         });
       }
     } on AuthException catch (e) {
-      setState(() {
-        _error = e.mensaje;
-        _cargando = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.mensaje;
+          _cargando = false;
+        });
+      }
+    } catch (e) {
+      // Antes SOLO se atrapaba `AuthException` — cualquier otro error
+      // (de red, de Storage, un `FirebaseException` crudo) dejaba
+      // `_cargando` en `true` PARA SIEMPRE: el botón seguía mostrando
+      // el spinner sin ningún mensaje y sin volver a responder. Este
+      // era el bug real detrás de "queda ahí bloqueado, no dice nada y
+      // no hace nada" (2026-08-24, reportado por Rafael).
+      if (mounted) {
+        setState(() {
+          _error = 'No se pudo completar el registro: $e';
+          _cargando = false;
+        });
+      }
     }
   }
 
@@ -441,26 +465,60 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Registrar familia',
-      body: _resumenFamiliaRegistrada != null
-          ? _buildExito(context)
-          : Column(
-              children: [
-                _buildEncabezadoPasos(context),
-                Expanded(
-                  child: PageView(
-                    controller: _pageController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    onPageChanged: (i) => setState(() => _currentStep = i),
-                    children: [
-                      _buildPasoAcudiente(context),
-                      _buildPasoMenores(context),
-                      _buildPasoResumen(context),
-                    ],
+      body: Stack(
+        children: [
+          _resumenFamiliaRegistrada != null
+              ? _buildExito(context)
+              : Column(
+                  children: [
+                    _buildEncabezadoPasos(context),
+                    Expanded(
+                      child: PageView(
+                        controller: _pageController,
+                        physics: const NeverScrollableScrollPhysics(),
+                        onPageChanged: (i) => setState(() => _currentStep = i),
+                        children: [
+                          _buildPasoAcudiente(context),
+                          _buildPasoMenores(context),
+                          _buildPasoResumen(context),
+                        ],
+                      ),
+                    ),
+                    _buildBarraNavegacion(context),
+                  ],
+                ),
+          // Overlay bien visible mientras se guarda (2026-08-24, pedido
+          // de Rafael: "que aparezca algo de que se está realizando el
+          // registro, por favor espere") — cubre toda la pantalla y
+          // bloquea cualquier toque de doble envío, no solo el pequeño
+          // spinner que ya tenía el botón (fácil de pasar por alto).
+          if (_cargando)
+            Positioned.fill(
+              child: ColoredBox(
+                color: Colors.black.withValues(alpha: 0.35),
+                child: Center(
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Registrando, por favor espera...',
+                            style: Theme.of(context).textTheme.titleMedium,
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                _buildBarraNavegacion(context),
-              ],
+              ),
             ),
+        ],
+      ),
     );
   }
 

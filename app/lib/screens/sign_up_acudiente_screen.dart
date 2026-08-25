@@ -251,16 +251,24 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
         fotoAcudienteExt: _fotoAcudienteExt,
       );
 
-      for (final m in _menores) {
-        final nino = _construirNinoNuevo(m);
-        await _authService.registrarNinoAdicional(
-          nino: nino,
-          parentescoTipo: m.parentesco!,
-          acudienteUid: acudienteUid,
-          fotoNinoBytes: m.fotoBytes,
-          fotoNinoExt: m.fotoExt,
-        );
-      }
+      // En paralelo (2026-08-24, pedido de Rafael: "optimiza para que no
+      // sea tan demorado") — antes cada niño esperaba a que el anterior
+      // terminara por completo (su propia subida de foto + escritura en
+      // Firestore). Cada niño escribe en SUS PROPIOS documentos, nunca
+      // el mismo que otro niño de la misma familia, así que no hay
+      // ningún riesgo de que se pisen entre sí corriendo a la vez.
+      await Future.wait(
+        _menores.map((m) {
+          final nino = _construirNinoNuevo(m);
+          return _authService.registrarNinoAdicional(
+            nino: nino,
+            parentescoTipo: m.parentesco!,
+            acudienteUid: acudienteUid,
+            fotoNinoBytes: m.fotoBytes,
+            fotoNinoExt: m.fotoExt,
+          );
+        }),
+      );
 
       // Ya existe sesión y perfil completos — el AuthGate (montado
       // debajo de esta pantalla desde que se abrió con Navigator.push)
@@ -272,10 +280,25 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
         });
       }
     } on AuthException catch (e) {
-      setState(() {
-        _error = e.mensaje;
-        _cargando = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.mensaje;
+          _cargando = false;
+        });
+      }
+    } catch (e) {
+      // Antes SOLO se atrapaba `AuthException` — cualquier otro error
+      // (de red, de Storage, un `FirebaseException` crudo) dejaba
+      // `_cargando` en `true` PARA SIEMPRE: el botón seguía mostrando
+      // el spinner sin ningún mensaje y sin volver a responder. Este
+      // era el bug real detrás de "queda ahí bloqueado, no dice nada y
+      // no hace nada" (2026-08-24, reportado por Rafael).
+      if (mounted) {
+        setState(() {
+          _error = 'No se pudo completar el registro: $e';
+          _cargando = false;
+        });
+      }
     }
   }
 
@@ -285,26 +308,59 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Registro de Acudiente')),
-      body: _registroExitoso
-          ? _buildExito(context)
-          : Column(
-              children: [
-                _buildEncabezadoPasos(context),
-                Expanded(
-                  child: PageView(
-                    controller: _pageController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    onPageChanged: (i) => setState(() => _currentStep = i),
-                    children: [
-                      _buildPasoAcudiente(context),
-                      _buildPasoMenores(context),
-                      _buildPasoResumen(context),
-                    ],
+      body: Stack(
+        children: [
+          _registroExitoso
+              ? _buildExito(context)
+              : Column(
+                  children: [
+                    _buildEncabezadoPasos(context),
+                    Expanded(
+                      child: PageView(
+                        controller: _pageController,
+                        physics: const NeverScrollableScrollPhysics(),
+                        onPageChanged: (i) => setState(() => _currentStep = i),
+                        children: [
+                          _buildPasoAcudiente(context),
+                          _buildPasoMenores(context),
+                          _buildPasoResumen(context),
+                        ],
+                      ),
+                    ),
+                    _buildBarraNavegacion(context),
+                  ],
+                ),
+          // Overlay bien visible mientras se guarda (2026-08-24, pedido
+          // de Rafael: "que aparezca algo de que se está realizando el
+          // registro, por favor espere") — cubre toda la pantalla y
+          // bloquea cualquier toque de doble envío.
+          if (_cargando)
+            Positioned.fill(
+              child: ColoredBox(
+                color: Colors.black.withValues(alpha: 0.35),
+                child: Center(
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Registrando, por favor espera...',
+                            style: Theme.of(context).textTheme.titleMedium,
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                _buildBarraNavegacion(context),
-              ],
+              ),
             ),
+        ],
+      ),
     );
   }
 
