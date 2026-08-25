@@ -60,6 +60,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   Acudiente? _acudienteElegido;
   bool _otroAcudiente = false;
   final _otroNombreController = TextEditingController();
+  final _otroTelefonoController = TextEditingController();
   // Se incrementa en cada selección/deselección de niño, para que una
   // carga en segundo plano que termine tarde (acudientes, entradas
   // recientes) no pise el estado si mientras tanto el servidor ya
@@ -104,6 +105,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
   void dispose() {
     _busquedaController.dispose();
     _otroNombreController.dispose();
+    _otroTelefonoController.dispose();
     _documentoCompletarController.dispose();
     _manillaController.dispose();
     _observacionController.dispose();
@@ -161,6 +163,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       _manillaController.clear();
       _observacionController.clear();
       _otroNombreController.clear();
+      _otroTelefonoController.clear();
       _tipoIdentificacionCompletar = null;
       _documentoCompletarController.clear();
       _entradasRecientesSinDocumento = null;
@@ -638,6 +641,9 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
           ? ''
           : (_acudienteElegido?.uid ?? ''),
       nombreAcudienteContacto: nombreContacto,
+      telefonoAcudienteContacto: _otroAcudiente
+          ? _otroTelefonoController.text.trim()
+          : '',
       servicio: _servicio!,
       grupoEdad: grupoParaEdad(edad) ?? '',
       observacion: _observacionController.text.trim(),
@@ -1178,6 +1184,14 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
               controller: _otroNombreController,
               decoration: const InputDecoration(
                 labelText: 'Nombre de quien entrega/retira',
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _otroTelefonoController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Teléfono de quien entrega/retira (opcional)',
               ),
             ),
           ],

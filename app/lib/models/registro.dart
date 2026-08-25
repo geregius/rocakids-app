@@ -51,6 +51,11 @@ class Registro {
   final String
   fkIdAcudienteContacto; // uid del acudiente, vacío si "otro"/visitante
   final String nombreAcudienteContacto;
+  // Solo se llena cuando quien entrega/retira es "Otro (no está en la
+  // lista)" — un acudiente ya vinculado tiene su teléfono en su propio
+  // perfil, no hace falta duplicarlo acá (2026-08-24, pedido de
+  // Rafael: poder contactar a esa persona si hace falta).
+  final String telefonoAcudienteContacto;
   final String tipoIdentificacionVisitante;
   final String documentoNinoVisitante;
   final String telefonoAcudienteVisitante;
@@ -82,6 +87,7 @@ class Registro {
     required this.nombreServidor,
     this.fkIdAcudienteContacto = '',
     required this.nombreAcudienteContacto,
+    this.telefonoAcudienteContacto = '',
     this.tipoIdentificacionVisitante = '',
     this.documentoNinoVisitante = '',
     this.telefonoAcudienteVisitante = '',
@@ -111,6 +117,7 @@ class Registro {
     'nombreServidor': nombreServidor,
     'fkIdAcudienteContacto': fkIdAcudienteContacto,
     'nombreAcudienteContacto': nombreAcudienteContacto,
+    'telefonoAcudienteContacto': telefonoAcudienteContacto,
     'tipoIdentificacionVisitante': tipoIdentificacionVisitante,
     'documentoNinoVisitante': documentoNinoVisitante,
     'telefonoAcudienteVisitante': telefonoAcudienteVisitante,
@@ -138,6 +145,7 @@ class Registro {
       nombreServidor: data['nombreServidor'] as String? ?? '',
       fkIdAcudienteContacto: data['fkIdAcudienteContacto'] as String? ?? '',
       nombreAcudienteContacto: data['nombreAcudienteContacto'] as String? ?? '',
+      telefonoAcudienteContacto: data['telefonoAcudienteContacto'] as String? ?? '',
       tipoIdentificacionVisitante:
           data['tipoIdentificacionVisitante'] as String? ?? '',
       documentoNinoVisitante: data['documentoNinoVisitante'] as String? ?? '',

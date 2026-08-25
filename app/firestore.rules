@@ -383,6 +383,7 @@ service cloud.firestore {
         && esTextoNoVacioAcotado(request.resource.data.get('nombreServidor', ''), 150)
         && esTexto(request.resource.data.get('fkIdAcudienteContacto', ''))
         && esTextoNoVacioAcotado(request.resource.data.get('nombreAcudienteContacto', ''), 150)
+        && esTexto(request.resource.data.get('telefonoAcudienteContacto', ''))
         && esTexto(request.resource.data.get('tipoIdentificacionVisitante', ''))
         && esTexto(request.resource.data.get('documentoNinoVisitante', ''))
         && esTexto(request.resource.data.get('telefonoAcudienteVisitante', ''))
