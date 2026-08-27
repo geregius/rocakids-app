@@ -59,7 +59,10 @@ class _EditarNinoSheetState extends State<EditarNinoSheet> {
       setState(() => _error = 'Selecciona la fecha de nacimiento.');
       return;
     }
-    if (grupoParaEdad(calcularEdad(_fechaNacimiento!)) == null) {
+    // Mayor de edadMaximaRegistro NO bloquea el registro (2026-08-27,
+    // pedido de Rafael) — solo se advierte en el selector de fecha. RocaKids
+    // sigue sin recibir bebés de cuna, así que eso sí bloquea.
+    if (calcularEdad(_fechaNacimiento!) < edadMinimaRegistro) {
       setState(
         () => _error =
             'RocaKids recibe niños de $edadMinimaRegistro a $edadMaximaRegistro años.',

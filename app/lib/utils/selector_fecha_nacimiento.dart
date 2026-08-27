@@ -59,7 +59,12 @@ class _SelectorFechaNacimientoState extends State<SelectorFechaNacimiento> {
   @override
   Widget build(BuildContext context) {
     final anioActual = DateTime.now().year;
-    final anioMin = anioActual - edadMaximaRegistro - 1;
+    // Sin tope superior de edad (2026-08-27, pedido de Rafael): un niño
+    // mayor de [edadMaximaRegistro] años debe poder registrarse igual,
+    // solo con la advertencia de abajo — así que el año mínimo seleccionable
+    // ya no está atado a esa constante. El mínimo (2 años) sigue siendo un
+    // límite real: RocaKids no recibe bebés de cuna.
+    final anioMin = anioActual - 100;
     final anioMax = anioActual - edadMinimaRegistro;
     final diasEnMesActual =
         (_anio != null && _mes != null) ? DateUtils.getDaysInMonth(_anio!, _mes!) : 31;

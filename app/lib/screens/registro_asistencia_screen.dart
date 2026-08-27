@@ -448,6 +448,35 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
     );
   }
 
+  /// Aviso (2026-08-27, pedido de Rafael) cuando el niño ya no cae en
+  /// ningún grupo de edad (2 a 10 años) — solo informativo, NO bloquea el
+  /// registro de asistencia.
+  Widget _avisoSinGrupo(int edad) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.amarillo.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.amarillo, width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.groups, color: AppColors.textoPrincipal),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Este niño tiene $edad años y ya no cae en ningún grupo del '
+              'ministerio infantil ($edadMinimaRegistro a $edadMaximaRegistro '
+              'años). Puedes continuar con su registro de asistencia igual.',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Aviso festivo (2026-08-18) cuando el niño seleccionado cumplió años
   /// en los últimos 7 días — a propósito bien llamativo (fondo degradado
   /// con los colores de marca, ícono grande) para que no pase
@@ -949,6 +978,10 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
             ),
           ),
         ),
+        if (grupo == null) ...[
+          const SizedBox(height: 12),
+          _avisoSinGrupo(edad),
+        ],
         if (nino.tieneNoAutorizados) ...[
           const SizedBox(height: 12),
           _avisoNoAutorizados(),

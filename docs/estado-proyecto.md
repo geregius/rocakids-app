@@ -1,6 +1,6 @@
 # RocaKids — Estado del Proyecto (guía de continuación)
 
-**Última actualización:** 2026-08-22 ("Manual de usuario" ahora ofrece PDF o Video Tutoriales — nueva colección `videos_tutoriales`, solo admin agrega/edita/borra, título traído automático desde YouTube, $0 de costo — ver sección 6, pendiente de que Rafael pruebe en producción)
+**Última actualización:** 2026-08-27 (niños mayores de 10 años ya se pueden registrar y dar asistencia, con advertencia en vez de bloqueo — ver sección 5.14)
 **Propósito de este documento:** que una conversación nueva (u otra persona) pueda retomar el desarrollo sin perder contexto. Resume qué existe, qué funciona, cómo está armado, y qué falta.
 
 Documentos relacionados en `docs/`:
@@ -385,6 +385,23 @@ Pedido de Rafael: una tarjeta en el bloque "Hoy" del Dashboard con cuántos niñ
 - "Menores Registrados" (`ninos_presentes_screen.dart`): la constante `_sinGrupo` pasó de `'Sin grupo'` a `'Mayores de 11 años'` — afecta el agrupamiento y el título de la tarjeta (se ajustó para no decir "Grupo Mayores de 11 años", que sonaba raro).
 
 Cero cambios en Firestore/reglas — ambos leen datos que ya se guardaban.
+
+---
+
+## 5.14. Registrar y dar asistencia a niños mayores de 10 años (2026-08-27)
+
+Pedido de Rafael: que el sistema **permita** registrar y dar entrada a niños **mayores de 10 años**, mostrando una advertencia pero sin bloquear el flujo. Antes de este cambio, un niño mayor de 10 años **no se podía ni siquiera registrar** — la nota de la sección 5.13 de arriba ("mayores de 11" solo aparecen por envejecimiento) queda desactualizada: ahora también pueden entrar así directamente al registrarlos.
+
+**Qué bloqueaba antes:**
+1. `selector_fecha_nacimiento.dart`: el dropdown de "Año" tenía un tope duro — no dejaba elegir una fecha de nacimiento que diera más de ~11 años.
+2. Las 4 pantallas que registran/editan un niño (`sign_up_acudiente_screen.dart`, `registrar_familia_screen.dart`, `agregar_hijo_screen.dart`, `editar_nino_sheet.dart`) rechazaban el guardado con el error "RocaKids recibe niños de 2 a 10 años" apenas `grupoParaEdad()` devolvía `null` — sin importar si era por ser muy grande o muy pequeño.
+
+**Cambios:**
+- El dropdown de año ahora **no tiene tope superior** (permite cualquier edad hacia arriba, hasta 100 años atrás) — pedido explícito de Rafael ("sin tope"). El tope inferior (2 años, RocaKids no recibe bebés de cuna) se mantiene igual.
+- Las 4 pantallas de registro/edición ya NO bloquean por edad mayor a `edadMaximaRegistro` (10) — solo siguen bloqueando si el niño tiene **menos de 2 años** (eso sigue siendo un límite real del ministerio). La advertencia visual ("Edad actual: X años · RocaKids recibe niños de 2 a 10 años", en rojo) se sigue mostrando en el selector de fecha, ahora como aviso informativo, no como bloqueo.
+- `registro_asistencia_screen.dart`: nueva alerta amarilla (`_avisoSinGrupo`) en la ficha del niño seleccionado, visible cuando `grupoParaEdad(edad) == null` — "Este niño tiene X años y ya no cae en ningún grupo... Puedes continuar con su registro de asistencia igual." El check-in en sí nunca bloqueaba por edad (ya guardaba `grupoEdad: '' `), solo faltaba avisar.
+
+Cero cambios en Firestore/reglas — mismo modelo de datos, `grupoEdad` sigue siendo `''` para estos niños en los registros de asistencia (igual que ya pasaba con los que envejecían fuera del rango).
 
 ---
 

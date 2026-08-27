@@ -136,7 +136,10 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
       if (m.fechaNacimiento == null) {
         return 'Selecciona la fecha de nacimiento del niño $n.';
       }
-      if (grupoParaEdad(calcularEdad(m.fechaNacimiento!)) == null) {
+      // Mayor de edadMaximaRegistro NO bloquea el registro (2026-08-27,
+      // pedido de Rafael) — solo se advierte en el selector de fecha. RocaKids
+      // sigue sin recibir bebés de cuna, así que eso sí bloquea.
+      if (calcularEdad(m.fechaNacimiento!) < edadMinimaRegistro) {
         return 'RocaKids recibe niños de $edadMinimaRegistro a '
             '$edadMaximaRegistro años (niño $n).';
       }
