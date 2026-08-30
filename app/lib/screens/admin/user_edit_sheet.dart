@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../models/usuario_app.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/llamar_telefono.dart';
 import '../../widgets/confirmar_eliminar.dart';
 import 'edit_perfil_servidor_sheet.dart';
 
@@ -141,14 +142,31 @@ class _UserEditSheetState extends State<UserEditSheet> {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            _FilaDato(
+              'Fecha de nacimiento',
+              u.fechaNacimiento != null
+                  ? _formatearFecha(u.fechaNacimiento!)
+                  : 'Sin registrar',
+            ),
             if (u.perfilCompleto) ...[
-              const SizedBox(height: 16),
               _FilaDato('Correo electrónico', u.correo),
               _FilaDato('Documento', '${u.tipoDocumento} ${u.numeroDocumento}'),
               _FilaDato('Teléfono', u.telefono),
               _FilaDato('EPS', u.epsNombre),
               _FilaDato('Grupo sanguíneo', u.grupoSanguineo),
-              _FilaDato('Contacto de emergencia', '${u.contactoEmergenciaNombre} · ${u.contactoEmergenciaTelefono}'),
+              _FilaDato(
+                'Contacto de emergencia',
+                '${u.contactoEmergenciaNombre} · ${u.contactoEmergenciaTelefono}',
+                trailing: u.contactoEmergenciaTelefono.isNotEmpty
+                    ? IconButton(
+                        onPressed: () => llamarTelefono(context, u.contactoEmergenciaTelefono),
+                        icon: const Icon(Icons.call, color: AppColors.azulMarino),
+                        tooltip: 'Llamar a ${u.contactoEmergenciaTelefono}',
+                        visualDensity: VisualDensity.compact,
+                      )
+                    : null,
+              ),
             ] else ...[
               const SizedBox(height: 12),
               const Text(
@@ -234,7 +252,8 @@ String _formatearFecha(DateTime fecha) =>
 class _FilaDato extends StatelessWidget {
   final String etiqueta;
   final String valor;
-  const _FilaDato(this.etiqueta, this.valor);
+  final Widget? trailing;
+  const _FilaDato(this.etiqueta, this.valor, {this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -248,6 +267,7 @@ class _FilaDato extends StatelessWidget {
             child: Text(etiqueta, style: Theme.of(context).textTheme.bodySmall),
           ),
           Expanded(child: Text(valor)),
+          ?trailing,
         ],
       ),
     );
