@@ -92,6 +92,20 @@ int? diasDesdeCumpleanos(DateTime fechaNacimiento, {DateTime? hoy}) {
   return null;
 }
 
+/// Cuántos días faltan para el próximo cumpleaños de [fechaNacimiento]
+/// (0 = hoy) — cuenta hacia adelante hasta la próxima vez que caiga esa
+/// fecha (este año si no ha pasado, el año que viene si ya pasó). Base
+/// de "Cumpleaños Servidores" ordenado por proximidad (2026-08-29).
+int diasHastaProximoCumpleanos(DateTime fechaNacimiento, {DateTime? hoy}) {
+  final ahoraCompleto = hoy ?? DateTime.now();
+  final ahora = DateTime(ahoraCompleto.year, ahoraCompleto.month, ahoraCompleto.day);
+  var proximo = DateTime(ahora.year, fechaNacimiento.month, fechaNacimiento.day);
+  if (proximo.isBefore(ahora)) {
+    proximo = DateTime(ahora.year + 1, fechaNacimiento.month, fechaNacimiento.day);
+  }
+  return proximo.difference(ahora).inDays;
+}
+
 /// "MM-DD" de una fecha, sin importar el año — campo derivado que se
 /// guarda junto a `fechaNacimiento` (en `ninos` y `usuarios`) para poder
 /// consultar "quién cumple esta semana" con un `where` acotado en vez de

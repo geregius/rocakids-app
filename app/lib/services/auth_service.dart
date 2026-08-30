@@ -1148,35 +1148,25 @@ class AuthService {
       );
   }
 
-  /// Servidores activos que cumplieron años en los últimos 7 días (o
-  /// cumplen hoy) — "Cumpleaños Servidores" (2026-08-19), mismo criterio
-  /// que [obtenerNinosQueCumplieronEstaSemana] pero sobre `usuarios`.
-  /// Mismo permiso que [contarServidoresActivos] (`puedeVerInfoLiderazgo()`
-  /// en firestore.rules: administrador, columna, líder de ministerio) —
-  /// a propósito NO abierto a todos los roles de servidor como la versión
-  /// de niños, porque `usuarios` guarda datos sensibles (documento,
-  /// teléfono, EPS) que ya están acotados a liderazgo en el resto de la
-  /// app (ver Dashboard/Acudientes y Niños).
-  ///
-  /// **Acotado por `mesDiaNacimiento`** (2026-08-19, mismo motivo que la
-  /// versión de niños). Firestore no permite combinar dos `whereIn` en
-  /// la misma consulta, así que a diferencia de antes el filtro de
-  /// rol/activo se aplica del lado del cliente — pero ya sobre el
-  /// puñado de resultados que cumplen esta semana (normalmente 0-2), no
-  /// sobre toda la colección.
-  Future<List<UsuarioApp>> obtenerServidoresQueCumplieronEstaSemana() async {
+  /// Todos los servidores activos (sin filtrar por fecha) — para
+  /// "Cumpleaños Servidores" ordenado por proximidad (2026-08-29, pedido
+  /// de Rafael: ver a todos ordenados de quién cumple más pronto a quién
+  /// más falta, no solo los de la última semana). Misma consulta base
+  /// que [obtenerServidoresConPerfilCompleto] (rol whereIn + activo, sin
+  /// `whereIn` de fecha) — es una colección chica (~30 servidores
+  /// activos), traerla completa y ordenar del lado del cliente es
+  /// barato, igual que ya se hacía para ese otro conteo.
+  Future<List<UsuarioApp>> obtenerTodosLosServidoresActivos() async {
     final rolesDeServidor = RolUsuario.values
         .where((r) => r.esRolDeServidor)
         .map((r) => r.valorFirestore)
-        .toSet();
+        .toList();
     final snap = await _firestore
         .collection('usuarios')
-        .where('mesDiaNacimiento', whereIn: mesDiaUltimaSemana())
+        .where('rol', whereIn: rolesDeServidor)
+        .where('activo', isEqualTo: true)
         .get();
-    return snap.docs
-        .map((d) => UsuarioApp.fromFirestore(d.id, d.data()))
-        .where((u) => u.activo && rolesDeServidor.contains(u.rol.valorFirestore))
-        .toList();
+    return snap.docs.map((d) => UsuarioApp.fromFirestore(d.id, d.data())).toList();
   }
 
   /// Cuántas veces un niño ha tenido Entrada en los últimos 30 días —

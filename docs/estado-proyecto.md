@@ -1,6 +1,6 @@
 # RocaKids — Estado del Proyecto (guía de continuación)
 
-**Última actualización:** 2026-08-27 (corregida la fecha de nacimiento de 453 niños que estaba corrida 1 día por un bug de la migración original, ver sección 8; y niños mayores de 10 años ya se pueden registrar y dar asistencia, con advertencia en vez de bloqueo, ver sección 5.14)
+**Última actualización:** 2026-08-29 ("Cumpleaños Servidores" ahora ordena a todos los servidores activos por proximidad, ver sección 5.15)
 **Propósito de este documento:** que una conversación nueva (u otra persona) pueda retomar el desarrollo sin perder contexto. Resume qué existe, qué funciona, cómo está armado, y qué falta.
 
 Documentos relacionados en `docs/`:
@@ -402,6 +402,19 @@ Pedido de Rafael: que el sistema **permita** registrar y dar entrada a niños **
 - `registro_asistencia_screen.dart`: nueva alerta amarilla (`_avisoSinGrupo`) en la ficha del niño seleccionado, visible cuando `grupoParaEdad(edad) == null` — "Este niño tiene X años y ya no cae en ningún grupo... Puedes continuar con su registro de asistencia igual." El check-in en sí nunca bloqueaba por edad (ya guardaba `grupoEdad: '' `), solo faltaba avisar.
 
 Cero cambios en Firestore/reglas — mismo modelo de datos, `grupoEdad` sigue siendo `''` para estos niños en los registros de asistencia (igual que ya pasaba con los que envejecían fuera del rango).
+
+---
+
+## 5.15. "Cumpleaños Servidores" ordenado por proximidad (2026-08-29)
+
+Pedido de Rafael: en vez de mostrar solo quién cumplió años en la última semana, mostrar **a todos los servidores activos** ordenados de quién cumple más pronto a quién más falta — para poder ver de un vistazo quién está próximo. Se descartó la alternativa que él mismo propuso (acotar solo al mes actual, por si "consume mucho recurso") porque no hacía falta: la colección de servidores activos es chica (~30, la misma que ya se traía completa para la tarjeta "Servidores con perfil completo" del Dashboard, sección 5.9) — traerla entera y ordenar del lado del cliente es igual de barato que antes.
+
+**Cambios:**
+- `models/nino.dart`: nueva `diasHastaProximoCumpleanos(fechaNacimiento)` — cuenta días hacia adelante hasta la próxima vez que caiga esa fecha (este año si no ha pasado, el que viene si ya pasó). Reemplaza a `diasDesdeCumpleanos` (que cuenta hacia atrás, solo dentro de 7 días) para este caso de uso — esa función sigue igual y se sigue usando en "Cumpleaños niños", que Rafael no pidió cambiar.
+- `services/auth_service.dart`: nueva `obtenerTodosLosServidoresActivos()` (misma consulta base que `obtenerServidoresConPerfilCompleto`: rol whereIn + activo, sin filtrar por fecha). Se eliminó `obtenerServidoresQueCumplieronEstaSemana()` — quedó sin ningún uso.
+- `cumpleanos_servidores_screen.dart`: la lista ahora se separa en dos grupos — servidores con `fechaNacimiento` (ordenados por `diasHastaProximoCumpleanos`, el más próximo primero) y, al final, los que todavía no la tienen registrada (agrupados aparte con un encabezado, para que quede claro que falta ese dato, en vez de desaparecer de la lista). Etiqueta de cada tarjeta cambió de "Cumplió hace N días" a "Cumple en N días" / "Cumple mañana" / "Cumple hoy".
+
+Cero cambios en Firestore/reglas — mismo permiso de siempre (`puedeVerInfoLiderazgo()`: administrador, columna, líder de ministerio).
 
 ---
 

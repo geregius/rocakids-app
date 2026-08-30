@@ -7,16 +7,22 @@ import '../theme/app_colors.dart';
 import '../widgets/app_shell.dart';
 import 'admin/user_edit_sheet.dart';
 
-/// Sección "Cumpleaños Servidores" (2026-08-19, pedido de Rafael) —
-/// misma mecánica que "Cumpleaños niños" pero sobre `usuarios`: quiénes
-/// cumplen años hoy o cumplieron en los últimos 7 días
-/// (`AuthService.obtenerServidoresQueCumplieronEstaSemana`). A
-/// diferencia de la versión de niños, **solo administrador, columna y
-/// líder de ministerio** la ven (`RolUsuario.puedeVerAcudientesYNinos`)
-/// — `usuarios` guarda datos sensibles del servidor (documento,
-/// teléfono, EPS) ya acotados a liderazgo en el resto de la app
-/// (Dashboard, Acudientes y Niños), así que esta sección sigue el mismo
-/// criterio en vez del más abierto de "Cumpleaños niños".
+/// Sección "Cumpleaños Servidores" (2026-08-19, pedido de Rafael;
+/// reordenada 2026-08-29) — a diferencia de la versión de niños,
+/// **solo administrador, columna y líder de ministerio** la ven
+/// (`RolUsuario.puedeVerAcudientesYNinos`) — `usuarios` guarda datos
+/// sensibles del servidor (documento, teléfono, EPS) ya acotados a
+/// liderazgo en el resto de la app (Dashboard, Acudientes y Niños), así
+/// que esta sección sigue el mismo criterio en vez del más abierto de
+/// "Cumpleaños niños".
+///
+/// **2026-08-29:** ya no muestra solo "quién cumplió en la última
+/// semana" — ahora trae a TODOS los servidores activos
+/// (`AuthService.obtenerTodosLosServidoresActivos`, colección chica,
+/// ~30 servidores, traerla completa es barato) y los ordena de quién
+/// cumple más pronto a quién más falta (`diasHastaProximoCumpleanos`),
+/// para poder ver de un vistazo quién está próximo. Los que todavía no
+/// tienen fecha de nacimiento registrada quedan aparte, al final.
 ///
 /// La fecha de nacimiento del servidor es un dato NUEVO — no existía en
 /// el sistema anterior, así que empieza vacía para todos los ya
@@ -40,7 +46,7 @@ class _CumpleanosServidoresScreenState
   @override
   void initState() {
     super.initState();
-    _futuro = _authService.obtenerServidoresQueCumplieronEstaSemana();
+    _futuro = _authService.obtenerTodosLosServidoresActivos();
   }
 
   @override
@@ -57,10 +63,15 @@ class _CumpleanosServidoresScreenState
           if (snapshot.hasError) {
             return Center(child: Text('Error: ${snapshot.error}'));
           }
-          final servidores = [...?snapshot.data]
+          final todos = [...?snapshot.data];
+          if (todos.isEmpty) {
+            return const Center(child: Text('No hay servidores activos.'));
+          }
+
+          final conFecha = todos.where((s) => s.fechaNacimiento != null).toList()
             ..sort((a, b) {
-              final diasA = diasDesdeCumpleanos(a.fechaNacimiento!) ?? 99;
-              final diasB = diasDesdeCumpleanos(b.fechaNacimiento!) ?? 99;
+              final diasA = diasHastaProximoCumpleanos(a.fechaNacimiento!);
+              final diasB = diasHastaProximoCumpleanos(b.fechaNacimiento!);
               final porDia = diasA.compareTo(diasB);
               return porDia != 0
                   ? porDia
@@ -68,22 +79,40 @@ class _CumpleanosServidoresScreenState
                       b.nombreCompleto.toLowerCase(),
                     );
             });
-
-          if (servidores.isEmpty) {
-            return const Center(
-              child: Text(
-                'Ningún servidor ha cumplido años en la última semana.',
+          final sinFecha = todos.where((s) => s.fechaNacimiento == null).toList()
+            ..sort(
+              (a, b) => a.nombreCompleto.toLowerCase().compareTo(
+                b.nombreCompleto.toLowerCase(),
               ),
             );
-          }
 
-          return ListView.builder(
+          return ListView(
             padding: const EdgeInsets.all(16),
-            itemCount: servidores.length,
-            itemBuilder: (context, i) => _CumpleanosServidorTile(
-              servidor: servidores[i],
-              esAdmin: widget.usuario.rol == RolUsuario.administrador,
-            ),
+            children: [
+              ...conFecha.map(
+                (s) => _CumpleanosServidorTile(
+                  servidor: s,
+                  esAdmin: widget.usuario.rol == RolUsuario.administrador,
+                ),
+              ),
+              if (sinFecha.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 8),
+                  child: Text(
+                    'Sin fecha de nacimiento registrada',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: AppColors.azulMarino.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ),
+                ...sinFecha.map(
+                  (s) => _CumpleanosServidorTile(
+                    servidor: s,
+                    esAdmin: widget.usuario.rol == RolUsuario.administrador,
+                  ),
+                ),
+              ],
+            ],
           );
         },
       ),
@@ -101,16 +130,18 @@ class _CumpleanosServidorTile extends StatelessWidget {
   });
 
   String _etiquetaFecha() {
-    final dias = diasDesdeCumpleanos(servidor.fechaNacimiento!);
-    if (dias == null) return '';
+    final fecha = servidor.fechaNacimiento;
+    if (fecha == null) return 'Sin fecha registrada';
+    final dias = diasHastaProximoCumpleanos(fecha);
     if (dias == 0) return 'Cumple hoy';
-    if (dias == 1) return 'Cumplió ayer';
-    return 'Cumplió hace $dias días';
+    if (dias == 1) return 'Cumple mañana';
+    return 'Cumple en $dias días';
   }
 
   @override
   Widget build(BuildContext context) {
-    final hoy = diasDesdeCumpleanos(servidor.fechaNacimiento!) == 0;
+    final fecha = servidor.fechaNacimiento;
+    final hoy = fecha != null && diasHastaProximoCumpleanos(fecha) == 0;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
