@@ -54,8 +54,11 @@ DateTime _sumarMeses(DateTime d, int n) {
 
 /// "Dashboard" para los roles de liderazgo (administrador, columna y
 /// líder de ministerio — ver [RolUsuario.puedeVerDashboard]): totales
-/// del sistema, un vistazo de cuántos niños hay HOY (reutilizando la
-/// misma lógica de "presentes ahora" que `ninos_presentes_screen.dart`)
+/// del sistema, un vistazo de cuántos niños hay HOY (usando
+/// `calcularPresentes()` de `models/registro.dart` — la tarjeta
+/// "Presentes ahora" tenía su PROPIA copia de esta lógica hasta
+/// 2026-08-30, que se quedó con el bug de visitantes ya corregido en
+/// la función compartida — ver sección 8 de `docs/estado-proyecto.md`)
 /// y una vista histórica de tendencias con filtros de 1/3/6/9/12 meses.
 ///
 /// El histórico lee `resumenes_mensuales` (2026-08-19) — un documento
@@ -847,26 +850,6 @@ class _BloqueHoyState extends State<_BloqueHoy> {
     });
   }
 
-  /// Igual criterio que `ninos_presentes_screen.dart`: el último
-  /// movimiento de HOY de un niño registrado decide si sigue presente;
-  /// cada Entrada de un visitante cuenta por separado porque esta fase
-  /// no registra su salida.
-  List<Registro> _presentesAhora(List<Registro> registrosDeHoy) {
-    final ultimoPorNino = <String, Registro>{};
-    final visitantesPresentes = <Registro>[];
-    for (final r in registrosDeHoy) {
-      if (r.esVisitante) {
-        if (r.tipoMovimiento == 'Entrada') visitantesPresentes.add(r);
-        continue;
-      }
-      ultimoPorNino[r.fkIdNino] = r;
-    }
-    return [
-      ...ultimoPorNino.values.where((r) => r.tipoMovimiento == 'Entrada'),
-      ...visitantesPresentes,
-    ];
-  }
-
   bool _sinDocumento(Registro r) => r.esVisitante
       ? r.documentoNinoVisitante.isEmpty
       : (_ninosPorId[r.fkIdNino]?.identificacionMenor.isEmpty ?? false);
@@ -889,7 +872,7 @@ class _BloqueHoyState extends State<_BloqueHoy> {
         _asegurarNinosCargados(
           entradasHoy.where((r) => !r.esVisitante).map((r) => r.fkIdNino),
         );
-        final presentes = _presentesAhora(registrosDeHoy);
+        final presentes = calcularPresentes(registrosDeHoy);
         final yaSalieron = entradasHoy.length - presentes.length;
         final visitantes = entradasHoy.where((r) => r.esVisitante).length;
         final sinDocumento = entradasHoy.where(_sinDocumento).length;
