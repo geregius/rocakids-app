@@ -168,10 +168,22 @@ class Registro {
 }
 
 /// De todos los movimientos de un día, deja solo a quien está presente
-/// AHORA: para un niño registrado, su movimiento más reciente debe ser
-/// "Entrada" (si ya salió, no cuenta); para un visitante, cada "Entrada"
-/// cuenta por separado (no hay forma de dar salida a un visitante desde
-/// el registro manual, así que cada una es una presencia distinta).
+/// AHORA: su movimiento más reciente debe ser "Entrada" (si ya salió,
+/// no cuenta). Para un niño registrado, el identificador es
+/// `fkIdNino`; para un visitante (sin cuenta previa) es `numeroManilla`
+/// — cada manilla física es única por día (mismo criterio exacto que
+/// ya usa `AuthService.manillaEnUsoHoy()`/`buscarPresentePorManilla()`
+/// para el escaneo, y que exige la manilla como obligatoria al
+/// registrar cualquier Entrada, incluida la de un visitante). Antes
+/// (hasta 2026-08-30) cada Entrada de visitante contaba como una
+/// presencia separada para siempre, sin importar cuántas Salidas se le
+/// registraran después (deslizando la tarjeta, "Retirar a todos", o el
+/// cierre automático) — un visitante NUNCA desaparecía de la lista.
+/// Bug real encontrado por Rafael: 19 visitantes seguían "presentes"
+/// pese a que sus Salidas sí se habían guardado (varias veces cada
+/// una, incluido un "Retirar a todos" completo) — la pantalla nunca
+/// las tomaba en cuenta.
+///
 /// Compartido entre "Menores Recibidos" y "Modo emergencia" (2026-08-19)
 /// — antes vivía solo en `ninos_presentes_screen.dart`; se movió acá
 /// para que ambas pantallas usen EXACTAMENTE el mismo criterio de
@@ -179,19 +191,19 @@ class Registro {
 /// no pueda quedar desincronizado del real.
 List<Registro> calcularPresentes(List<Registro> registrosDelDia) {
   final ultimoPorNino = <String, Registro>{};
-  final visitantesPresentes = <Registro>[];
+  final ultimoPorVisitante = <String, Registro>{};
   for (final r in registrosDelDia) {
-    if (r.esVisitante) {
-      if (r.tipoMovimiento == 'Entrada') visitantesPresentes.add(r);
-      continue;
-    }
     // Los registros ya vienen ordenados por fecha ascendente, así que
-    // el último que se procese por niño es el más reciente.
-    ultimoPorNino[r.fkIdNino] = r;
+    // el último que se procese por cada clave es el más reciente.
+    if (r.esVisitante) {
+      ultimoPorVisitante[r.numeroManilla] = r;
+    } else {
+      ultimoPorNino[r.fkIdNino] = r;
+    }
   }
   return [
     ...ultimoPorNino.values.where((r) => r.tipoMovimiento == 'Entrada'),
-    ...visitantesPresentes,
+    ...ultimoPorVisitante.values.where((r) => r.tipoMovimiento == 'Entrada'),
   ];
 }
 

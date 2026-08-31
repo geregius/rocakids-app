@@ -32,12 +32,13 @@ const _sinGrupo = 'Mayores de 11 años';
 /// histórica del día completo (incluyendo quien ya salió) queda
 /// pendiente para más adelante — decisión explícita de Rafael, 2026-08-15.
 ///
-/// "Presente" = el último movimiento de HOY de ese niño fue "Entrada".
-/// Los niños VISITANTES (sin cuenta previa) se cuentan también: como
-/// esta fase de la app no tiene forma de registrar la salida de un
-/// visitante (`registrar_asistencia_screen.dart` solo permite su
-/// Entrada), CADA entrada de visitante de hoy cuenta como presente —
-/// es una limitación conocida de esta fase, no un bug de esta pantalla.
+/// "Presente" = el último movimiento de HOY de esa identidad fue
+/// "Entrada" (niño registrado → `fkIdNino`; visitante → `numeroManilla`,
+/// ver `calcularPresentes()` en `models/registro.dart`). Los niños
+/// VISITANTES (sin cuenta previa) se cuentan también, y SÍ desaparecen
+/// al deslizar su tarjeta o con "Retirar a todos" — corregido
+/// 2026-08-30 (antes cada Entrada de visitante quedaba presente para
+/// siempre sin importar cuántas Salidas se le registraran).
 ///
 /// Deslizar la tarjeta de un niño (a cualquier lado) le da la SALIDA de
 /// inmediato — sin confirmación ni volver a preguntar quién lo retira,
