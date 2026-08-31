@@ -93,6 +93,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Dashboard',
+      construirPantalla: () => DashboardScreen(usuario: widget.usuario),
       body: (context) => ListView(
         padding: const EdgeInsets.all(16),
         children: [

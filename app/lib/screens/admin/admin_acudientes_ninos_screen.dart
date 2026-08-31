@@ -47,6 +47,7 @@ class _AdminAcudientesNinosScreenState extends State<AdminAcudientesNinosScreen>
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Acudientes y Niños',
+      construirPantalla: () => AdminAcudientesNinosScreen(usuario: widget.usuario),
       body: (context) => Column(
         children: [
           TabBar(

@@ -36,12 +36,21 @@ class AppShell extends StatefulWidget {
   final String seccionActiva;
   final WidgetBuilder body;
   final Widget? floatingActionButton;
+  // Reconstruye ESTA MISMA pantalla desde cero (ej. `() =>
+  // NinosPresentesScreen(usuario: usuario)`) — lo que usa "Actualizar"
+  // (ver `_refrescar`) para lograr EXACTAMENTE el efecto de salir a
+  // otro ítem del menú y volver, pedido explícito de Rafael
+  // (2026-08-30): no basta con refrescar el stream por dentro, tiene
+  // que ser el mismo reinicio total (incluye el propio `State` de la
+  // pantalla, no solo su `body`).
+  final Widget Function() construirPantalla;
 
   const AppShell({
     super.key,
     required this.usuario,
     required this.seccionActiva,
     required this.body,
+    required this.construirPantalla,
     this.floatingActionButton,
   });
 
@@ -50,36 +59,36 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  // Se incrementa cada vez que se toca "Actualizar" en la barra superior
-  // (2026-08-24, pedido de Rafael: varias fallas de conexión dejaban una
-  // pantalla "trabada", y la única forma de recuperarla era salir a otro
-  // ítem del menú y volver — eso destruye y recrea desde cero el widget
-  // de esa pantalla, lo que reinicia cualquier consulta/stream). Envolver
-  // `body` en un `KeyedSubtree` con esta cifra como key (ver
-  // `_buildNormal`) logra EXACTAMENTE lo mismo con un botón, sin navegar
-  // a ningún lado. Mismo motivo por el que, igual que saliendo y
-  // volviendo, un formulario a medio llenar se perdería con este botón
-  // — no es un caso nuevo.
+  // Botón "Actualizar" en la barra superior (2026-08-24, pedido de
+  // Rafael: varias fallas de conexión dejaban una pantalla "trabada", y
+  // la única forma de recuperarla era salir a otro ítem del menú y
+  // volver — eso destruye y recrea desde cero el widget de esa
+  // pantalla, lo que reinicia cualquier consulta/stream).
   //
-  // **2026-08-30 (bug real encontrado, pedido de Rafael: "retiro a
-  // niños pero al volver a entrar siguen apareciendo presentes, y
-  // Actualizar queda pensando"):** `body` era un `Widget` ya construido
-  // — un `StreamBuilder(stream: _authService.registrosDeHoy(), ...)`
-  // armado UNA sola vez dentro del `build()` de la pantalla que llama a
-  // `AppShell`. El `KeyedSubtree` de abajo sí destruye y recrea el
-  // `StreamBuilder`, pero lo vuelve a atar al MISMO objeto `Stream` de
-  // siempre (la llamada a `registrosDeHoy()` no se repetía) — si ese
-  // listener de Firestore quedó colgado (conexión inestable, pestaña en
-  // segundo plano un rato largo, celular que perdió señal), "Actualizar"
-  // no lo arreglaba: solo remontaba el widget alrededor del mismo stream
-  // ya trabado, así que se quedaba esperando para siempre. `body` pasó
-  // de `Widget` a `WidgetBuilder` — ahora se invoca DE NUEVO en cada
-  // refresh (ver `_buildNormal`), así que cualquier pantalla que arme su
-  // stream/consulta ahí adentro obtiene una consulta realmente nueva,
-  // igual que salir del menú y volver.
-  int _refreshTick = 0;
-
-  void _refrescar() => setState(() => _refreshTick++);
+  // **2026-08-30, dos vueltas sobre el mismo bug:** el primer intento
+  // (envolver `body` en un `KeyedSubtree` con una key que cambia) solo
+  // destruía/recreaba el `StreamBuilder` de adentro, pero lo volvía a
+  // atar al MISMO objeto `Stream` de siempre (la pantalla que llama a
+  // `AppShell` no se reconstruía a sí misma, solo `AppShell`) — si ese
+  // listener de Firestore quedó colgado, "Actualizar" no lo arreglaba
+  // de verdad. Rafael aclaró explícitamente qué necesitaba: "la idea es
+  // que sea como ir a otro menú y volver" — el reinicio TOTAL de la
+  // pantalla (su propio `State`, no solo su `body`), no una recarga
+  // parcial del stream. Por eso ahora `_refrescar` hace una navegación
+  // real (`pushReplacement`, sin animación) hacia una instancia NUEVA
+  // de la misma pantalla (`widget.construirPantalla()`) — exactamente
+  // lo mismo que ya hacía `_irA` para cualquier ítem del menú, solo que
+  // sin moverse de sección. Mismo motivo de siempre por el que un
+  // formulario a medio llenar se pierde con este botón — no es un caso
+  // nuevo.
+  void _refrescar(BuildContext context) {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, _, _) => widget.construirPantalla(),
+        transitionDuration: Duration.zero,
+      ),
+    );
+  }
 
   void _irA(BuildContext context, Widget pantalla) {
     Navigator.of(
@@ -322,16 +331,10 @@ class _AppShellState extends State<AppShell> {
     final usuario = widget.usuario;
     final seccionActiva = widget.seccionActiva;
     final floatingActionButton = widget.floatingActionButton;
-    // `KeyedSubtree` con una key que cambia en cada toque de "Actualizar"
-    // fuerza a Flutter a destruir y reconstruir todo el contenido de la
-    // pantalla desde cero — ver el porqué en el docstring de
-    // `_refreshTick`. `widget.body(context)` se llama DE NUEVO acá cada
-    // vez (no se guarda en una variable fuera de este método), así que
-    // cualquier `stream:`/`future:` armado adentro se pide fresco.
-    final body = KeyedSubtree(key: ValueKey(_refreshTick), child: widget.body(context));
+    final body = widget.body(context);
     final accionActualizar = [
       IconButton(
-        onPressed: _refrescar,
+        onPressed: () => _refrescar(context),
         icon: const Icon(Icons.refresh),
         tooltip: 'Actualizar esta pantalla',
       ),
@@ -395,6 +398,7 @@ class _EmergenciaScreenWrapper extends StatelessWidget {
       usuario: usuario,
       seccionActiva: 'Modo emergencia',
       body: (context) => ModoEmergenciaBody(usuario: usuario),
+      construirPantalla: () => _EmergenciaScreenWrapper(usuario: usuario),
     );
   }
 }

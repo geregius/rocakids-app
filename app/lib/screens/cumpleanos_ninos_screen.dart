@@ -83,6 +83,7 @@ class _CumpleanosNinosScreenState extends State<CumpleanosNinosScreen> {
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Cumpleaños niños',
+      construirPantalla: () => CumpleanosNinosScreen(usuario: widget.usuario),
       body: (context) => FutureBuilder<List<Nino>>(
         future: _futuroCumpleaneros,
         builder: (context, snapshotCumpleaneros) {

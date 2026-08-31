@@ -13,6 +13,7 @@ class HomeScreen extends StatelessWidget {
     return AppShell(
       usuario: usuario,
       seccionActiva: 'Inicio',
+      construirPantalla: () => HomeScreen(usuario: usuario),
       body: (context) => Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,

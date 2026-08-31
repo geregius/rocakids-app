@@ -782,6 +782,7 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
       // mientras se está aquí (no hay ninguno con esta etiqueta) — un
       // detalle cosmético menor, sin ningún impacto funcional.
       seccionActiva: 'Registro de asistencia',
+      construirPantalla: () => RegistroAsistenciaScreen(usuario: widget.usuario),
       body: (context) => Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),

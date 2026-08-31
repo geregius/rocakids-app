@@ -72,6 +72,7 @@ class _AcudientePortalScreenState extends State<AcudientePortalScreen> {
         return AppShell(
           usuario: widget.usuario,
           seccionActiva: 'Mis hijos',
+          construirPantalla: () => AcudientePortalScreen(usuario: widget.usuario),
           floatingActionButton: tieneAcudiente
               ? FloatingActionButton.extended(
                   onPressed: () => _listaKey.currentState?.abrirAgregarHijo(),

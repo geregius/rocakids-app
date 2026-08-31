@@ -66,6 +66,7 @@ class _ManualUsuarioScreenState extends State<ManualUsuarioScreen>
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Manual de usuario',
+      construirPantalla: () => ManualUsuarioScreen(usuario: widget.usuario),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _generandoPdf ? null : _descargarPdf,
         icon: _generandoPdf

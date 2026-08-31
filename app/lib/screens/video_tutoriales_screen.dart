@@ -84,6 +84,7 @@ class _VideoTutorialesScreenState extends State<VideoTutorialesScreen>
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Manual de usuario',
+      construirPantalla: () => VideoTutorialesScreen(usuario: widget.usuario),
       floatingActionButton: esAdmin
           ? FloatingActionButton.extended(
               onPressed: () => _abrirFormulario(),

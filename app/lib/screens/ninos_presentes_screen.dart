@@ -301,6 +301,7 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Menores Registrados',
+      construirPantalla: () => NinosPresentesScreen(usuario: widget.usuario),
       // Dos acciones flotantes (2026-08-24): "+" para registrar una
       // nueva entrada (antes vivía en el ítem de menú aparte "Registro
       // de asistencia", ahora abre exactamente la misma pantalla con

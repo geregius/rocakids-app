@@ -54,6 +54,7 @@ class _CumpleanosServidoresScreenState
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Cumpleaños Servidores',
+      construirPantalla: () => CumpleanosServidoresScreen(usuario: widget.usuario),
       body: (context) => FutureBuilder<List<UsuarioApp>>(
         future: _futuro,
         builder: (context, snapshot) {
