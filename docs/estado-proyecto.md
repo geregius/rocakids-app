@@ -1,6 +1,6 @@
 # RocaKids — Estado del Proyecto (guía de continuación)
 
-**Última actualización:** 2026-08-30 (corregido de raíz que los niños VISITANTES nunca desaparecían de "presente" aunque se les diera Salida — usaban una identidad distinta a los niños registrados; ver sección 8)
+**Última actualización:** 2026-08-30 (pestaña "Niños" de "Acudientes y Niños" ahora agrupada por grupo/aula, con etiqueta "Mayores de 10 años" para quienes ya no caen en ninguno — ver sección 5.16)
 **Propósito de este documento:** que una conversación nueva (u otra persona) pueda retomar el desarrollo sin perder contexto. Resume qué existe, qué funciona, cómo está armado, y qué falta.
 
 Documentos relacionados en `docs/`:
@@ -415,6 +415,17 @@ Pedido de Rafael: en vez de mostrar solo quién cumplió años en la última sem
 - `cumpleanos_servidores_screen.dart`: la lista ahora se separa en dos grupos — servidores con `fechaNacimiento` (ordenados por `diasHastaProximoCumpleanos`, el más próximo primero) y, al final, los que todavía no la tienen registrada (agrupados aparte con un encabezado, para que quede claro que falta ese dato, en vez de desaparecer de la lista). Etiqueta de cada tarjeta cambió de "Cumplió hace N días" a "Cumple en N días" / "Cumple mañana" / "Cumple hoy".
 
 Cero cambios en Firestore/reglas — mismo permiso de siempre (`puedeVerInfoLiderazgo()`: administrador, columna, líder de ministerio).
+
+---
+
+## 5.16. Pestaña "Niños" de "Acudientes y Niños" agrupada por edad (2026-08-30)
+
+Pedido de Rafael: que la lista de niños en `admin/admin_acudientes_ninos_screen.dart` muestre la misma distinción de grupos/aulas que ya se usa en "Menores Registrados", en vez de una lista plana. Mismo criterio de siempre (`grupoParaEdad()` sobre la edad actual calculada desde `fechaNacimiento`), pero SIN depender de quién esté presente hoy — se agrupan TODOS los niños que pasan el filtro de búsqueda, estén presentes o no.
+
+- Nuevas `_GrupoNinosSection`/`_NinoTile` (mismo patrón visual — `ExpansionTile` colapsable — que `_GrupoSection` en `ninos_presentes_screen.dart`, pero sin swipe: acá no se registra asistencia).
+- **Etiqueta pedida explícitamente por Rafael para esta pantalla: "Mayores de 10 años"** (en vez de "Mayores de 11 años", la que ya usan "Menores Registrados" y el Dashboard para el mismo grupo exacto de niños — `grupoParaEdad()` devolviendo `null`, es decir, 11 años o más). Describen el mismo conjunto de niños, solo con una redacción distinta pedida puntualmente para esta pantalla — queda una inconsistencia de nombre a propósito entre pantallas, no un descuido.
+
+Cero cambios en Firestore/reglas — la agrupación es puramente de presentación sobre datos que la pantalla ya traía completos.
 
 ---
 

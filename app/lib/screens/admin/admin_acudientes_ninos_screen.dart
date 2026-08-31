@@ -9,6 +9,14 @@ import '../../widgets/app_shell.dart';
 import '../acudiente_detalle_sheet.dart';
 import '../nino_detalle_sheet.dart';
 
+/// Niños cuya edad ya no cae en ningún grupo de [gruposEdad] (11 años o
+/// más) — mismo criterio que `grupoParaEdad()` devolviendo `null`,
+/// pero acá Rafael pidió explícitamente esta etiqueta puntual
+/// (2026-08-30) en vez de "Mayores de 11 años" (la que ya se usa en
+/// "Menores Registrados"/Dashboard) — describen el mismo grupo de
+/// niños, solo con una redacción distinta pedida para esta pantalla.
+const _mayoresDeDiez = 'Mayores de 10 años';
+
 /// Panel para ver la lista completa de acudientes Y niños (pedido
 /// explícito de Rafael, no solo niños) — extiende el pendiente
 /// "Administración de Niños" para incluir también a los acudientes.
@@ -154,59 +162,141 @@ class _ListaNinosState extends State<_ListaNinos> {
                   ),
                 );
               }
-              return ListView.builder(
+              // Agrupados por grupo/aula del ministerio (2026-08-30,
+              // pedido de Rafael) — mismo criterio que "Menores
+              // Registrados" (`grupoParaEdad()` sobre la edad actual),
+              // pero acá los grupos son estáticos (no dependen de quién
+              // esté presente hoy), así que se recalculan directo sobre
+              // TODOS los niños que pasaron el filtro de búsqueda.
+              final grupos = <String, List<Nino>>{};
+              for (final n in ninos) {
+                final grupo = grupoParaEdad(calcularEdad(n.fechaNacimiento)) ?? _mayoresDeDiez;
+                grupos.putIfAbsent(grupo, () => []).add(n);
+              }
+              for (final lista in grupos.values) {
+                lista.sort(
+                  (a, b) => a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase()),
+                );
+              }
+              final ordenados = [
+                ...gruposEdad,
+                if (grupos.containsKey(_mayoresDeDiez)) _mayoresDeDiez,
+              ];
+              return ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: ninos.length,
-                itemBuilder: (context, i) {
-                  final nino = ninos[i];
-                  final noAutorizaImagen = !nino.autorizoFotoFlag;
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: AppColors.amarillo,
-                      backgroundImage: nino.fotoUrl.isNotEmpty
-                          ? NetworkImage(nino.fotoUrl)
-                          : null,
-                      child: nino.fotoUrl.isEmpty
-                          ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
-                          : null,
-                    ),
-                    title: Text(nino.nombreCompleto),
-                    subtitle: Text(
-                      '${calcularEdad(nino.fechaNacimiento)} años · '
-                      '${nino.identificacionMenor.isNotEmpty ? nino.identificacionMenor : 'Sin documento'}',
-                    ),
-                    trailing: (!nino.alertaMedicaFlag && !noAutorizaImagen)
-                        ? null
-                        : Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (nino.alertaMedicaFlag) ...[
-                                const Tooltip(
-                                  message: 'Tiene condición médica/alergia registrada',
-                                  child: Icon(Icons.medical_information, color: AppColors.rojo),
-                                ),
-                                if (noAutorizaImagen) const SizedBox(width: 6),
-                              ],
-                              if (noAutorizaImagen)
-                                const Tooltip(
-                                  message:
-                                      'NO autoriza uso de imagen — no tomarle fotos ni videos',
-                                  child: Icon(Icons.no_photography, color: AppColors.rojo),
-                                ),
-                            ],
-                          ),
-                    onTap: () => showModalBottomSheet<bool>(
-                      context: context,
-                      isScrollControlled: true,
-                      builder: (_) => NinoDetalleSheet(nino: nino, usuario: widget.usuario),
-                    ),
-                  );
-                },
+                children: [
+                  for (final grupo in ordenados)
+                    if (grupos[grupo] != null)
+                      _GrupoNinosSection(
+                        key: ValueKey(grupo),
+                        nombre: grupo,
+                        ninos: grupos[grupo]!,
+                        usuario: widget.usuario,
+                      ),
+                ],
               );
             },
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Un grupo/aula colapsable dentro de "Niños" — mismo patrón visual que
+/// `_GrupoSection` en `ninos_presentes_screen.dart`, pero sin swipe
+/// (acá no se registra asistencia, solo se consulta/edita la ficha).
+class _GrupoNinosSection extends StatelessWidget {
+  final String nombre;
+  final List<Nino> ninos;
+  final UsuarioApp usuario;
+
+  const _GrupoNinosSection({
+    super.key,
+    required this.nombre,
+    required this.ninos,
+    required this.usuario,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final rangoEdad = rangoEdadPorGrupo[nombre];
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: true,
+          title: Text(
+            rangoEdad != null
+                ? 'Grupo $nombre · $rangoEdad (${ninos.length})'
+                // "Mayores de 10 años" ya se lee bien solo — con el
+                // prefijo "Grupo" delante quedaría raro.
+                : nombre == _mayoresDeDiez
+                ? '$nombre (${ninos.length})'
+                : 'Grupo $nombre (${ninos.length})',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: AppColors.azulMarino,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          children: [
+            const Divider(height: 1),
+            for (final nino in ninos) _NinoTile(nino: nino, usuario: usuario),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NinoTile extends StatelessWidget {
+  final Nino nino;
+  final UsuarioApp usuario;
+
+  const _NinoTile({required this.nino, required this.usuario});
+
+  @override
+  Widget build(BuildContext context) {
+    final noAutorizaImagen = !nino.autorizoFotoFlag;
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: AppColors.amarillo,
+        backgroundImage: nino.fotoUrl.isNotEmpty ? NetworkImage(nino.fotoUrl) : null,
+        child: nino.fotoUrl.isEmpty
+            ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
+            : null,
+      ),
+      title: Text(nino.nombreCompleto),
+      subtitle: Text(
+        '${calcularEdad(nino.fechaNacimiento)} años · '
+        '${nino.identificacionMenor.isNotEmpty ? nino.identificacionMenor : 'Sin documento'}',
+      ),
+      trailing: (!nino.alertaMedicaFlag && !noAutorizaImagen)
+          ? null
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (nino.alertaMedicaFlag) ...[
+                  const Tooltip(
+                    message: 'Tiene condición médica/alergia registrada',
+                    child: Icon(Icons.medical_information, color: AppColors.rojo),
+                  ),
+                  if (noAutorizaImagen) const SizedBox(width: 6),
+                ],
+                if (noAutorizaImagen)
+                  const Tooltip(
+                    message: 'NO autoriza uso de imagen — no tomarle fotos ni videos',
+                    child: Icon(Icons.no_photography, color: AppColors.rojo),
+                  ),
+              ],
+            ),
+      onTap: () => showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => NinoDetalleSheet(nino: nino, usuario: usuario),
+      ),
     );
   }
 }
