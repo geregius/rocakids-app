@@ -91,6 +91,17 @@ class _ListaNinosState extends State<_ListaNinos> {
   final _busquedaController = TextEditingController();
   String _busqueda = '';
 
+  // Un controlador por grupo (2026-08-31, pedido de Rafael: los grupos
+  // arrancan colapsados — para ver un niño hay que abrir el grupo a
+  // mano O buscarlo por nombre, y ahí el grupo con el resultado se
+  // despliega solo). `ExpansionTile.initiallyExpanded` solo aplica en
+  // el primer build de cada tile — no sirve para forzar que se abra
+  // más adelante en reacción a la búsqueda, por eso hace falta un
+  // `ExpansibleController` explícito por grupo.
+  final _controladores = {
+    for (final g in [...gruposEdad, _mayoresDeOnce]) g: ExpansibleController(),
+  };
+
   @override
   void dispose() {
     _busquedaController.dispose();
@@ -180,6 +191,25 @@ class _ListaNinosState extends State<_ListaNinos> {
                 ...gruposEdad,
                 if (grupos.containsKey(_mayoresDeOnce)) _mayoresDeOnce,
               ];
+              // Con una búsqueda activa, el/los grupo(s) que tienen
+              // coincidencia se abren solos; sin búsqueda, quedan
+              // colapsados (estado por defecto). Se hace después de
+              // pintar el frame (`addPostFrameCallback`) porque el
+              // controlador de un grupo recién montado todavía no está
+              // "adjunto" durante el propio `build()`.
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                final hayBusqueda = _busqueda.trim().isNotEmpty;
+                for (final entrada in _controladores.entries) {
+                  if (!grupos.containsKey(entrada.key)) continue;
+                  final controlador = entrada.value;
+                  if (hayBusqueda && !controlador.isExpanded) {
+                    controlador.expand();
+                  } else if (!hayBusqueda && controlador.isExpanded) {
+                    controlador.collapse();
+                  }
+                }
+              });
               return ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
@@ -187,6 +217,7 @@ class _ListaNinosState extends State<_ListaNinos> {
                     if (grupos[grupo] != null)
                       _GrupoNinosSection(
                         key: ValueKey(grupo),
+                        controller: _controladores[grupo]!,
                         nombre: grupo,
                         ninos: grupos[grupo]!,
                         usuario: widget.usuario,
@@ -208,12 +239,14 @@ class _GrupoNinosSection extends StatelessWidget {
   final String nombre;
   final List<Nino> ninos;
   final UsuarioApp usuario;
+  final ExpansibleController controller;
 
   const _GrupoNinosSection({
     super.key,
     required this.nombre,
     required this.ninos,
     required this.usuario,
+    required this.controller,
   });
 
   @override
@@ -225,7 +258,11 @@ class _GrupoNinosSection extends StatelessWidget {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          initiallyExpanded: true,
+          controller: controller,
+          // Colapsado por defecto (2026-08-31, pedido de Rafael) — se
+          // abre a mano, o solo si hay una búsqueda con coincidencia
+          // (ver `_ListaNinosState.build`).
+          initiallyExpanded: false,
           title: Text(
             rangoEdad != null
                 ? 'Grupo $nombre · $rangoEdad (${ninos.length})'

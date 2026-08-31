@@ -1,6 +1,6 @@
 # RocaKids — Estado del Proyecto (guía de continuación)
 
-**Última actualización:** 2026-08-30 (pestaña "Niños" de "Acudientes y Niños" ahora agrupada por grupo/aula, con etiqueta "Mayores de 11 años" — unificada con el resto de la app — ver sección 5.16)
+**Última actualización:** 2026-08-31 (los grupos de la pestaña "Niños" en "Acudientes y Niños" ahora arrancan colapsados, y se abren solos al buscar un niño por nombre — ver sección 5.16)
 **Propósito de este documento:** que una conversación nueva (u otra persona) pueda retomar el desarrollo sin perder contexto. Resume qué existe, qué funciona, cómo está armado, y qué falta.
 
 Documentos relacionados en `docs/`:
@@ -426,6 +426,8 @@ Pedido de Rafael: que la lista de niños en `admin/admin_acudientes_ninos_screen
 - Etiqueta del grupo sin aula (11 años o más): **"Mayores de 11 años"** — mismo texto exacto que "Menores Registrados"/Dashboard (`_mayoresDeOnce`). Rafael pidió inicialmente "Mayores de 10 años" solo para esta pantalla, pero al notar la inconsistencia con el resto de la app pidió unificarlo el mismo día — quedó igual en todos lados.
 
 Cero cambios en Firestore/reglas — la agrupación es puramente de presentación sobre datos que la pantalla ya traía completos.
+
+**2026-08-31, ajuste de Rafael sobre el mismo cambio:** los grupos arrancan **colapsados** por defecto (antes quedaban todos abiertos de una vez). Para ver un niño: se abre el grupo a mano, o se busca por nombre/documento y el grupo con la coincidencia se despliega solo. `ExpansionTile.initiallyExpanded` solo define el estado la PRIMERA vez que se monta cada tile — no sirve para forzar que se abra más adelante en reacción a la búsqueda, así que se agregó un `ExpansibleController` por grupo (`_ListaNinosState._controladores`, uno fijo por cada uno de los 6 grupos posibles) y, tras cada build, un `addPostFrameCallback` que expande el/los grupo(s) con coincidencia mientras hay texto en la búsqueda, y los colapsa de vuelta al vaciarla.
 
 ---
 
