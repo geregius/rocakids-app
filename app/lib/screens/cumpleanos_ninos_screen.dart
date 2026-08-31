@@ -83,7 +83,7 @@ class _CumpleanosNinosScreenState extends State<CumpleanosNinosScreen> {
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Cumpleaños niños',
-      body: FutureBuilder<List<Nino>>(
+      body: (context) => FutureBuilder<List<Nino>>(
         future: _futuroCumpleaneros,
         builder: (context, snapshotCumpleaneros) {
           if (snapshotCumpleaneros.connectionState == ConnectionState.waiting) {

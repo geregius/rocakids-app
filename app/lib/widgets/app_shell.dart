@@ -34,7 +34,7 @@ const _anchoMenuFijo = 800.0;
 class AppShell extends StatefulWidget {
   final UsuarioApp usuario;
   final String seccionActiva;
-  final Widget body;
+  final WidgetBuilder body;
   final Widget? floatingActionButton;
 
   const AppShell({
@@ -60,6 +60,23 @@ class _AppShellState extends State<AppShell> {
   // a ningún lado. Mismo motivo por el que, igual que saliendo y
   // volviendo, un formulario a medio llenar se perdería con este botón
   // — no es un caso nuevo.
+  //
+  // **2026-08-30 (bug real encontrado, pedido de Rafael: "retiro a
+  // niños pero al volver a entrar siguen apareciendo presentes, y
+  // Actualizar queda pensando"):** `body` era un `Widget` ya construido
+  // — un `StreamBuilder(stream: _authService.registrosDeHoy(), ...)`
+  // armado UNA sola vez dentro del `build()` de la pantalla que llama a
+  // `AppShell`. El `KeyedSubtree` de abajo sí destruye y recrea el
+  // `StreamBuilder`, pero lo vuelve a atar al MISMO objeto `Stream` de
+  // siempre (la llamada a `registrosDeHoy()` no se repetía) — si ese
+  // listener de Firestore quedó colgado (conexión inestable, pestaña en
+  // segundo plano un rato largo, celular que perdió señal), "Actualizar"
+  // no lo arreglaba: solo remontaba el widget alrededor del mismo stream
+  // ya trabado, así que se quedaba esperando para siempre. `body` pasó
+  // de `Widget` a `WidgetBuilder` — ahora se invoca DE NUEVO en cada
+  // refresh (ver `_buildNormal`), así que cualquier pantalla que arme su
+  // stream/consulta ahí adentro obtiene una consulta realmente nueva,
+  // igual que salir del menú y volver.
   int _refreshTick = 0;
 
   void _refrescar() => setState(() => _refreshTick++);
@@ -308,8 +325,10 @@ class _AppShellState extends State<AppShell> {
     // `KeyedSubtree` con una key que cambia en cada toque de "Actualizar"
     // fuerza a Flutter a destruir y reconstruir todo el contenido de la
     // pantalla desde cero — ver el porqué en el docstring de
-    // `_refreshTick`.
-    final body = KeyedSubtree(key: ValueKey(_refreshTick), child: widget.body);
+    // `_refreshTick`. `widget.body(context)` se llama DE NUEVO acá cada
+    // vez (no se guarda en una variable fuera de este método), así que
+    // cualquier `stream:`/`future:` armado adentro se pide fresco.
+    final body = KeyedSubtree(key: ValueKey(_refreshTick), child: widget.body(context));
     final accionActualizar = [
       IconButton(
         onPressed: _refrescar,
@@ -375,7 +394,7 @@ class _EmergenciaScreenWrapper extends StatelessWidget {
     return AppShell(
       usuario: usuario,
       seccionActiva: 'Modo emergencia',
-      body: ModoEmergenciaBody(usuario: usuario),
+      body: (context) => ModoEmergenciaBody(usuario: usuario),
     );
   }
 }

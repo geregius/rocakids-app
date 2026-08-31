@@ -79,7 +79,7 @@ class _AcudientePortalScreenState extends State<AcudientePortalScreen> {
                   label: const Text('Agregar hijo'),
                 )
               : null,
-          body: body,
+          body: (context) => body,
         );
       },
     );

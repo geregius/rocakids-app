@@ -23,7 +23,7 @@ class AdminUsersListScreen extends StatelessWidget {
     return AppShell(
       usuario: usuario,
       seccionActiva: 'Gestión de Servidores',
-      body: StreamBuilder<List<UsuarioApp>>(
+      body: (context) => StreamBuilder<List<UsuarioApp>>(
         stream: authService.listarUsuarios(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {

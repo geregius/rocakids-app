@@ -21,7 +21,7 @@ class ManualInicioScreen extends StatelessWidget {
     return AppShell(
       usuario: usuario,
       seccionActiva: 'Manual de usuario',
-      body: Center(
+      body: (context) => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(

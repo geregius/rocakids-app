@@ -468,7 +468,7 @@ class _RegistrarFamiliaScreenState extends State<RegistrarFamiliaScreen> {
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Registrar familia',
-      body: Stack(
+      body: (context) => Stack(
         children: [
           _resumenFamiliaRegistrada != null
               ? _buildExito(context)

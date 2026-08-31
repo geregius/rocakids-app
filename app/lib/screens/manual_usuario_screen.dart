@@ -77,7 +77,7 @@ class _ManualUsuarioScreenState extends State<ManualUsuarioScreen>
             : const Icon(Icons.picture_as_pdf),
         label: Text(_generandoPdf ? 'Generando…' : 'Descargar PDF'),
       ),
-      body: Column(
+      body: (context) => Column(
         children: [
           Material(
             color: AppColors.superficie,

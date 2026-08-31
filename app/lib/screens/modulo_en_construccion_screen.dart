@@ -33,7 +33,7 @@ class ModuloEnConstruccionScreen extends StatelessWidget {
     return AppShell(
       usuario: usuario,
       seccionActiva: 'Inicio',
-      body: SingleChildScrollView(
+      body: (context) => SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),

@@ -54,7 +54,7 @@ class _CumpleanosServidoresScreenState
     return AppShell(
       usuario: widget.usuario,
       seccionActiva: 'Cumpleaños Servidores',
-      body: FutureBuilder<List<UsuarioApp>>(
+      body: (context) => FutureBuilder<List<UsuarioApp>>(
         future: _futuro,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {

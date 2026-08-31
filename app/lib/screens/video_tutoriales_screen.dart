@@ -91,7 +91,7 @@ class _VideoTutorialesScreenState extends State<VideoTutorialesScreen>
               label: const Text('Agregar video'),
             )
           : null,
-      body: StreamBuilder<List<VideoTutorial>>(
+      body: (context) => StreamBuilder<List<VideoTutorial>>(
         stream: _authService.listarVideosTutoriales(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {

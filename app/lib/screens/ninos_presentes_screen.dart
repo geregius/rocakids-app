@@ -330,7 +330,7 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
           ),
         ],
       ),
-      body: StreamBuilder<List<Registro>>(
+      body: (context) => StreamBuilder<List<Registro>>(
               stream: _authService.registrosDeHoy(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
