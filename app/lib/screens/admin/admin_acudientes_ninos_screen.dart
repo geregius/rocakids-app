@@ -10,12 +10,10 @@ import '../acudiente_detalle_sheet.dart';
 import '../nino_detalle_sheet.dart';
 
 /// Niños cuya edad ya no cae en ningún grupo de [gruposEdad] (11 años o
-/// más) — mismo criterio que `grupoParaEdad()` devolviendo `null`,
-/// pero acá Rafael pidió explícitamente esta etiqueta puntual
-/// (2026-08-30) en vez de "Mayores de 11 años" (la que ya se usa en
-/// "Menores Registrados"/Dashboard) — describen el mismo grupo de
-/// niños, solo con una redacción distinta pedida para esta pantalla.
-const _mayoresDeDiez = 'Mayores de 10 años';
+/// más) — mismo criterio que `grupoParaEdad()` devolviendo `null`, y
+/// misma etiqueta que ya usan "Menores Registrados"/Dashboard (unificada
+/// 2026-08-30, pedido explícito de Rafael tras notar la inconsistencia).
+const _mayoresDeOnce = 'Mayores de 11 años';
 
 /// Panel para ver la lista completa de acudientes Y niños (pedido
 /// explícito de Rafael, no solo niños) — extiende el pendiente
@@ -170,7 +168,7 @@ class _ListaNinosState extends State<_ListaNinos> {
               // TODOS los niños que pasaron el filtro de búsqueda.
               final grupos = <String, List<Nino>>{};
               for (final n in ninos) {
-                final grupo = grupoParaEdad(calcularEdad(n.fechaNacimiento)) ?? _mayoresDeDiez;
+                final grupo = grupoParaEdad(calcularEdad(n.fechaNacimiento)) ?? _mayoresDeOnce;
                 grupos.putIfAbsent(grupo, () => []).add(n);
               }
               for (final lista in grupos.values) {
@@ -180,7 +178,7 @@ class _ListaNinosState extends State<_ListaNinos> {
               }
               final ordenados = [
                 ...gruposEdad,
-                if (grupos.containsKey(_mayoresDeDiez)) _mayoresDeDiez,
+                if (grupos.containsKey(_mayoresDeOnce)) _mayoresDeOnce,
               ];
               return ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -231,9 +229,9 @@ class _GrupoNinosSection extends StatelessWidget {
           title: Text(
             rangoEdad != null
                 ? 'Grupo $nombre · $rangoEdad (${ninos.length})'
-                // "Mayores de 10 años" ya se lee bien solo — con el
+                // "Mayores de 11 años" ya se lee bien solo — con el
                 // prefijo "Grupo" delante quedaría raro.
-                : nombre == _mayoresDeDiez
+                : nombre == _mayoresDeOnce
                 ? '$nombre (${ninos.length})'
                 : 'Grupo $nombre (${ninos.length})',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(

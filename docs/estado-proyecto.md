@@ -1,6 +1,6 @@
 # RocaKids — Estado del Proyecto (guía de continuación)
 
-**Última actualización:** 2026-08-30 (pestaña "Niños" de "Acudientes y Niños" ahora agrupada por grupo/aula, con etiqueta "Mayores de 10 años" para quienes ya no caen en ninguno — ver sección 5.16)
+**Última actualización:** 2026-08-30 (pestaña "Niños" de "Acudientes y Niños" ahora agrupada por grupo/aula, con etiqueta "Mayores de 11 años" — unificada con el resto de la app — ver sección 5.16)
 **Propósito de este documento:** que una conversación nueva (u otra persona) pueda retomar el desarrollo sin perder contexto. Resume qué existe, qué funciona, cómo está armado, y qué falta.
 
 Documentos relacionados en `docs/`:
@@ -423,7 +423,7 @@ Cero cambios en Firestore/reglas — mismo permiso de siempre (`puedeVerInfoLide
 Pedido de Rafael: que la lista de niños en `admin/admin_acudientes_ninos_screen.dart` muestre la misma distinción de grupos/aulas que ya se usa en "Menores Registrados", en vez de una lista plana. Mismo criterio de siempre (`grupoParaEdad()` sobre la edad actual calculada desde `fechaNacimiento`), pero SIN depender de quién esté presente hoy — se agrupan TODOS los niños que pasan el filtro de búsqueda, estén presentes o no.
 
 - Nuevas `_GrupoNinosSection`/`_NinoTile` (mismo patrón visual — `ExpansionTile` colapsable — que `_GrupoSection` en `ninos_presentes_screen.dart`, pero sin swipe: acá no se registra asistencia).
-- **Etiqueta pedida explícitamente por Rafael para esta pantalla: "Mayores de 10 años"** (en vez de "Mayores de 11 años", la que ya usan "Menores Registrados" y el Dashboard para el mismo grupo exacto de niños — `grupoParaEdad()` devolviendo `null`, es decir, 11 años o más). Describen el mismo conjunto de niños, solo con una redacción distinta pedida puntualmente para esta pantalla — queda una inconsistencia de nombre a propósito entre pantallas, no un descuido.
+- Etiqueta del grupo sin aula (11 años o más): **"Mayores de 11 años"** — mismo texto exacto que "Menores Registrados"/Dashboard (`_mayoresDeOnce`). Rafael pidió inicialmente "Mayores de 10 años" solo para esta pantalla, pero al notar la inconsistencia con el resto de la app pidió unificarlo el mismo día — quedó igual en todos lados.
 
 Cero cambios en Firestore/reglas — la agrupación es puramente de presentación sobre datos que la pantalla ya traía completos.
 
