@@ -128,6 +128,19 @@ service cloud.firestore {
       allow delete: if esAdmin() || puedeVerInfoLiderazgo();
     }
 
+    // Historial de notificaciones dentro de la app (2026-09-02, campana
+    // en `AppShell`) — solo el propio dueño puede leerlas. Escritura
+    // SIEMPRE desde el Admin SDK (`enviarNotificacionAUsuarios()` en
+    // functions/index.js), nunca desde el cliente — la única excepción
+    // es marcar como leída, y solo ESE campo (`update` que intente
+    // cambiar cualquier otra cosa se rechaza).
+    match /usuarios/{uid}/notificaciones/{notifId} {
+      allow get, list: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida']);
+      allow create, delete: if false;
+    }
+
     // Reserva de unicidad de documento de acudiente: doc ID = numeroDocumento.
     // Mismo truco que en ninos — un segundo intento con el mismo documento
     // cae en "update" (no permitido), así que Firestore rechaza el duplicado.

@@ -1,6 +1,6 @@
 const {onSchedule} = require('firebase-functions/v2/scheduler');
 const {onCall} = require('firebase-functions/v2/https');
-const {onDocumentCreated} = require('firebase-functions/v2/firestore');
+const {onDocumentCreated, onDocumentWritten} = require('firebase-functions/v2/firestore');
 const {defineSecret} = require('firebase-functions/params');
 const {initializeApp} = require('firebase-admin/app');
 const {getFirestore, Timestamp, FieldValue} = require('firebase-admin/firestore');
@@ -484,18 +484,22 @@ exports.enviarCorreoRecuperacion = onCall(
 
 // ---------------------------------------------------------------------
 // Notificaciones push (2026-09-02, pedido de Rafael: avisar a los
-// servidores de un grupo cuando se les asigna un servicio). Primera
-// etapa: solo la infraestructura (activar en el cliente + un envío de
-// prueba) — todavía no está conectada a "asignar grupo" en
-// Programación de Servidores, eso es el siguiente paso una vez se
-// confirme que las notificaciones de prueba llegan de verdad.
+// servidores de un grupo cuando se les asigna un servicio). Ya
+// conectada a "Programación de Servidores" (ver
+// `notificarAsignacionGrupo` más abajo) — cada notificación, además
+// del push en sí, queda guardada en `usuarios/{uid}/notificaciones`
+// para el listado dentro de la app (campana en `AppShell`).
 // ---------------------------------------------------------------------
 
-/// Manda una notificación push a una lista de uids (`usuarios/{uid}.fcmTokens`)
-/// y limpia del perfil cualquier token que Firebase Cloud Messaging
-/// devuelva como inválido/vencido (celular con la app desinstalada,
-/// permiso revocado desde la configuración, etc.) — sin esto, esos
-/// tokens muertos se seguirían intentando para siempre.
+/// Manda una notificación a una lista de uids: la guarda en
+/// `usuarios/{uid}/notificaciones` de CADA uno (para el listado dentro
+/// de la app — funciona aunque esa persona nunca haya activado el
+/// permiso del navegador) y, además, la manda como push real a los
+/// dispositivos que sí tengan un token guardado
+/// (`usuarios/{uid}.fcmTokens`) — limpiando del perfil cualquier token
+/// que Firebase Cloud Messaging devuelva como inválido/vencido
+/// (celular con la app desinstalada, permiso revocado, etc.), sin eso
+/// esos tokens muertos se seguirían intentando para siempre.
 async function enviarNotificacionAUsuarios(uids, {titulo, cuerpo, datos}) {
   const uidsUnicos = [...new Set(uids)].filter(Boolean);
   if (uidsUnicos.length === 0) return {enviados: 0, fallidos: 0};
@@ -508,6 +512,24 @@ async function enviarNotificacionAUsuarios(uids, {titulo, cuerpo, datos}) {
     tokensPorUid.set(doc.id, propios);
     tokens.push(...propios);
   }
+
+  // Historial dentro de la app — para TODOS los uids, tengan o no un
+  // dispositivo con el permiso activado (2026-09-02, pedido de Rafael:
+  // lista de notificaciones al tocar la campana, más reciente arriba,
+  // con contador de no leídas).
+  const batchHistorial = db.batch();
+  for (const uid of uidsUnicos) {
+    const ref = db.collection('usuarios').doc(uid).collection('notificaciones').doc();
+    batchHistorial.set(ref, {
+      titulo,
+      cuerpo,
+      datos: datos || {},
+      leida: false,
+      creadoEn: FieldValue.serverTimestamp(),
+    });
+  }
+  await batchHistorial.commit();
+
   if (tokens.length === 0) return {enviados: 0, fallidos: 0};
 
   const respuesta = await getMessaging().sendEachForMulticast({
@@ -546,8 +568,7 @@ async function enviarNotificacionAUsuarios(uids, {titulo, cuerpo, datos}) {
 }
 
 // Se manda a sí mismo, para poder probar de punta a punta que un
-// dispositivo que activó notificaciones sí las recibe, antes de
-// conectar esto a ningún evento real de la app.
+// dispositivo que activó notificaciones sí las recibe.
 exports.enviarNotificacionPrueba = onCall(async (request) => {
   if (!request.auth) {
     throw new Error('Necesitas iniciar sesión.');
@@ -557,6 +578,31 @@ exports.enviarNotificacionPrueba = onCall(async (request) => {
     cuerpo: '¡Notificaciones activadas correctamente!',
   });
   return resultado;
+});
+
+// Avisa a cada servidor cuando queda asignado a un grupo de
+// "Programación de Servidores" (2026-09-02, pedido original de
+// Rafael) — reacciona directo a `grupos_servidores`, sin importar
+// desde qué pantalla/código se haya hecho el cambio. Al CREAR un grupo,
+// avisa a todos sus integrantes; al EDITARLO, avisa SOLO a los que se
+// acaban de agregar (no a los que ya estaban, para no repetirles el
+// aviso cada vez que se toca el grupo por cualquier otro motivo — ej.
+// cambiarle el nombre). No avisa nada al eliminar un grupo.
+exports.notificarAsignacionGrupo = onDocumentWritten('grupos_servidores/{grupoId}', async (event) => {
+  const antes = event.data?.before?.data();
+  const despues = event.data?.after?.data();
+  if (!despues) return; // se eliminó el grupo, nada que avisar
+
+  const idsAntes = new Set(antes ? antes.fkIdsServidores || [] : []);
+  const idsDespues = despues.fkIdsServidores || [];
+  const nuevos = idsDespues.filter((id) => !idsAntes.has(id));
+  if (nuevos.length === 0) return;
+
+  await enviarNotificacionAUsuarios(nuevos, {
+    titulo: 'Programación de Servidores',
+    cuerpo: `Fuiste asignado al grupo "${despues.nombre}" de ${despues.categoria}.`,
+    datos: {tipo: 'asignacion_grupo', grupoId: event.params.grupoId, categoria: despues.categoria},
+  });
 });
 
 // ---------------------------------------------------------------------

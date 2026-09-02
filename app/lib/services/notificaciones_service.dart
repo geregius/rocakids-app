@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/notificacion_app.dart';
+
 /// Notificaciones push del navegador/celular vía Firebase Cloud
 /// Messaging (2026-09-02, pedido de Rafael: avisar a los servidores de
 /// un grupo cuando se les asigna un servicio). Solo funciona si la
@@ -97,6 +99,39 @@ class NotificacionesService {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Historial de notificaciones de este usuario, más reciente primero
+  /// (2026-09-02, pedido de Rafael: lista al tocar la campana). Sigue
+  /// funcionando aunque este dispositivo nunca haya activado el
+  /// permiso push — cada notificación se guarda para TODOS los
+  /// destinatarios, no solo para quien tiene un token de dispositivo
+  /// (ver `enviarNotificacionAUsuarios()` en `functions/index.js`).
+  Stream<List<NotificacionApp>> listarNotificaciones(String uid) {
+    return _firestore
+        .collection('usuarios')
+        .doc(uid)
+        .collection('notificaciones')
+        .orderBy('creadoEn', descending: true)
+        .limit(50)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => NotificacionApp.fromFirestore(d.id, d.data()))
+              .toList(),
+        );
+  }
+
+  /// Marca como leídas todas las notificaciones que todavía no lo
+  /// estaban — se llama al abrir la lista desde la campana.
+  Future<void> marcarTodasLeidas(String uid, List<NotificacionApp> noLeidas) async {
+    if (noLeidas.isEmpty) return;
+    final batch = _firestore.batch();
+    final ref = _firestore.collection('usuarios').doc(uid).collection('notificaciones');
+    for (final n in noLeidas) {
+      batch.update(ref.doc(n.id), {'leida': true});
+    }
+    await batch.commit();
   }
 
   /// Vuelve a guardar el token si Firebase lo renueva mientras la
