@@ -29,9 +29,16 @@ class _BotonNotificacionesState extends State<BotonNotificaciones> {
   @override
   void initState() {
     super.initState();
-    _servicio.estadoPermiso().then((e) {
-      if (mounted) setState(() => _estado = e);
-    });
+    // Sin `catchError`, un navegador sin soporte real de notificaciones
+    // (ver el `try` de `_tocar()`) podría lanzar acá también, apenas se
+    // carga la pantalla — no hay nada que mostrar en ese caso, la
+    // campana simplemente queda "vacía" (estado por defecto).
+    _servicio
+        .estadoPermiso()
+        .then((e) {
+          if (mounted) setState(() => _estado = e);
+        })
+        .catchError((_) {});
   }
 
   Future<void> _tocar() async {
@@ -53,7 +60,30 @@ class _BotonNotificacionesState extends State<BotonNotificaciones> {
       );
       return;
     }
-    final activado = await _servicio.activar(widget.uid);
+    // Este `try` es importante, no decorativo: en un navegador que NO
+    // soporta de verdad notificaciones push (ej. Chrome en iPhone —
+    // Apple solo permite Service Workers/notificaciones reales dentro
+    // de Safari, ver `feature-icono-pantalla-inicio-y-escaner-timeout`)
+    // `activar()` puede lanzar una excepción en vez de solo devolver
+    // `false` — sin este `try`, eso se veía como "no pasa nada" al
+    // tocar la campana (encontrado 2026-09-02, reportado por Rafael en
+    // iPhone con Chrome).
+    bool activado;
+    try {
+      activado = await _servicio.activar(widget.uid);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Este navegador no admite notificaciones. En iPhone, agrega RocaKids a '
+            'la pantalla de inicio usando Safari (no Chrome) y vuelve a intentarlo.',
+          ),
+          duration: Duration(seconds: 8),
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     final nuevoEstado = await _servicio.estadoPermiso();
     if (!mounted) return;
