@@ -20,6 +20,7 @@ import '../screens/ninos_presentes_screen.dart';
 import '../screens/registrar_familia_screen.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import 'boton_notificaciones.dart';
 
 /// Ancho de pantalla a partir del cual el menú queda siempre visible a
 /// la izquierda, en vez de colapsar en un cajón deslizable (celular).
@@ -345,6 +346,10 @@ class _AppShellState extends State<AppShell> {
     final floatingActionButton = widget.floatingActionButton;
     final body = widget.body(context);
     final accionActualizar = [
+      // Botón de campana (2026-09-02, pedido de Rafael) — activa
+      // notificaciones push de este dispositivo. Ver
+      // `widgets/boton_notificaciones.dart` y `services/notificaciones_service.dart`.
+      BotonNotificaciones(uid: usuario.uid),
       IconButton(
         onPressed: () => _refrescar(context),
         icon: const Icon(Icons.refresh),

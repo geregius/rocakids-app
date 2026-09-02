@@ -2,12 +2,22 @@ import 'dart:async';
 
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
 import 'screens/reset_password_screen.dart';
 import 'theme/app_theme.dart';
+
+/// Para mostrar un aviso dentro de la app cuando llega una notificación
+/// push mientras la pestaña está ABIERTA y activa (2026-09-02) — un
+/// navegador solo muestra la notificación real del sistema operativo
+/// si la pestaña está en segundo plano o cerrada; en primer plano el
+/// mensaje llega "silencioso" (`FirebaseMessaging.onMessage`) y hay que
+/// decidir qué mostrar. Un `GlobalKey` deja hacerlo sin necesitar un
+/// `BuildContext` a mano justo ahí.
+final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 /// Firebase App Check (2026-08-21, hallazgo de la auditoría de
 /// seguridad: "sin protección contra bots") — la clave del SITIO de
@@ -39,6 +49,22 @@ void main() async {
         )
         .catchError((_) {}),
   );
+  // Notificaciones que llegan mientras la pestaña está ABIERTA (ver
+  // docstring de `scaffoldMessengerKey`) — en segundo plano/cerrada, el
+  // propio `web/firebase-messaging-sw.js` ya las muestra como
+  // notificación real del sistema, sin que la app tenga que hacer nada.
+  FirebaseMessaging.onMessage.listen((mensaje) {
+    final titulo = mensaje.notification?.title;
+    final cuerpo = mensaje.notification?.body;
+    if (titulo == null && cuerpo == null) return;
+    scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text([titulo, cuerpo].whereType<String>().join(': ')),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  });
+
   runApp(const RocaKidsApp());
 }
 
@@ -64,6 +90,7 @@ class RocaKidsApp extends StatelessWidget {
       title: 'RocaKids',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      scaffoldMessengerKey: scaffoldMessengerKey,
       home: _pantallaInicial(),
     );
   }

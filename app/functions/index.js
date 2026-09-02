@@ -5,6 +5,7 @@ const {defineSecret} = require('firebase-functions/params');
 const {initializeApp} = require('firebase-admin/app');
 const {getFirestore, Timestamp, FieldValue} = require('firebase-admin/firestore');
 const {getAuth} = require('firebase-admin/auth');
+const {getMessaging} = require('firebase-admin/messaging');
 const nodemailer = require('nodemailer');
 
 initializeApp();
@@ -480,6 +481,83 @@ exports.enviarCorreoRecuperacion = onCall(
     }
   },
 );
+
+// ---------------------------------------------------------------------
+// Notificaciones push (2026-09-02, pedido de Rafael: avisar a los
+// servidores de un grupo cuando se les asigna un servicio). Primera
+// etapa: solo la infraestructura (activar en el cliente + un envío de
+// prueba) — todavía no está conectada a "asignar grupo" en
+// Programación de Servidores, eso es el siguiente paso una vez se
+// confirme que las notificaciones de prueba llegan de verdad.
+// ---------------------------------------------------------------------
+
+/// Manda una notificación push a una lista de uids (`usuarios/{uid}.fcmTokens`)
+/// y limpia del perfil cualquier token que Firebase Cloud Messaging
+/// devuelva como inválido/vencido (celular con la app desinstalada,
+/// permiso revocado desde la configuración, etc.) — sin esto, esos
+/// tokens muertos se seguirían intentando para siempre.
+async function enviarNotificacionAUsuarios(uids, {titulo, cuerpo, datos}) {
+  const uidsUnicos = [...new Set(uids)].filter(Boolean);
+  if (uidsUnicos.length === 0) return {enviados: 0, fallidos: 0};
+
+  const docs = await db.getAll(...uidsUnicos.map((uid) => db.collection('usuarios').doc(uid)));
+  const tokensPorUid = new Map();
+  const tokens = [];
+  for (const doc of docs) {
+    const propios = doc.exists ? doc.data().fcmTokens || [] : [];
+    tokensPorUid.set(doc.id, propios);
+    tokens.push(...propios);
+  }
+  if (tokens.length === 0) return {enviados: 0, fallidos: 0};
+
+  const respuesta = await getMessaging().sendEachForMulticast({
+    tokens,
+    notification: {title: titulo, body: cuerpo},
+    data: datos || {},
+    webpush: {fcmOptions: {link: 'https://rocakidsarmenia-7935b.web.app'}},
+  });
+
+  // Reconstruir qué token (índice de `tokens`) le tocó a cada uid, para
+  // saber de qué documento quitarlo si falló como "ya no existe".
+  const tokensInvalidos = new Set();
+  respuesta.responses.forEach((r, i) => {
+    const codigo = r.error && r.error.code;
+    if (
+      codigo === 'messaging/registration-token-not-registered' ||
+      codigo === 'messaging/invalid-registration-token'
+    ) {
+      tokensInvalidos.add(tokens[i]);
+    }
+  });
+  if (tokensInvalidos.size > 0) {
+    const batch = db.batch();
+    for (const [uid, propios] of tokensPorUid) {
+      const aQuitar = propios.filter((t) => tokensInvalidos.has(t));
+      if (aQuitar.length > 0) {
+        batch.update(db.collection('usuarios').doc(uid), {
+          fcmTokens: FieldValue.arrayRemove(...aQuitar),
+        });
+      }
+    }
+    await batch.commit();
+  }
+
+  return {enviados: respuesta.successCount, fallidos: respuesta.failureCount};
+}
+
+// Se manda a sí mismo, para poder probar de punta a punta que un
+// dispositivo que activó notificaciones sí las recibe, antes de
+// conectar esto a ningún evento real de la app.
+exports.enviarNotificacionPrueba = onCall(async (request) => {
+  if (!request.auth) {
+    throw new Error('Necesitas iniciar sesión.');
+  }
+  const resultado = await enviarNotificacionAUsuarios([request.auth.uid], {
+    titulo: 'RocaKids',
+    cuerpo: '¡Notificaciones activadas correctamente!',
+  });
+  return resultado;
+});
 
 // ---------------------------------------------------------------------
 // Resumen mensual de asistencia — mantiene el Dashboard rápido (2026-08-19).

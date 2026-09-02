@@ -49,6 +49,7 @@ dependencies:
   youtube_player_iframe: ^6.0.2
   image: ^4.9.2
   url_launcher: ^6.3.2
+  firebase_messaging: ^16.6.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
