@@ -392,12 +392,14 @@ class _SeccionCategoria extends StatelessWidget {
     final subtitulo = categoria.tipoRotacion == TipoRotacion.semanal
         ? 'Cada ${nombreDiaSemana(categoria.diaSemana ?? DateTime.sunday)}'
         : 'Se programa cada ocasión';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: true,
+          title: Row(
             children: [
               Expanded(
                 child: Column(
@@ -421,28 +423,31 @@ class _SeccionCategoria extends StatelessWidget {
               ),
             ],
           ),
-          if (grupos.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text(
-                'Todavía no hay grupos en esta categoría.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            )
-          else
-            for (var i = 0; i < grupos.length; i++)
-              _TarjetaGrupo(
-                grupo: grupos[i],
-                servidoresPorId: servidoresPorId,
-                onEditar: () => onEditar(grupos[i]),
-                onSubir: i > 0
-                    ? () => AuthService().intercambiarOrdenGrupos(grupos[i], grupos[i - 1])
-                    : null,
-                onBajar: i < grupos.length - 1
-                    ? () => AuthService().intercambiarOrdenGrupos(grupos[i], grupos[i + 1])
-                    : null,
-              ),
-        ],
+          children: [
+            const Divider(height: 1),
+            if (grupos.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Todavía no hay grupos en esta categoría.'),
+                ),
+              )
+            else
+              for (var i = 0; i < grupos.length; i++)
+                _TarjetaGrupo(
+                  grupo: grupos[i],
+                  servidoresPorId: servidoresPorId,
+                  onEditar: () => onEditar(grupos[i]),
+                  onSubir: i > 0
+                      ? () => AuthService().intercambiarOrdenGrupos(grupos[i], grupos[i - 1])
+                      : null,
+                  onBajar: i < grupos.length - 1
+                      ? () => AuthService().intercambiarOrdenGrupos(grupos[i], grupos[i + 1])
+                      : null,
+                ),
+          ],
+        ),
       ),
     );
   }
