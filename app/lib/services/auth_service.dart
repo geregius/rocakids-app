@@ -2025,12 +2025,37 @@ class AuthService {
     await _firestore.collection('videos_tutoriales').doc(id).delete();
   }
 
+  /// Todas las categorías de "Programación de Servidores" (2026-08-31,
+  /// pedido de Rafael: poder crear categorías nuevas, no solo las 4
+  /// iniciales). Colección chica, se ordena del lado del cliente por
+  /// `creadoEn` (las 4 originales primero, en el orden en que se
+  /// sembraron; las nuevas al final, en el orden en que se crean).
+  Stream<List<CategoriaProgramacion>> listarCategoriasProgramacion() {
+    return _firestore
+        .collection('categorias_programacion')
+        .orderBy('creadoEn')
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => CategoriaProgramacion.fromFirestore(d.id, d.data()))
+              .toList(),
+        );
+  }
+
+  /// **Solo administrador o líder de ministerio**
+  /// (`RolUsuario.puedeGestionarProgramacion`, ver `firestore.rules`).
+  Future<void> crearCategoriaProgramacion(String nombre) async {
+    await _firestore.collection('categorias_programacion').add({
+      'nombre': nombre,
+      'creadoEn': FieldValue.serverTimestamp(),
+    });
+  }
+
   /// Todos los grupos de "Programación de Servidores" (2026-08-31,
-  /// pedido de Rafael) — colección chica (unos 15-20 grupos entre las 4
+  /// pedido de Rafael) — colección chica (unos 15-20 grupos entre las
   /// categorías), traerla completa es barato. Ordenado del lado del
-  /// cliente por categoría (mismo orden que [categoriasProgramacion]) y
-  /// nombre — un `orderBy` compuesto en Firestore exigiría un índice
-  /// extra para algo que ordenar en memoria ya resuelve gratis.
+  /// cliente por nombre — un `orderBy` compuesto en Firestore exigiría
+  /// un índice extra para algo que ordenar en memoria ya resuelve gratis.
   Stream<List<GrupoServidores>> listarGruposServidores() {
     return _firestore
         .collection('grupos_servidores')
