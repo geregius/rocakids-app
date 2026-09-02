@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/acudiente.dart';
 import '../models/gestion.dart';
+import '../models/grupo_servidores.dart';
 import '../models/manual_contenido.dart';
 import '../models/nino.dart';
 import '../models/no_autorizado.dart';
@@ -2022,6 +2023,65 @@ class AuthService {
   /// **Solo admin**.
   Future<void> eliminarVideoTutorial(String id) async {
     await _firestore.collection('videos_tutoriales').doc(id).delete();
+  }
+
+  /// Todos los grupos de "Programación de Servidores" (2026-08-31,
+  /// pedido de Rafael) — colección chica (unos 15-20 grupos entre las 4
+  /// categorías), traerla completa es barato. Ordenado del lado del
+  /// cliente por categoría (mismo orden que [categoriasProgramacion]) y
+  /// nombre — un `orderBy` compuesto en Firestore exigiría un índice
+  /// extra para algo que ordenar en memoria ya resuelve gratis.
+  Stream<List<GrupoServidores>> listarGruposServidores() {
+    return _firestore
+        .collection('grupos_servidores')
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => GrupoServidores.fromFirestore(d.id, d.data()))
+              .toList(),
+        );
+  }
+
+  /// **Solo administrador o líder de ministerio**
+  /// (`RolUsuario.puedeGestionarProgramacion`, ver `firestore.rules`).
+  Future<void> crearGrupoServidores({
+    required String categoria,
+    required String nombre,
+    required List<String> fkIdsServidores,
+  }) async {
+    await _firestore.collection('grupos_servidores').add({
+      ...GrupoServidores(
+        id: '',
+        categoria: categoria,
+        nombre: nombre,
+        fkIdsServidores: fkIdsServidores,
+        creadoEn: DateTime.now(),
+      ).toFirestore(),
+      'creadoEn': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// **Solo administrador o líder de ministerio**.
+  Future<void> editarGrupoServidores({
+    required String id,
+    required String categoria,
+    required String nombre,
+    required List<String> fkIdsServidores,
+  }) async {
+    await _firestore.collection('grupos_servidores').doc(id).update(
+      GrupoServidores(
+        id: id,
+        categoria: categoria,
+        nombre: nombre,
+        fkIdsServidores: fkIdsServidores,
+        creadoEn: DateTime.now(),
+      ).toFirestore(),
+    );
+  }
+
+  /// **Solo administrador o líder de ministerio**.
+  Future<void> eliminarGrupoServidores(String id) async {
+    await _firestore.collection('grupos_servidores').doc(id).delete();
   }
 
   /// Sin esto, Storage guarda el archivo como `application/octet-stream`

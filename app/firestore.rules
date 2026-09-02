@@ -62,6 +62,19 @@ service cloud.firestore {
         ];
     }
 
+    // "Programación de Servidores" (2026-08-31, pedido explícito de
+    // Rafael: "solo los líderes del ministerio") — a propósito MÁS
+    // ACOTADO que puedeVerInfoLiderazgo(): NO incluye columna. Debe
+    // quedar sincronizado con `RolUsuario.puedeGestionarProgramacion`
+    // en el cliente.
+    function puedeGestionarProgramacion() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol.lower() in [
+          'administrador', 'lider_ministerio'
+        ];
+    }
+
     // --- Validación de formato/tipo de datos (2026-08-21) ---
     // Todo lo de arriba valida QUIÉN puede escribir; esto valida QUÉ se
     // puede escribir. Antes de esto, `allow create` solo exigía rol/
@@ -431,6 +444,21 @@ service cloud.firestore {
         && esTextoAcotado(request.resource.data.get('descripcion', ''), 500)
         && request.resource.data.get('audiencias', []) is list;
       allow update, delete: if esAdmin();
+    }
+
+    // Grupos/equipos de "Programación de Servidores" (2026-08-31,
+    // primera etapa: crear grupos por categoría y asignarles
+    // integrantes — ver `puedeGestionarProgramacion()` arriba). Cerrado
+    // por completo a cualquier otro rol (incluida lectura) hasta que se
+    // decida si en una etapa futura cada servidor puede ver sus propios
+    // grupos.
+    match /grupos_servidores/{grupoId} {
+      allow get, list: if puedeGestionarProgramacion();
+      allow create: if puedeGestionarProgramacion()
+        && request.resource.data.get('categoria', '') in ['Domingos', 'Miércoles', 'Casa2', 'Ayunos']
+        && esTextoNoVacioAcotado(request.resource.data.get('nombre', ''), 100)
+        && request.resource.data.get('fkIdsServidores', []) is list;
+      allow update, delete: if puedeGestionarProgramacion();
     }
 
     // Todo lo demás queda cerrado por defecto hasta que se definan

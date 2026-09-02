@@ -138,6 +138,14 @@ enum RolUsuario {
   /// sincronizado con `allow update, delete` de `usuarios/{uid}` en
   /// firestore.rules.
   bool get puedeGestionarServidores => puedeVerAcudientesYNinos;
+
+  /// Quién puede crear/editar grupos de "Programación de Servidores" y
+  /// asignarles integrantes (2026-08-31, pedido explícito de Rafael:
+  /// "solo los líderes del ministerio") — a propósito MÁS ACOTADO que
+  /// [puedeGestionarServidores] (no incluye columna). Debe quedar
+  /// sincronizado con `puedeGestionarProgramacion()` en firestore.rules.
+  bool get puedeGestionarProgramacion =>
+      this == RolUsuario.administrador || this == RolUsuario.liderMinisterio;
 }
 
 const gruposSanguineos = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];

@@ -5,6 +5,7 @@ import '../screens/acudiente_portal_screen.dart';
 import '../screens/admin/admin_acudientes_ninos_screen.dart';
 import '../screens/admin/admin_users_list_screen.dart';
 import '../screens/admin/dashboard_screen.dart';
+import '../screens/admin/programacion_servidores_screen.dart';
 import '../screens/admin/user_edit_sheet.dart';
 import '../screens/auth_gate.dart';
 import '../screens/cambiar_password_sheet.dart';
@@ -202,6 +203,17 @@ class _AppShellState extends State<AppShell> {
           icon: Icons.people,
           label: 'Gestión de Servidores',
           onTap: () => _irA(context, AdminUsersListScreen(usuario: usuario)),
+        ),
+      // Solo administrador y líder de ministerio (2026-08-31, pedido
+      // explícito de Rafael) — a propósito MÁS ACOTADO que las demás
+      // pantallas de liderazgo de arriba, columna NO entra acá. Ver
+      // `puedeGestionarProgramacion`.
+      if (usuario.rol.puedeGestionarProgramacion)
+        _ItemMenu(
+          icon: Icons.groups,
+          label: 'Programación de Servidores',
+          onTap: () =>
+              _irA(context, ProgramacionServidoresScreen(usuario: usuario)),
         ),
       // Solo administrador, columna y líder de ministerio pueden
       // activar/desactivar el modo (2026-08-19, pedido explícito de
