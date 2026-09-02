@@ -2044,17 +2044,46 @@ class AuthService {
 
   /// **Solo administrador o líder de ministerio**
   /// (`RolUsuario.puedeGestionarProgramacion`, ver `firestore.rules`).
-  Future<void> crearCategoriaProgramacion(String nombre) async {
+  /// [diaSemana] es obligatorio si [tipoRotacion] es `semanal` (día
+  /// fijo cada semana, ej. domingo) — se ignora si es `manual`
+  /// (Casa2/Ayunos: se programa cada ocasión a mano).
+  Future<void> crearCategoriaProgramacion(
+    String nombre, {
+    required TipoRotacion tipoRotacion,
+    int? diaSemana,
+  }) async {
     await _firestore.collection('categorias_programacion').add({
-      'nombre': nombre,
+      ...CategoriaProgramacion(
+        id: '',
+        nombre: nombre,
+        tipoRotacion: tipoRotacion,
+        diaSemana: tipoRotacion == TipoRotacion.semanal ? diaSemana : null,
+        creadoEn: DateTime.now(),
+      ).toFirestore(),
       'creadoEn': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Fija (o corrige) el punto de partida de la rotación automática de
+  /// una categoría `semanal` — "el [fecha] sirve el grupo
+  /// [grupoId]", de ahí en adelante el sistema calcula solo quién
+  /// sigue (`grupoQueSirve()`, `models/grupo_servidores.dart`). **Solo
+  /// administrador o líder de ministerio**.
+  Future<void> configurarRotacionCategoria({
+    required String categoriaId,
+    required DateTime fecha,
+    required String grupoId,
+  }) async {
+    await _firestore.collection('categorias_programacion').doc(categoriaId).update({
+      'fechaReferenciaRotacion': Timestamp.fromDate(fecha),
+      'grupoReferenciaId': grupoId,
     });
   }
 
   /// Todos los grupos de "Programación de Servidores" (2026-08-31,
   /// pedido de Rafael) — colección chica (unos 15-20 grupos entre las
   /// categorías), traerla completa es barato. Ordenado del lado del
-  /// cliente por nombre — un `orderBy` compuesto en Firestore exigiría
+  /// cliente por `orden` — un `orderBy` compuesto en Firestore exigiría
   /// un índice extra para algo que ordenar en memoria ya resuelve gratis.
   Stream<List<GrupoServidores>> listarGruposServidores() {
     return _firestore
@@ -2069,10 +2098,14 @@ class AuthService {
 
   /// **Solo administrador o líder de ministerio**
   /// (`RolUsuario.puedeGestionarProgramacion`, ver `firestore.rules`).
+  /// [orden] decide su posición en la rotación (2026-09-02) — quien
+  /// llama debe pasar el siguiente disponible (ej. cuántos grupos ya
+  /// tiene esa categoría) para que quede al final por defecto.
   Future<void> crearGrupoServidores({
     required String categoria,
     required String nombre,
     required List<String> fkIdsServidores,
+    required int orden,
   }) async {
     await _firestore.collection('grupos_servidores').add({
       ...GrupoServidores(
@@ -2080,6 +2113,7 @@ class AuthService {
         categoria: categoria,
         nombre: nombre,
         fkIdsServidores: fkIdsServidores,
+        orden: orden,
         creadoEn: DateTime.now(),
       ).toFirestore(),
       'creadoEn': FieldValue.serverTimestamp(),
@@ -2092,6 +2126,7 @@ class AuthService {
     required String categoria,
     required String nombre,
     required List<String> fkIdsServidores,
+    required int orden,
   }) async {
     await _firestore.collection('grupos_servidores').doc(id).update(
       GrupoServidores(
@@ -2099,6 +2134,7 @@ class AuthService {
         categoria: categoria,
         nombre: nombre,
         fkIdsServidores: fkIdsServidores,
+        orden: orden,
         creadoEn: DateTime.now(),
       ).toFirestore(),
     );
@@ -2107,6 +2143,54 @@ class AuthService {
   /// **Solo administrador o líder de ministerio**.
   Future<void> eliminarGrupoServidores(String id) async {
     await _firestore.collection('grupos_servidores').doc(id).delete();
+  }
+
+  /// Cambia la posición de dos grupos en la rotación de su categoría
+  /// (botones mover arriba/abajo, 2026-09-02) — un `batch` para que
+  /// nunca queden dos grupos con el mismo `orden` a medio camino.
+  /// **Solo administrador o líder de ministerio**.
+  Future<void> intercambiarOrdenGrupos(GrupoServidores a, GrupoServidores b) async {
+    final batch = _firestore.batch();
+    batch.update(_firestore.collection('grupos_servidores').doc(a.id), {'orden': b.orden});
+    batch.update(_firestore.collection('grupos_servidores').doc(b.id), {'orden': a.orden});
+    await batch.commit();
+  }
+
+  /// Ocasiones programadas a mano de categorías `manual` (Casa2,
+  /// Ayunos) — colección chica, se ordena en memoria del lado del
+  /// cliente. 2026-09-02, pedido de Rafael.
+  Stream<List<ServicioProgramado>> listarServiciosProgramados() {
+    return _firestore
+        .collection('servicios_programados')
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => ServicioProgramado.fromFirestore(d.id, d.data()))
+              .toList(),
+        );
+  }
+
+  /// **Solo administrador o líder de ministerio**.
+  Future<void> programarServicio({
+    required String categoria,
+    required DateTime fecha,
+    required String grupoId,
+  }) async {
+    await _firestore.collection('servicios_programados').add({
+      ...ServicioProgramado(
+        id: '',
+        categoria: categoria,
+        fecha: fecha,
+        grupoId: grupoId,
+        creadoEn: DateTime.now(),
+      ).toFirestore(),
+      'creadoEn': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// **Solo administrador o líder de ministerio**.
+  Future<void> eliminarServicioProgramado(String id) async {
+    await _firestore.collection('servicios_programados').doc(id).delete();
   }
 
   /// Sin esto, Storage guarda el archivo como `application/octet-stream`

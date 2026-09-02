@@ -457,7 +457,8 @@ service cloud.firestore {
       allow create: if puedeGestionarProgramacion()
         && esTextoNoVacioAcotado(request.resource.data.get('categoria', ''), 100)
         && esTextoNoVacioAcotado(request.resource.data.get('nombre', ''), 100)
-        && request.resource.data.get('fkIdsServidores', []) is list;
+        && request.resource.data.get('fkIdsServidores', []) is list
+        && request.resource.data.get('orden', 0) is int;
       allow update, delete: if puedeGestionarProgramacion();
     }
 
@@ -465,11 +466,29 @@ service cloud.firestore {
     // el mismo día: Rafael pidió poder crear categorías nuevas, no solo
     // las 4 iniciales — antes `categoria` en `grupos_servidores` era
     // una lista fija validada acá mismo). Mismo permiso/alcance que
-    // `grupos_servidores` — cerrado a cualquier otro rol.
+    // `grupos_servidores` — cerrado a cualquier otro rol. **2026-09-02:**
+    // `tipoRotacion`/`diaSemana` (fijados al crear) y
+    // `fechaReferenciaRotacion`/`grupoReferenciaId` (el punto de
+    // partida de la rotación automática, fijado después vía `update`)
+    // — ver `puedeGestionarProgramacion()`.
     match /categorias_programacion/{categoriaId} {
       allow get, list: if puedeGestionarProgramacion();
       allow create: if puedeGestionarProgramacion()
-        && esTextoNoVacioAcotado(request.resource.data.get('nombre', ''), 100);
+        && esTextoNoVacioAcotado(request.resource.data.get('nombre', ''), 100)
+        && request.resource.data.get('tipoRotacion', '') in ['semanal', 'manual'];
+      allow update, delete: if puedeGestionarProgramacion();
+    }
+
+    // Ocasiones programadas a mano de categorías `manual` (Casa2,
+    // Ayunos) — ej. "el Casa2 del 12 de septiembre lo sirve el Grupo
+    // 2" (2026-09-02, pedido de Rafael). Mismo permiso/alcance que las
+    // dos colecciones de arriba.
+    match /servicios_programados/{servicioId} {
+      allow get, list: if puedeGestionarProgramacion();
+      allow create: if puedeGestionarProgramacion()
+        && esTextoNoVacioAcotado(request.resource.data.get('categoria', ''), 100)
+        && request.resource.data.get('fecha', null) is timestamp
+        && esTextoNoVacioAcotado(request.resource.data.get('grupoId', ''), 200);
       allow update, delete: if puedeGestionarProgramacion();
     }
 
