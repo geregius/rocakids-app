@@ -684,6 +684,62 @@ exports.notificarAsignacionGrupo = onDocumentWritten('grupos_servidores/{grupoId
   });
 });
 
+// Manda a TODOS los integrantes del grupo asignado (a diferencia de
+// `notificarAsignacionGrupo`, que solo avisa a quien se acaba de
+// agregar al equipo) — esto es la confirmación real de "te toca servir
+// tal día", no un cambio de roster. 2026-09-02, aclaración de Rafael:
+// "el punto es que cuando se asigne un grupo en Próximos Servicios sí
+// debe notificar a todos los del grupo asignado".
+async function notificarGrupoAsignadoAFecha(grupoId, categoria, fecha) {
+  const gruposSnap = await db.collection('grupos_servidores').doc(grupoId).get();
+  if (!gruposSnap.exists) return;
+  const grupo = gruposSnap.data();
+  const integrantes = grupo.fkIdsServidores || [];
+  if (integrantes.length === 0) return;
+
+  await enviarNotificacionAUsuarios(integrantes, {
+    titulo: 'Programación de Servidores',
+    cuerpo: `Tu grupo "${grupo.nombre}" fue asignado para el servicio de ${categoria} del ${fechaTextoBogota(fecha)}.`,
+    datos: {tipo: 'servicio_asignado', grupoId, categoria},
+  });
+}
+
+// Categorías `semanal` (Domingos, Miércoles, Enseñanza...): se dispara
+// cuando se fija o se cambia el punto de partida de la rotación
+// ("Elegir grupo de partida"/"Cambiar punto de partida" en "Próximos
+// Servicios") — avisa a TODO el grupo que quedó asignado a esa fecha
+// de referencia. Los turnos futuros que se derivan solos de esa
+// rotación (semanas siguientes) NO generan un aviso nuevo cada vez que
+// alguien abre la pantalla — solo el momento en que Rafael confirma el
+// punto de partida.
+exports.notificarPuntoDePartidaRotacion = onDocumentWritten('categorias_programacion/{categoriaId}', async (event) => {
+  const antes = event.data?.before?.data();
+  const despues = event.data?.after?.data();
+  if (!despues || !despues.grupoReferenciaId || !despues.fechaReferenciaRotacion) return;
+
+  const grupoIgual = antes && antes.grupoReferenciaId === despues.grupoReferenciaId;
+  const fechaIgual = antes && antes.fechaReferenciaRotacion &&
+      antes.fechaReferenciaRotacion.isEqual(despues.fechaReferenciaRotacion);
+  if (grupoIgual && fechaIgual) return; // no cambió nada relevante, no repetir el aviso
+
+  await notificarGrupoAsignadoAFecha(
+      despues.grupoReferenciaId, despues.nombre, despues.fechaReferenciaRotacion.toDate(),
+  );
+});
+
+// Categorías `manual` (Casa2, Ayunos): se dispara al programar una
+// ocasión nueva ("Programar servicio"/"Reprogramar" en "Próximos
+// Servicios") — avisa a TODO el grupo asignado a esa fecha.
+// `_ProgramarServicioSheet` siempre borra el `servicios_programados`
+// viejo y crea uno nuevo al reprogramar (nunca hace `update`), así que
+// `onDocumentCreated` alcanza para cubrir tanto la primera vez como
+// una reprogramación posterior.
+exports.notificarServicioProgramado = onDocumentCreated('servicios_programados/{servicioId}', async (event) => {
+  const servicio = event.data?.data();
+  if (!servicio) return;
+  await notificarGrupoAsignadoAFecha(servicio.grupoId, servicio.categoria, servicio.fecha.toDate());
+});
+
 // ---------------------------------------------------------------------
 // Resumen mensual de asistencia — mantiene el Dashboard rápido (2026-08-19).
 // ---------------------------------------------------------------------
