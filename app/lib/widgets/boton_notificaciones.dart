@@ -61,25 +61,25 @@ class _BotonNotificacionesState extends State<BotonNotificaciones> {
       return;
     }
     // Este `try` es importante, no decorativo: en un navegador que NO
-    // soporta de verdad notificaciones push (ej. Chrome en iPhone —
-    // Apple solo permite Service Workers/notificaciones reales dentro
-    // de Safari, ver `feature-icono-pantalla-inicio-y-escaner-timeout`)
-    // `activar()` puede lanzar una excepción en vez de solo devolver
-    // `false` — sin este `try`, eso se veía como "no pasa nada" al
-    // tocar la campana (encontrado 2026-09-02, reportado por Rafael en
-    // iPhone con Chrome).
+    // soporta de verdad notificaciones push, `activar()` puede lanzar
+    // una excepción en vez de solo devolver `false` — sin este `try`,
+    // eso se veía como "no pasa nada" al tocar la campana (encontrado
+    // 2026-09-02, reportado por Rafael en iPhone con Chrome). Se
+    // muestra el error real (no un mensaje adivinado) porque la MISMA
+    // excepción puede tener causas distintas — ej. el primer caso fue
+    // Chrome en iOS (nunca soporta esto), pero después volvió a pasar
+    // ya instalado con Safari, así que "usa Safari" no era la causa
+    // real esa segunda vez — hace falta el texto exacto para saber por
+    // qué en cada caso.
     bool activado;
     try {
       activado = await _servicio.activar(widget.uid);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Este navegador no admite notificaciones. En iPhone, agrega RocaKids a '
-            'la pantalla de inicio usando Safari (no Chrome) y vuelve a intentarlo.',
-          ),
-          duration: Duration(seconds: 8),
+        SnackBar(
+          content: Text('No se pudo activar: $e'),
+          duration: const Duration(seconds: 12),
         ),
       );
       return;
