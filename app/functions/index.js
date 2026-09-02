@@ -580,14 +580,74 @@ exports.enviarNotificacionPrueba = onCall(async (request) => {
   return resultado;
 });
 
+// "Hoy" en Bogotá, como medianoche expresada en el mismo formato que
+// se guardan `fechaReferenciaRotacion`/`servicios_programados.fecha`
+// desde la app (medianoche Bogotá = 05:00 UTC, ver el bug de
+// fechaNacimiento en docs/estado-proyecto.md sección 8 — mismo
+// criterio para no repetir ese error).
+function hoyBogotaMedianoche() {
+  const ahora = new Date();
+  const bogota = new Date(ahora.getTime() - OFFSET_BOGOTA_HORAS * 3600 * 1000);
+  return new Date(Date.UTC(
+    bogota.getUTCFullYear(), bogota.getUTCMonth(), bogota.getUTCDate(), OFFSET_BOGOTA_HORAS, 0, 0,
+  ));
+}
+
+function fechaTextoBogota(fecha) {
+  const bogota = new Date(fecha.getTime() - OFFSET_BOGOTA_HORAS * 3600 * 1000);
+  const dia = String(bogota.getUTCDate()).padStart(2, '0');
+  const mes = String(bogota.getUTCMonth() + 1).padStart(2, '0');
+  return `${dia}/${mes}/${bogota.getUTCFullYear()}`;
+}
+
+/// Próxima fecha en la que le toca servir al grupo [grupoId] — mismo
+/// cálculo exacto que `grupoQueSirve()`/`siguienteGrupoSugerido()` en
+/// `models/grupo_servidores.dart`, pero "al revés" ("dado un grupo,
+/// cuándo le toca" en vez de "dada una fecha, qué grupo le toca").
+/// `null` si la categoría es semanal pero todavía no se configuró el
+/// punto de partida, o si es manual y no tiene ningún
+/// `servicios_programados` futuro.
+async function proximaFechaDeGrupo(grupoId, categoriaDoc, gruposDeCategoria) {
+  const hoy = hoyBogotaMedianoche();
+  const ordenados = [...gruposDeCategoria].sort((a, b) => (a.orden || 0) - (b.orden || 0));
+
+  if (categoriaDoc.tipoRotacion === 'semanal') {
+    const fechaRef = categoriaDoc.fechaReferenciaRotacion;
+    const grupoRefId = categoriaDoc.grupoReferenciaId;
+    if (!fechaRef || !grupoRefId) return null;
+    const indiceRef = ordenados.findIndex((g) => g.id === grupoRefId);
+    const indiceGrupo = ordenados.findIndex((g) => g.id === grupoId);
+    if (indiceRef === -1 || indiceGrupo === -1) return null;
+    const total = ordenados.length;
+    const semanaMs = 7 * 24 * 3600 * 1000;
+    const diffSemanas = ((indiceGrupo - indiceRef) % total + total) % total;
+    let fecha = new Date(fechaRef.toDate().getTime() + diffSemanas * semanaMs);
+    while (fecha.getTime() < hoy.getTime()) {
+      fecha = new Date(fecha.getTime() + total * semanaMs);
+    }
+    return fecha;
+  }
+
+  // Manual (Casa2/Ayunos): el próximo `servicios_programados` futuro
+  // asignado a ESTE grupo — se filtra por `grupoId` solo (ya es único
+  // por grupo, sin necesidad de un índice compuesto con `categoria`).
+  const snap = await db.collection('servicios_programados').where('grupoId', '==', grupoId).get();
+  const futuras = snap.docs
+      .map((d) => d.data().fecha.toDate())
+      .filter((f) => f.getTime() >= hoy.getTime())
+      .sort((a, b) => a - b);
+  return futuras.length > 0 ? futuras[0] : null;
+}
+
 // Avisa a cada servidor cuando queda asignado a un grupo de
 // "Programación de Servidores" (2026-09-02, pedido original de
-// Rafael) — reacciona directo a `grupos_servidores`, sin importar
-// desde qué pantalla/código se haya hecho el cambio. Al CREAR un grupo,
-// avisa a todos sus integrantes; al EDITARLO, avisa SOLO a los que se
-// acaban de agregar (no a los que ya estaban, para no repetirles el
-// aviso cada vez que se toca el grupo por cualquier otro motivo — ej.
-// cambiarle el nombre). No avisa nada al eliminar un grupo.
+// Rafael, con la fecha real del próximo servicio en el mensaje —
+// ajuste el mismo día) — reacciona directo a `grupos_servidores`, sin
+// importar desde qué pantalla/código se haya hecho el cambio. Al CREAR
+// un grupo, avisa a todos sus integrantes; al EDITARLO, avisa SOLO a
+// los que se acaban de agregar (no a los que ya estaban, para no
+// repetirles el aviso cada vez que se toca el grupo por cualquier otro
+// motivo — ej. cambiarle el nombre). No avisa nada al eliminar un grupo.
 exports.notificarAsignacionGrupo = onDocumentWritten('grupos_servidores/{grupoId}', async (event) => {
   const antes = event.data?.before?.data();
   const despues = event.data?.after?.data();
@@ -598,9 +658,28 @@ exports.notificarAsignacionGrupo = onDocumentWritten('grupos_servidores/{grupoId
   const nuevos = idsDespues.filter((id) => !idsAntes.has(id));
   if (nuevos.length === 0) return;
 
+  let fechaProxima = null;
+  try {
+    const [categoriaSnap, gruposSnap] = await Promise.all([
+      db.collection('categorias_programacion').where('nombre', '==', despues.categoria).limit(1).get(),
+      db.collection('grupos_servidores').where('categoria', '==', despues.categoria).get(),
+    ]);
+    if (!categoriaSnap.empty) {
+      const categoriaDoc = categoriaSnap.docs[0].data();
+      const gruposDeCategoria = gruposSnap.docs.map((d) => ({id: d.id, orden: d.data().orden || 0}));
+      fechaProxima = await proximaFechaDeGrupo(event.params.grupoId, categoriaDoc, gruposDeCategoria);
+    }
+  } catch (e) {
+    console.error('No se pudo calcular la próxima fecha del grupo:', e.message || e);
+  }
+
+  const cuerpo = fechaProxima
+    ? `Fuiste asignado para el servicio de ${despues.categoria} del ${fechaTextoBogota(fechaProxima)}.`
+    : `Fuiste asignado al grupo "${despues.nombre}" de ${despues.categoria}.`;
+
   await enviarNotificacionAUsuarios(nuevos, {
     titulo: 'Programación de Servidores',
-    cuerpo: `Fuiste asignado al grupo "${despues.nombre}" de ${despues.categoria}.`,
+    cuerpo,
     datos: {tipo: 'asignacion_grupo', grupoId: event.params.grupoId, categoria: despues.categoria},
   });
 });
