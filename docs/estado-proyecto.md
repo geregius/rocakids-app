@@ -1,6 +1,6 @@
 # RocaKids — Estado del Proyecto (guía de continuación)
 
-**Última actualización:** 2026-09-02 (el aviso de "Programación de Servidores" ahora también se dispara al confirmar quién sirve en "Próximos Servicios" — no solo al editar el equipo de un grupo — avisando a TODOS sus integrantes con la fecha real — ver sección 5.19)
+**Última actualización:** 2026-09-03 (nueva sección 1.5 — control de costos: tope de 5 USD/mes y 6 restricciones permanentes que hay que respetar antes de desplegar cualquier cosa. Revisión completa de facturación hecha ese día: RocaKids gasta ≈$0, el cobro que llegó era de otro proyecto)
 **Propósito de este documento:** que una conversación nueva (u otra persona) pueda retomar el desarrollo sin perder contexto. Resume qué existe, qué funciona, cómo está armado, y qué falta.
 
 Documentos relacionados en `docs/`:
@@ -24,6 +24,38 @@ Documentos relacionados en `docs/`:
 | Plan de Firebase | Blaze (pago por uso), pero configurado para costo real ≈ $0 en este volumen |
 | Alerta de presupuesto | ✅ **Confirmada y corregida el 2026-08-18** — ya existía pero mal configurada (1 COP, un placeholder que dejó Firebase automáticamente). Corregida a 5 USD/mes, avisos a 50/90/100% del gasto. Es una alerta por correo, NO un corte automático de servicio. |
 | Backups de Firestore | `gs://rocakidsarmenia-7935b-backups/` (bucket nuevo, misma región que Firestore) — ahí vive el export de antes de la migración de datos reales, ver [[restore-point-pre-migracion-modulo2]] en la memoria |
+| Cuenta de facturación | "Mi cuenta de facturación" (`016E3B-65E391-510B06`), **compartida** con otros 3 proyectos de Rafael: `feriacienciangc`, `monety360-app` y `project-0974d454-...`. ⚠️ **Un cobro que llegue por esta cuenta no necesariamente viene de RocaKids** — revisar siempre qué proyecto lo generó antes de sacar conclusiones. Rafael tiene además una segunda cuenta, "Pago de Firebase" (`01C448-E2F38F-85023D`), donde vive el proyecto `sigil3` (ver sección 1.5). |
+
+---
+
+## 1.5. ⚠️ Control de costos — restricciones permanentes
+
+**Tope acordado: 5 USD/mes** para `rocakidsarmenia-7935b`. Rafael lo vigila a diario desde otra conversación con acceso a la consola de GCP.
+
+**Regla general: antes de construir cualquier cosa que Rafael pida, evaluar si aumenta el costo por cualquier motivo y avisarlo ANTES de desplegar, no después.** Esto no reemplaza las reglas puntuales de abajo, las cubre a todas.
+
+1. **Región fija:** todas las Cloud Functions van en `southamerica-east1`. No desplegar en otra región sin discutirlo antes explícitamente.
+2. **Schedulers/crons:** antes de agregar uno nuevo o subirle la frecuencia a uno existente, calcular el impacto (segundos de CPU aprox. × invocaciones por día). Si multiplica el consumo actual, decirlo antes de desplegar. Ver además el límite de **3 jobs gratuitos** de Cloud Scheduler — ya están usados los 3.
+3. **Nunca `minInstances > 0`** salvo pedido explícito — convierte un costo "por uso" en un costo fijo mensual.
+4. **No habilitar APIs de pago nuevas** (Maps, Vision, servicios de IA, etc.) sin avisar primero, aunque tengan nivel gratuito.
+5. **Triggers de Firestore** (`onCreate`/`onWrite`) sobre colecciones con escrituras masivas o fan-out: informar el volumen esperado antes de desplegar.
+6. **Cualquier cambio que aumente de forma notable las invocaciones o el tiempo de CPU facturable** se reporta antes del deploy, no después.
+
+### Estado verificado el 2026-09-03
+
+Revisión completa a raíz de un cobro que le llegó a Rafael. **El cobro NO era de RocaKids** — era del proyecto `sigil3` (otro desarrollo suyo, en la otra cuenta de facturación). RocaKids lleva gastados COP 0,02 de COP 964.462 de crédito, con pronóstico de COP 0,00 para el mes completo.
+
+| Rubro | Medido | Límite gratis |
+|---|---|---|
+| Cloud Scheduler | 3 jobs | 3 |
+| Cloud Run — `minInstances` | 0 en las 9 funciones | (0 = no cobra en reposo) |
+| Artifact Registry | 208 MB | 500 MB |
+| Storage (fotos de niños/acudientes) | 145 MB | 5 GB |
+| Backup de Firestore | 21 KB | — |
+| Firestore — recuperación punto en el tiempo (PITR) | Desactivada | (activarla sí cuesta) |
+| Errores de funciones en 30 días | 2 aislados, sin bucles de reintento | — |
+
+**Lección que dejó `sigil3`, aplicable acá:** ese proyecto puso Storage, Firestore e imágenes de contenedor **todo** en `southamerica-east1`, donde **Cloud Storage no tiene capa gratuita** (cobra desde el primer byte), y además acumuló 883 MB de imágenes por desplegar 44 funciones 62 veces en dos días (el nivel gratuito de Artifact Registry son 500 MB). RocaKids evita lo primero **a propósito** — el bucket vive en `us-east1`, ver la tabla de la sección 1: **no cambiar esa decisión.** Lo segundo es el recordatorio de que cada `firebase deploy --only functions` cuesta algo aunque sea poco: no redesplegar funciones sin necesidad.
 
 ---
 
