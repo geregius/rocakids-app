@@ -41,6 +41,50 @@ Documentos relacionados en `docs/`:
 5. **Triggers de Firestore** (`onCreate`/`onWrite`) sobre colecciones con escrituras masivas o fan-out: informar el volumen esperado antes de desplegar.
 6. **Cualquier cambio que aumente de forma notable las invocaciones o el tiempo de CPU facturable** se reporta antes del deploy, no después.
 
+### Opción guardada: consolidar las 3 tareas programadas en una sola
+
+**Decidido el 2026-09-03: NO hacerlo por ahora.** Queda escrito para
+cuando haga falta, no como pendiente.
+
+**Precio real de una tarea extra: $0.10 USD/mes** (Cloud Scheduler cobra
+$0.10 por job/mes después de los 3 gratuitos por *cuenta de
+facturación*). Verificado el 2026-09-03 que los 3 puestos gratis son
+todos de RocaKids — los otros proyectos de esa cuenta
+(`feriacienciangc`, `monety360-app`, `project-0974d454-...`) tienen cero.
+
+Las 3 tareas actuales son `cierreAutomaticoDomingoMediodia` (domingo
+10:30am), `cierreAutomaticoFinDeDia` (diario 11:55pm) y
+`correoCumpleanosDiario` (diario 7:00am). Las dos primeras llaman a la
+misma función interna (`cerrarPresentesDeHoy`), solo que a horas
+distintas.
+
+**Diseño que funcionaría:** un solo `onSchedule` con horario
+`30 7,10,23 * * *` (7:30am, 10:30am y 11:30pm todos los días) que
+despacha internamente según la hora:
+
+- 7:30am → correos de cumpleaños
+- 10:30am → si es domingo, `cerrarPresentesDeHoy()`; si no, nada
+- 11:30pm → `cerrarPresentesDeHoy()`
+
+Las horas están escogidas para que **el cierre del domingo quede
+idéntico (10:30am)**, que es el único donde la hora importa de verdad
+(tiene que ocurrir antes del segundo servicio). Los otros dos se corren
+media hora y 25 minutos respectivamente, donde da lo mismo. Invocaciones:
+suben de ~2,1 a 3 por día — irrelevante frente al nivel gratuito de 2
+millones/mes.
+
+**Por qué NO se hizo ahora:** el ahorro hoy es exactamente $0 (las 3
+tareas actuales ya son gratis); solo daría valor el día que se necesite
+una cuarta. A cambio habría que tocar código desplegado y confirmado
+desde el 2026-08-15 e introducir lógica de "según la hora, haz esto o
+lo otro", que es donde se cuelan bugs de zona horaria — en un sistema
+que controla la salida de niños, ese riesgo no vale $0.10/mes.
+
+**Cuándo retomarlo:** el día que Rafael pida una tarea programada nueva.
+Ahí hay que ofrecerle los dos caminos — pagar $0.10/mes, o consolidar
+estas 3 en una y meter la nueva gratis — porque en ese momento ya se va
+a tocar el código de todos modos.
+
 ### Estado verificado el 2026-09-03
 
 Revisión completa a raíz de un cobro que le llegó a Rafael. **El cobro NO era de RocaKids** — era del proyecto `sigil3` (otro desarrollo suyo, en la otra cuenta de facturación). RocaKids lleva gastados COP 0,02 de COP 964.462 de crédito, con pronóstico de COP 0,00 para el mes completo.
