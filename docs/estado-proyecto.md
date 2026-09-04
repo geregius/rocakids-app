@@ -35,11 +35,15 @@ Documentos relacionados en `docs/`:
 **Regla general: antes de construir cualquier cosa que Rafael pida, evaluar si aumenta el costo por cualquier motivo y avisarlo ANTES de desplegar, no después.** Esto no reemplaza las reglas puntuales de abajo, las cubre a todas.
 
 1. **Región fija:** todas las Cloud Functions van en `southamerica-east1`. No desplegar en otra región sin discutirlo antes explícitamente.
-2. **Schedulers/crons:** antes de agregar uno nuevo o subirle la frecuencia a uno existente, calcular el impacto (segundos de CPU aprox. × invocaciones por día). Si multiplica el consumo actual, decirlo antes de desplegar. Ver además el límite de **3 jobs gratuitos** de Cloud Scheduler — ya están usados los 3.
+2. **Schedulers/crons:** antes de agregar uno nuevo o subirle la frecuencia a uno existente, calcular el impacto (segundos de CPU aprox. × invocaciones por día). Si multiplica el consumo actual, decirlo antes de desplegar. Cloud Scheduler da **3 jobs gratuitos por cuenta de facturación** y los 3 ya están usados (verificado 2026-09-03: los 3 son de RocaKids) — pero **sin alarmismo: el 4to cuesta $0.10 USD/mes**, no es una pared. Ver la opción de consolidación más abajo.
 3. **Nunca `minInstances > 0`** salvo pedido explícito — convierte un costo "por uso" en un costo fijo mensual.
 4. **No habilitar APIs de pago nuevas** (Maps, Vision, servicios de IA, etc.) sin avisar primero, aunque tengan nivel gratuito.
 5. **Triggers de Firestore** (`onCreate`/`onWrite`) sobre colecciones con escrituras masivas o fan-out: informar el volumen esperado antes de desplegar.
 6. **Cualquier cambio que aumente de forma notable las invocaciones o el tiempo de CPU facturable** se reporta antes del deploy, no después.
+7. **Consolidar despliegues — desplegar UNA sola vez, no varias seguidas.** Cada deploy de una Cloud Function genera una imagen nueva en Artifact Registry (nivel gratuito: **500 MB por proyecto**). Google limpia lo que tiene más de 24 h, pero muchos despliegues seguidos acumulan basura más rápido de lo que se limpia. **Ya pasó de verdad:** 62 despliegues en 2 días llevaron a `sigil3` a 883 MB (176% del tope gratuito) — ver "Estado verificado" más abajo. RocaKids está en 208 MB, sano.
+8. **Probar en local con el Firebase Emulator Suite antes de desplegar** (Functions, Firestore, Storage, Auth). Un deploy de prueba-y-error en producción cuesta Cloud Build + Artifact Registry cada vez.
+9. **Región de los buckets de Storage: `us-east1` / `us-west1` / `us-central1`** — nunca `southamerica-east1`. Cloud Storage en São Paulo **no tiene nivel gratuito, cobra desde el primer byte**. Ojo que esto aplica solo a Cloud Storage: Firestore sí tiene nivel gratuito en cualquier región, por eso la base está en `southamerica-east1` y el bucket en `us-east1` (ver sección 1). La región de un bucket ya creado **no se puede cambiar in situ**.
+10. **Nunca tocar configuración de facturación** — convertir una cuenta de prueba a pago, vincular/desvincular facturación, activar frenos automáticos. Eso lo maneja Rafael directamente en la conversación de control de costos, no acá.
 
 ### Opción guardada: consolidar las 3 tareas programadas en una sola
 
