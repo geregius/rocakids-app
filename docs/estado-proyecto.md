@@ -774,9 +774,52 @@ programadas; la función nueva es un trigger sobre una colección con un puñado
 de escrituras al mes (no fan-out); suma ~5 lecturas al abrir "Próximos
 Servicios" (una por categoría, por ID directo).
 
-**⚠️ ESTADO: compilado pero NO desplegado.** `flutter analyze` sin avisos y
-`flutter build web` exitoso, pero falta desplegar (hosting + functions +
-reglas) y que Rafael lo pruebe.
+**✅ DESPLEGADO el 2026-09-12** (reglas + `notificarCambioServicio` +
+hosting, en ese orden, tres `--only` separados para no repetir el problema
+de "deploy combinado no publica hosting"). Verificado después del deploy:
+10 funciones activas, **3 trabajos de Scheduler** (sin duplicar), Artifact
+Registry en 168 MB de 500 (baja sola a las 24 h). **Falta que Rafael lo
+pruebe en la app.**
+
+---
+
+## 5.21. Bug: el botón final de "Registrar familia" no hacía nada (2026-09-12)
+
+Rafael reportó que "Registrar familia" no permitía registrar: *"le doy al
+botón final en el resumen y no hace absolutamente nada"*. Su hipótesis era
+lentitud por guardar acudiente y niño a la vez, y propuso guardar por pasos.
+**No era lentitud — el botón reventaba antes de empezar.**
+
+`_registrar()` abría con `_formKeyAcudiente.currentState!.validate()`. Ese
+`Form` vive en el **paso 1**, pero `PageView` monta solo la página visible y
+sus vecinas: desde el **paso 3 (resumen)** la página 1 queda a dos de
+distancia y **se desmonta**, así que `currentState` es `null` y el `!` lanza
+un `TypeError` **síncrono, fuera del `try/catch`** de más abajo. Resultado:
+no se prendía el overlay, no aparecía mensaje, no se guardaba nada — el
+`catch` genérico agregado el 2026-08-24 (sección 8) **nunca llegaba a
+ejecutarse**. Explica también que fallara en celular y no siempre en
+computador: el desmontaje depende del tamaño de pantalla.
+
+**Corregido** en `registrar_familia_screen.dart` y en
+`sign_up_acudiente_screen.dart` (mismo wizard de 3 pasos, mismo bug):
+acceso null-safe al `Form`. No se pierde validación — no se llega al paso 3
+sin pasar la del paso 1 en `_siguientePaso()`, y los valores viven en los
+controladores del State, no en el widget desmontado.
+
+**Por qué NO se hizo el guardado por pasos que propuso Rafael** (evaluado y
+descartado con él): (a) no habría arreglado esto, porque el fallo ocurre
+antes de guardar; (b) sería **más lento** — hoy los niños se guardan en
+paralelo con `Future.wait`, y por pasos irían uno por uno; (c) dejaría
+**acudientes huérfanos** (cuenta de Auth + `usuarios` + `acudientes` +
+documento reservado, sin ningún niño) cada vez que alguien abandone el
+formulario a mitad, y al reintentar chocaría con "ya existe una cuenta con
+este correo".
+
+⚠️ **Deuda pendiente relacionada:** en 3 puntos de `auth_service.dart`
+cualquier `permission-denied` se traduce a *"Este número de documento ya se
+encuentra registrado en el sistema"*. Si la causa real es otra, el mensaje
+miente — mismo antipatrón que costó 3 rondas en las notificaciones
+(sección 5.19). Conviene mostrar el error real, no adivinar la causa.
 
 ---
 
