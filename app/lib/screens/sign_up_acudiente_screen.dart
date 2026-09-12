@@ -229,7 +229,22 @@ class _SignUpAcudienteScreenState extends State<SignUpAcudienteScreen> {
   }
 
   Future<void> _registrar() async {
-    if (!_formKeyAcudiente.currentState!.validate()) {
+    // ⚠️ El Form del paso 1 puede estar DESMONTADO cuando se pulsa este
+    // botón: `PageView` monta solo la página visible y sus vecinas, y
+    // desde el paso 3 (resumen) la página 1 queda a dos de distancia.
+    // Con `currentState!` eso lanzaba un `TypeError` de null check
+    // SÍNCRONO, **fuera** del `try/catch` de más abajo — así que el
+    // botón final no hacía absolutamente nada: ni overlay, ni mensaje de
+    // error, ni registro (reportado por Rafael el 2026-09-12: "le doy al
+    // botón final en el resumen y no hace absolutamente nada").
+    //
+    // No se pierde ninguna validación al saltarla cuando está
+    // desmontado: no se puede llegar al paso 3 sin haber pasado la
+    // validación del paso 1 en `_siguientePaso()`, y los valores viven
+    // en los controladores del State (no en el widget desmontado), así
+    // que siguen intactos.
+    final formAcudiente = _formKeyAcudiente.currentState;
+    if (formAcudiente != null && !formAcudiente.validate()) {
       _irAPaso(0);
       return;
     }
