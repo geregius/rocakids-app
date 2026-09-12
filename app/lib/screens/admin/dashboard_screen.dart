@@ -826,6 +826,34 @@ class _BloqueHoy extends StatefulWidget {
 }
 
 class _BloqueHoyState extends State<_BloqueHoy> {
+  // Qué día se está viendo (2026-09-12, pedido de Rafael: "ver el detalle
+  // de la sección HOY pero con un filtro por día"). Arranca en hoy, que
+  // es el comportamiento que existía antes.
+  DateTime _dia = DateTime.now();
+
+  bool get _esHoy {
+    final hoy = DateTime.now();
+    return _dia.year == hoy.year && _dia.month == hoy.month && _dia.day == hoy.day;
+  }
+
+  String get _diaTexto =>
+      '${_dia.day.toString().padLeft(2, '0')}/'
+      '${_dia.month.toString().padLeft(2, '0')}/${_dia.year}';
+
+  Future<void> _elegirDia() async {
+    final elegido = await showDatePicker(
+      context: context,
+      initialDate: _dia,
+      // La app no tiene registros anteriores a septiembre de 2025 (el mes
+      // más viejo de la migración histórica), y no tiene sentido dejar
+      // elegir un día futuro: siempre saldría vacío.
+      firstDate: DateTime(2025, 9, 1),
+      lastDate: DateTime.now(),
+      helpText: 'Ver el detalle de qué día',
+    );
+    if (elegido != null && mounted) setState(() => _dia = elegido);
+  }
+
   // Antes traía los ~460 niños completos (`obtenerTodosLosNinos()`) solo
   // para el dato secundario "sin documento" — ahora pide bajo demanda
   // solo los niños de las Entradas de hoy (2026-08-19, mismo arreglo que
@@ -857,7 +885,7 @@ class _BloqueHoyState extends State<_BloqueHoy> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Registro>>(
-      stream: widget.authService.registrosDeHoy(),
+      stream: widget.authService.registrosDeDia(_dia),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -901,17 +929,40 @@ class _BloqueHoyState extends State<_BloqueHoy> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Selector de día. Se muestra siempre (no solo al cambiar de
+            // fecha) para que se vea que el bloque es navegable; el botón
+            // "Volver a hoy" solo aparece cuando hace falta.
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _elegirDia,
+                  icon: const Icon(Icons.edit_calendar, size: 18),
+                  label: Text(_esHoy ? 'Hoy ($_diaTexto)' : _diaTexto),
+                ),
+                if (!_esHoy)
+                  TextButton(
+                    onPressed: () => setState(() => _dia = DateTime.now()),
+                    child: const Text('Volver a hoy'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
             Wrap(
               spacing: 12,
               runSpacing: 12,
               children: [
                 _StatTile(
-                  etiqueta: 'Recibidos hoy',
+                  etiqueta: _esHoy ? 'Recibidos hoy' : 'Recibidos ese día',
                   valor: '${entradasHoy.length}',
                   icono: Icons.groups,
                 ),
                 _StatTile(
-                  etiqueta: 'Presentes ahora',
+                  // En un día pasado "presentes ahora" no significa nada:
+                  // son los que nunca recibieron Salida ese día.
+                  etiqueta: _esHoy ? 'Presentes ahora' : 'Sin salida registrada',
                   valor: '${presentes.length}',
                   icono: Icons.child_care,
                 ),
@@ -940,9 +991,15 @@ class _BloqueHoyState extends State<_BloqueHoy> {
             ),
             const SizedBox(height: 20),
             if (entradasHoy.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: Text('Todavía no hay registros hoy.')),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Text(
+                    _esHoy
+                        ? 'Todavía no hay registros hoy.'
+                        : 'No hubo ningún registro el $_diaTexto.',
+                  ),
+                ),
               )
             else
               _GraficasResponsivas(
@@ -1055,6 +1112,37 @@ class _BloqueHistoricoState extends State<_BloqueHistorico> {
               }
             }
 
+            // Promedio de niños por OCASIÓN de cada servicio (2026-09-12,
+            // pedido de Rafael: "saber en promedio cuántos niños están
+            // ingresando por ejemplo al segundo servicio"). Se divide el
+            // total de la ventana entre el número de veces que ese
+            // servicio ocurrió de verdad — NO entre los meses ni entre los
+            // domingos del calendario, que deformaría el mes en curso y
+            // los servicios cancelados. `ocasionesPorServicio` viene del
+            // resumen mensual, que ya está cargado: cero consultas extra.
+            final ocasiones = <String, int>{
+              for (final s in serviciosDisponibles) s: 0,
+            };
+            for (final m in mesesEnRango) {
+              final resumen = resumenPorMes[m];
+              if (resumen == null) continue;
+              for (final entry in resumen.ocasionesPorServicio.entries) {
+                if (ocasiones.containsKey(entry.key)) {
+                  ocasiones[entry.key] = (ocasiones[entry.key] ?? 0) + entry.value;
+                }
+              }
+            }
+            final promedioPorServicio = <String, int>{};
+            for (final s in serviciosDisponibles) {
+              final veces = ocasiones[s] ?? 0;
+              // Un servicio que no ocurrió se omite en vez de mostrarse en
+              // 0: "0 niños en promedio" se leería como "no fue nadie",
+              // cuando lo cierto es que no hubo servicio.
+              if (veces > 0) {
+                promedioPorServicio[s] = ((porServicio[s] ?? 0) / veces).round();
+              }
+            }
+
             // Crecimiento acumulado de niños registrados: arranca con
             // la base de todos los `ninosNuevos` de meses ANTERIORES a
             // la ventana seleccionada (para que el acumulado no vuelva
@@ -1086,6 +1174,11 @@ class _BloqueHistoricoState extends State<_BloqueHistorico> {
                 _GraficaBarras(
                   titulo: 'Comparación entre servicios',
                   datos: porServicio,
+                  etiquetaCorta: (k) => _servicioCorto[k] ?? k,
+                ),
+                _GraficaBarras(
+                  titulo: 'Promedio de niños por servicio',
+                  datos: promedioPorServicio,
                   etiquetaCorta: (k) => _servicioCorto[k] ?? k,
                 ),
               ],

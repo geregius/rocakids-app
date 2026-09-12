@@ -878,6 +878,80 @@ reglas), así que sin compilación ni imagen nueva.
 
 ---
 
+## 5.23. Dashboard: filtro por día + promedio por servicio (2026-09-12)
+
+Dos pedidos de Rafael en el mismo mensaje.
+
+### Filtro por día en el bloque "Hoy"
+
+`registrosDeHoy()` ahora **delega** en `registrosDeDia(DateTime)` — misma
+consulta, solo cambia la fecha — así que no hizo falta índice nuevo. El
+bloque tiene un selector de fecha (desde 2025-09, el mes más viejo de la
+migración, hasta hoy) y un botón "Volver a hoy".
+
+**Las etiquetas cambian según el día**, porque en una fecha pasada mentirían:
+"Recibidos hoy" → "Recibidos ese día", y sobre todo **"Presentes ahora" →
+"Sin salida registrada"** (en un día pasado no hay nadie "presente ahora": son
+los que nunca recibieron Salida).
+
+**Costo:** cada día consultado lee los registros de ese día (~400 un domingo,
+poquísimos entre semana). Reportado a Rafael ANTES de construir: revisar 10
+días ≈ 4.000 lecturas ≈ 0,3% de la cuota mensual.
+
+### ⚠️ Bug encontrado de paso: `porServicio` se guardaba mal desde el 19-ago
+
+`actualizarResumenMensual` hacía:
+
+```js
+actualizacion[`porServicio.${registro.servicio}`] = FieldValue.increment(1);
+await resumenRef.set(actualizacion, {merge: true});
+```
+
+**`set({merge: true})` trata las claves LITERALMENTE**: el punto quedó como
+parte del nombre, creando campos llamados `"porServicio.Miércoles"` en la
+raíz del documento, invisibles para quien lee `porServicio` como mapa. Solo
+`update()` interpreta el punto como ruta a un campo anidado.
+
+Por eso los meses hasta el backfill del 2026-08-19 se veían bien y **todo lo
+posterior parecía vacío** (2026-09 mostraba `totalEntradas: 129` y ningún
+servicio). **No se perdió ningún dato** — estaban completos, en el campo
+equivocado. Corregido escribiendo un mapa anidado de verdad.
+
+### Promedio por servicio (promedio por OCASIÓN, no por mes)
+
+Confirmado con `AskUserQuestion` cómo calcularlo, entre tres opciones. Rafael
+eligió el exacto: **total ÷ veces que ese servicio ocurrió de verdad**, no
+÷ meses ni ÷ domingos del calendario (eso deformaría el mes en curso y los
+servicios cancelados).
+
+`actualizarResumenMensual` ahora también guarda `diasPorServicio`: la **fecha
+como clave** (no un contador), para que dos niños del mismo día no cuenten
+como dos ocasiones. Acotado a ~31 claves por servicio por mes. El modelo
+`ResumenMensual` lo expone como `ocasionesPorServicio` + `promedioPorOcasion()`.
+
+**Backfill del histórico corrido y verificado** (2026-09-12): 4.121 entradas
+leídas, **0 sin campo `servicio`**, 12 de 13 meses cuadrando exactamente con
+`totalEntradas`. Se hizo por API REST desde la máquina de Rafael, **sin
+desplegar una Cloud Function temporal** — dos despliegues menos que el patrón
+usado en migraciones anteriores. Script en el scratchpad de la sesión, con
+modo simulación por defecto.
+
+**Costo de la gráfica: cero lecturas extra.** El bloque "Histórico" ya carga
+los 13 resúmenes al abrir el Dashboard; el promedio sale de datos que ya
+están en memoria.
+
+**Dos cosas que quedaron documentadas, no corregidas:**
+- **2026-02 tiene 349 en `totalEntradas` pero 347 registros reales.**
+  `totalEntradas` sube al crear un registro y no baja si luego se borra. No se
+  tocó para no alterar un número histórico ya mostrado.
+- **Los meses viejos traen ruido de la migración**: agosto muestra 8 ocasiones
+  de "Domingo 1° Servicio" y ese mes solo tuvo 5 domingos. Son registros
+  hechos en días que no corresponden al servicio. El promedio usa las fechas
+  reales, que es el denominador honesto, pero conviene leer con cuidado los
+  meses anteriores a que la app estuviera en uso normal.
+
+---
+
 ## 6. Pantallas construidas (`lib/screens/`)
 
 ### `widgets/app_shell.dart` — estructura de navegación (2026-08-14)

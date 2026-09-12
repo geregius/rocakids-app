@@ -800,9 +800,15 @@ class AuthService {
   /// actualiza solo a medida que se registran entradas/salidas durante
   /// el servicio. Mismo permiso que [registrarMovimiento] para leer
   /// (`puedeRegistrarAsistencia()`).
-  Stream<List<Registro>> registrosDeHoy() {
-    final ahora = DateTime.now();
-    final inicio = DateTime(ahora.year, ahora.month, ahora.day);
+  Stream<List<Registro>> registrosDeHoy() => registrosDeDia(DateTime.now());
+
+  /// Los movimientos de UN día cualquiera (2026-09-12, pedido de Rafael:
+  /// poder ver el detalle del bloque "Hoy" de cualquier fecha, no solo la
+  /// de hoy). Misma consulta que [registrosDeHoy] — de hecho esa ahora
+  /// delega acá — así que no hay índice nuevo ni costo distinto por día
+  /// consultado.
+  Stream<List<Registro>> registrosDeDia(DateTime dia) {
+    final inicio = DateTime(dia.year, dia.month, dia.day);
     final fin = inicio.add(const Duration(days: 1));
     return _firestore
         .collection('registros')

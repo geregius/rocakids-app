@@ -221,12 +221,32 @@ class ResumenMensual {
   final int ninosNuevos;
   final Map<String, int> porServicio;
 
+  /// En cuántas OCASIONES distintas ocurrió cada servicio dentro del mes
+  /// (2026-09-12). Sin este dato solo se puede calcular el promedio por
+  /// mes; con él se puede responder lo que de verdad sirve: "cuántos
+  /// niños entran en un 2° servicio típico".
+  ///
+  /// La Cloud Function lo llena guardando la FECHA como clave (no un
+  /// contador), justamente para que dos niños del mismo día no cuenten
+  /// como dos ocasiones.
+  final Map<String, int> ocasionesPorServicio;
+
   const ResumenMensual({
     required this.mes,
     required this.totalEntradas,
     required this.ninosNuevos,
     required this.porServicio,
+    this.ocasionesPorServicio = const {},
   });
+
+  /// Promedio de niños por ocasión de [servicio] en este mes, o `null` si
+  /// no hay ocasiones registradas (no se inventa un 0, que se leería como
+  /// "no vino nadie" cuando en realidad es "no hubo servicio").
+  double? promedioPorOcasion(String servicio) {
+    final ocasiones = ocasionesPorServicio[servicio] ?? 0;
+    if (ocasiones == 0) return null;
+    return (porServicio[servicio] ?? 0) / ocasiones;
+  }
 
   factory ResumenMensual.fromFirestore(String id, Map<String, dynamic> data) {
     final partes = id.split('-');
@@ -238,11 +258,22 @@ class ResumenMensual {
         porServicio[entry.key as String] = (entry.value as num).toInt();
       }
     }
+    // `diasPorServicio` guarda un mapa de FECHAS por servicio; acá solo
+    // interesa cuántas hay.
+    final ocasiones = <String, int>{};
+    final rawDias = data['diasPorServicio'];
+    if (rawDias is Map) {
+      for (final entry in rawDias.entries) {
+        final fechas = entry.value;
+        if (fechas is Map) ocasiones[entry.key as String] = fechas.length;
+      }
+    }
     return ResumenMensual(
       mes: mes,
       totalEntradas: (data['totalEntradas'] as num?)?.toInt() ?? 0,
       ninosNuevos: (data['ninosNuevos'] as num?)?.toInt() ?? 0,
       porServicio: porServicio,
+      ocasionesPorServicio: ocasiones,
     );
   }
 }

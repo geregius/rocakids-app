@@ -838,6 +838,15 @@ function mesIdBogota(fecha) {
   return `${bogota.getUTCFullYear()}-${String(bogota.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+// Igual que `mesIdBogota` pero hasta el dia (AAAA-MM-DD) — para contar en
+// cuantas OCASIONES distintas ocurrio cada servicio (2026-09-12).
+function fechaIdBogota(fecha) {
+  const bogota = new Date(fecha.getTime() - OFFSET_BOGOTA_HORAS * 3600 * 1000);
+  const mes = String(bogota.getUTCMonth() + 1).padStart(2, '0');
+  const dia = String(bogota.getUTCDate()).padStart(2, '0');
+  return `${bogota.getUTCFullYear()}-${mes}-${dia}`;
+}
+
 async function actualizarEstadisticasNino(ninoId, fechaMovimiento, mesId) {
   const ninoRef = db.collection('ninos').doc(ninoId);
   const resumenRef = db.collection('resumenes_mensuales').doc(mesId);
@@ -874,7 +883,26 @@ exports.actualizarResumenMensual = onDocumentCreated(
 
       const actualizacion = {totalEntradas: FieldValue.increment(1)};
       if (registro.servicio) {
-        actualizacion[`porServicio.${registro.servicio}`] = FieldValue.increment(1);
+        // ⚠️ Mapa ANIDADO de verdad, NO una clave plana
+        // `porServicio.${servicio}`: `set({merge: true})` trata las
+        // claves LITERALMENTE, así que la notación de punto creaba
+        // campos llamados "porServicio.Miércoles" en la raíz del
+        // documento, invisibles para quien lee `porServicio` como mapa.
+        // Solo `update()` interpreta el punto como ruta a un campo
+        // anidado. Bug encontrado el 2026-09-12: los meses anteriores al
+        // backfill se veían bien y todo lo posterior parecía vacío.
+        actualizacion.porServicio = {
+          [registro.servicio]: FieldValue.increment(1),
+        };
+        // Fechas distintas en las que ocurrió cada servicio — sin esto
+        // solo se puede calcular el promedio POR MES, no "cuántos niños
+        // entran en un servicio típico", que es lo que sirve de verdad.
+        // Se guarda la fecha como clave (no un contador) justamente para
+        // que repetirla no sume: interesa en CUÁNTAS ocasiones pasó, no
+        // cuántos niños hubo. Acotado a ~31 claves por servicio por mes.
+        actualizacion.diasPorServicio = {
+          [registro.servicio]: {[fechaIdBogota(fecha)]: true},
+        };
       }
       await resumenRef.set(actualizacion, {merge: true});
 
