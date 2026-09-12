@@ -188,6 +188,11 @@ class _ProgramacionServidoresScreenState
                           builder: (context, snapshotServicios) {
                             final servicios = snapshotServicios.data ?? [];
 
+                            return StreamBuilder<List<CambioServicio>>(
+                              stream: _authService.listarCambiosServicio(),
+                              builder: (context, snapshotCambios) {
+                            final cambios = snapshotCambios.data ?? [];
+
                             return TabBarView(
                               controller: _tabController,
                               children: [
@@ -214,9 +219,13 @@ class _ProgramacionServidoresScreenState
                                   categorias: categorias,
                                   porCategoria: porCategoria,
                                   servicios: servicios,
+                                  cambios: cambios,
                                   servidoresPorId: servidoresPorId,
+                                  servidores: servidores,
                                 ),
                               ],
+                            );
+                              },
                             );
                           },
                         );
@@ -515,13 +524,17 @@ class _ProximosServiciosTab extends StatelessWidget {
   final List<CategoriaProgramacion> categorias;
   final Map<String, List<GrupoServidores>> porCategoria;
   final List<ServicioProgramado> servicios;
+  final List<CambioServicio> cambios;
   final Map<String, UsuarioApp> servidoresPorId;
+  final List<UsuarioApp> servidores;
 
   const _ProximosServiciosTab({
     required this.categorias,
     required this.porCategoria,
     required this.servicios,
+    required this.cambios,
     required this.servidoresPorId,
+    required this.servidores,
   });
 
   @override
@@ -537,7 +550,9 @@ class _ProximosServiciosTab extends StatelessWidget {
             categoria: categoria,
             grupos: porCategoria[categoria.nombre] ?? const [],
             servicios: servicios.where((s) => s.categoria == categoria.nombre).toList(),
+            cambios: cambios,
             servidoresPorId: servidoresPorId,
+            servidores: servidores,
           ),
       ],
     );
@@ -548,13 +563,17 @@ class _TarjetaProximoServicio extends StatelessWidget {
   final CategoriaProgramacion categoria;
   final List<GrupoServidores> grupos;
   final List<ServicioProgramado> servicios;
+  final List<CambioServicio> cambios;
   final Map<String, UsuarioApp> servidoresPorId;
+  final List<UsuarioApp> servidores;
 
   const _TarjetaProximoServicio({
     required this.categoria,
     required this.grupos,
     required this.servicios,
+    required this.cambios,
     required this.servidoresPorId,
+    required this.servidores,
   });
 
   Future<void> _configurarRotacion(BuildContext context) async {
@@ -591,6 +610,37 @@ class _TarjetaProximoServicio extends StatelessWidget {
     );
   }
 
+  Future<void> _intercambiar(
+    BuildContext context, {
+    required GrupoServidores grupo,
+    required DateTime fecha,
+    required CambioServicio? existente,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _IntercambioSheet(
+        categoria: categoria,
+        grupo: grupo,
+        fecha: fecha,
+        existente: existente,
+        servidores: servidores,
+        servidoresPorId: servidoresPorId,
+      ),
+    );
+  }
+
+  /// El cambio ya registrado para esta categoría en esta fecha, si lo
+  /// hay — se busca por el mismo ID determinístico con el que se
+  /// guarda ([idCambioServicio]), así que es una comparación directa.
+  CambioServicio? _cambioDe(DateTime fecha) {
+    final id = idCambioServicio(categoria.id, DateTime(fecha.year, fecha.month, fecha.day));
+    for (final c in cambios) {
+      if (c.id == id) return c;
+    }
+    return null;
+  }
+
   String _nombresDe(List<String> ids) {
     if (ids.isEmpty) return 'Sin servidores asignados';
     final nombres = ids
@@ -603,6 +653,72 @@ class _TarjetaProximoServicio extends StatelessWidget {
 
   String _fechaTexto(DateTime f) =>
       '${f.day.toString().padLeft(2, '0')}/${f.month.toString().padLeft(2, '0')}/${f.year}';
+
+  /// Bloque que se muestra debajo del equipo cuando esa fecha tiene un
+  /// intercambio: quién no sirve, quién entra en su lugar, y el aviso
+  /// de puestos descubiertos (pedido explícito de Rafael — un faltante
+  /// sin reemplazo no se guarda en silencio).
+  Widget? _detalleCambios(BuildContext context, EquipoDelServicio equipo) {
+    if (!equipo.hayCambios) return null;
+    final pequeno = Theme.of(context).textTheme.bodySmall;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (equipo.salenIds.isNotEmpty)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.person_off, size: 16, color: AppColors.rojo),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'No sirven: ${_nombresDe(equipo.salenIds)}',
+                    style: pequeno?.copyWith(color: AppColors.rojo),
+                  ),
+                ),
+              ],
+            ),
+          if (equipo.entranIds.isNotEmpty)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.person_add_alt, size: 16, color: AppColors.azulClaro),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Entran: ${_nombresDe(equipo.entranIds)}',
+                    style: pequeno?.copyWith(color: AppColors.azulClaro),
+                  ),
+                ),
+              ],
+            ),
+          if (equipo.puestosSinReemplazo > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.priority_high, size: 16, color: AppColors.rojo),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      equipo.puestosSinReemplazo == 1
+                          ? '1 puesto sin reemplazo'
+                          : '${equipo.puestosSinReemplazo} puestos sin reemplazo',
+                      style: pequeno?.copyWith(
+                        color: AppColors.rojo,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -623,11 +739,15 @@ class _TarjetaProximoServicio extends StatelessWidget {
               fechaObjetivo: fechaObjetivo,
             )
           : null;
-      contenido = grupo != null
+      final cambio = grupo == null ? null : _cambioDe(fechaObjetivo);
+      final equipo =
+          grupo == null ? null : equipoDelServicio(grupo: grupo, cambio: cambio);
+      contenido = grupo != null && equipo != null
           ? _FilaResultado(
               titulo: 'Próximo ${nombreDiaSemana(diaSemana)} ${_fechaTexto(fechaObjetivo)}',
               grupoNombre: grupo.nombre,
-              integrantes: _nombresDe(grupo.fkIdsServidores),
+              integrantes: _nombresDe(equipo.quedanIds),
+              detalleCambios: _detalleCambios(context, equipo),
             )
           : Text(
               tieneReferencia
@@ -640,10 +760,23 @@ class _TarjetaProximoServicio extends StatelessWidget {
           onPressed: () => _configurarRotacion(context),
           child: Text(tieneReferencia ? 'Cambiar punto de partida' : 'Elegir grupo de partida'),
         ),
+        if (grupo != null)
+          OutlinedButton.icon(
+            onPressed: () => _intercambiar(
+              context,
+              grupo: grupo,
+              fecha: fechaObjetivo,
+              existente: cambio,
+            ),
+            icon: const Icon(Icons.edit_calendar, size: 18),
+            label: Text(cambio == null ? 'Intercambiar' : 'Editar intercambio'),
+          ),
       ];
     } else {
       final hoy = DateTime.now();
-      final proximos = servicios.where((s) => !s.fecha.isBefore(DateTime(hoy.year, hoy.month, hoy.day))).toList()
+      final proximos = servicios
+          .where((s) => !s.fecha.isBefore(DateTime(hoy.year, hoy.month, hoy.day)))
+          .toList()
         ..sort((a, b) => a.fecha.compareTo(b.fecha));
       final proximo = proximos.isEmpty ? null : proximos.first;
       GrupoServidores? grupo;
@@ -655,18 +788,37 @@ class _TarjetaProximoServicio extends StatelessWidget {
           }
         }
       }
+      final grupoAsignado = grupo;
+      final cambio = (proximo == null || grupoAsignado == null)
+          ? null
+          : _cambioDe(proximo.fecha);
+      final equipo = grupoAsignado == null
+          ? null
+          : equipoDelServicio(grupo: grupoAsignado, cambio: cambio);
       contenido = proximo == null
           ? const Text('Todavía no hay ningún servicio programado.')
           : _FilaResultado(
               titulo: _fechaTexto(proximo.fecha),
-              grupoNombre: grupo?.nombre ?? '(grupo eliminado)',
-              integrantes: grupo == null ? '' : _nombresDe(grupo.fkIdsServidores),
+              grupoNombre: grupoAsignado?.nombre ?? '(grupo eliminado)',
+              integrantes: equipo == null ? '' : _nombresDe(equipo.quedanIds),
+              detalleCambios: equipo == null ? null : _detalleCambios(context, equipo),
             );
       acciones = [
         OutlinedButton(
           onPressed: () => _programarServicio(context, existente: proximo),
           child: Text(proximo == null ? 'Programar servicio' : 'Reprogramar'),
         ),
+        if (proximo != null && grupoAsignado != null)
+          OutlinedButton.icon(
+            onPressed: () => _intercambiar(
+              context,
+              grupo: grupoAsignado,
+              fecha: proximo.fecha,
+              existente: cambio,
+            ),
+            icon: const Icon(Icons.edit_calendar, size: 18),
+            label: Text(cambio == null ? 'Intercambiar' : 'Editar intercambio'),
+          ),
         if (proximo != null)
           TextButton(
             onPressed: () async {
@@ -713,11 +865,13 @@ class _FilaResultado extends StatelessWidget {
   final String titulo;
   final String grupoNombre;
   final String integrantes;
+  final Widget? detalleCambios;
 
   const _FilaResultado({
     required this.titulo,
     required this.grupoNombre,
     required this.integrantes,
+    this.detalleCambios,
   });
 
   @override
@@ -729,7 +883,262 @@ class _FilaResultado extends StatelessWidget {
         Text(grupoNombre, style: Theme.of(context).textTheme.titleLarge),
         if (integrantes.isNotEmpty)
           Text(integrantes, style: Theme.of(context).textTheme.bodySmall),
+        ?detalleCambios,
       ],
+    );
+  }
+}
+
+/// Intercambio TEMPORAL de servidores para UNA ocasión (2026-09-03,
+/// pedido de Rafael) — ver [CambioServicio]. Dos listas: quiénes del
+/// grupo asignado NO sirven esa fecha, y quiénes entran en su lugar.
+///
+/// Los candidatos a entrar son **cualquier servidor activo que no esté
+/// ya en el grupo asignado** (decisión explícita de Rafael): no tiene
+/// sentido "reemplazar" a alguien con un compañero que ya iba a servir
+/// ese día de todos modos.
+///
+/// No exige que entren tantos como salen — si salen 3 y entran 2, se
+/// guarda igual pero el faltante queda visible como "1 puesto sin
+/// reemplazo", tanto acá como en la tarjeta del servicio.
+class _IntercambioSheet extends StatefulWidget {
+  final CategoriaProgramacion categoria;
+  final GrupoServidores grupo;
+  final DateTime fecha;
+  final CambioServicio? existente;
+  final List<UsuarioApp> servidores;
+  final Map<String, UsuarioApp> servidoresPorId;
+
+  const _IntercambioSheet({
+    required this.categoria,
+    required this.grupo,
+    required this.fecha,
+    required this.existente,
+    required this.servidores,
+    required this.servidoresPorId,
+  });
+
+  @override
+  State<_IntercambioSheet> createState() => _IntercambioSheetState();
+}
+
+class _IntercambioSheetState extends State<_IntercambioSheet> {
+  late Set<String> _salen;
+  late Set<String> _entran;
+  final _buscarCtrl = TextEditingController();
+  String _filtro = '';
+  bool _guardando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _salen = {...?widget.existente?.salenIds};
+    _entran = {...?widget.existente?.entranIds};
+    _buscarCtrl.addListener(() {
+      setState(() => _filtro = _buscarCtrl.text.trim().toLowerCase());
+    });
+  }
+
+  @override
+  void dispose() {
+    _buscarCtrl.dispose();
+    super.dispose();
+  }
+
+  String _nombre(String uid) =>
+      widget.servidoresPorId[uid]?.nombreCompleto ?? '(servidor no encontrado)';
+
+  String get _fechaTexto =>
+      '${widget.fecha.day.toString().padLeft(2, '0')}/'
+      '${widget.fecha.month.toString().padLeft(2, '0')}/'
+      '${widget.fecha.year}';
+
+  int get _sinReemplazo {
+    final faltan = _salen.length - _entran.length;
+    return faltan > 0 ? faltan : 0;
+  }
+
+  Future<void> _guardar() async {
+    setState(() => _guardando = true);
+    try {
+      await AuthService().guardarCambioServicio(
+        categoriaId: widget.categoria.id,
+        categoria: widget.categoria.nombre,
+        fecha: widget.fecha,
+        grupoId: widget.grupo.id,
+        salenIds: _salen.toList(),
+        entranIds: _entran.toList(),
+      );
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _guardando = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo guardar el intercambio: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Candidatos a entrar: cualquier servidor activo que no sea del
+    // grupo asignado, filtrado por el buscador.
+    final candidatos = widget.servidores
+        .where((s) => !widget.grupo.fkIdsServidores.contains(s.uid))
+        .where((s) => _filtro.isEmpty || s.nombreCompleto.toLowerCase().contains(_filtro))
+        .toList()
+      ..sort((a, b) => a.nombreCompleto.compareTo(b.nombreCompleto));
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.85,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Intercambio para el $_fechaTexto',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            Text(
+              '${widget.categoria.nombre} — ${widget.grupo.nombre}. '
+              'El grupo original no se modifica.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView(
+                children: [
+                  Text(
+                    'Quiénes NO sirven ese día',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: AppColors.azulMarino,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (widget.grupo.fkIdsServidores.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Este grupo no tiene integrantes.'),
+                    ),
+                  for (final uid in widget.grupo.fkIdsServidores)
+                    CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: _salen.contains(uid),
+                      title: Text(_nombre(uid)),
+                      onChanged: (v) => setState(() {
+                        if (v == true) {
+                          _salen.add(uid);
+                        } else {
+                          _salen.remove(uid);
+                        }
+                      }),
+                    ),
+                  const Divider(height: 24),
+                  Text(
+                    'Quiénes entran en su lugar',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: AppColors.azulMarino,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: _buscarCtrl,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      prefixIcon: Icon(Icons.search),
+                      hintText: 'Buscar servidor por nombre',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  if (candidatos.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Ningún servidor coincide con la búsqueda.'),
+                    ),
+                  for (final s in candidatos)
+                    CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: _entran.contains(s.uid),
+                      title: Text(s.nombreCompleto),
+                      onChanged: (v) => setState(() {
+                        if (v == true) {
+                          _entran.add(s.uid);
+                        } else {
+                          _entran.remove(s.uid);
+                        }
+                      }),
+                    ),
+                ],
+              ),
+            ),
+            const Divider(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${_salen.length} salen · ${_entran.length} entran',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                if (_sinReemplazo > 0)
+                  Row(
+                    children: [
+                      const Icon(Icons.priority_high, size: 16, color: AppColors.rojo),
+                      const SizedBox(width: 4),
+                      Text(
+                        _sinReemplazo == 1
+                            ? '1 puesto sin reemplazo'
+                            : '$_sinReemplazo puestos sin reemplazo',
+                        style: const TextStyle(
+                          color: AppColors.rojo,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: _guardando ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                const Spacer(),
+                FilledButton(
+                  onPressed: _guardando ? null : _guardar,
+                  child: _guardando
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      // Sin cambios seleccionados, guardar equivale a
+                      // deshacer el intercambio (borra el documento).
+                      : Text(
+                          _salen.isEmpty && _entran.isEmpty
+                              ? 'Quitar intercambio'
+                              : 'Guardar intercambio',
+                        ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

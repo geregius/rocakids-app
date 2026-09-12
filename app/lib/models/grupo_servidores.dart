@@ -223,3 +223,131 @@ DateTime proximaFechaDia(int diaSemana, {DateTime? desde}) {
   final diff = (diaSemana - base.weekday) % 7;
   return base.add(Duration(days: diff < 0 ? diff + 7 : diff));
 }
+
+/// Fecha en formato `AAAA-MM-DD` — la mitad del ID determinístico de
+/// un [CambioServicio].
+String _fechaId(DateTime f) =>
+    '${f.year.toString().padLeft(4, '0')}-'
+    '${f.month.toString().padLeft(2, '0')}-'
+    '${f.day.toString().padLeft(2, '0')}';
+
+/// ID determinístico de un cambio: `{categoriaId}_{AAAA-MM-DD}`. Mismo
+/// criterio que `nino_acudiente` ({fkIdNino}_{fkIdAcudiente}) — hace
+/// imposible tener dos documentos de cambios para la misma ocasión, y
+/// permite leerlo con un `get` directo en vez de una consulta.
+String idCambioServicio(String categoriaId, DateTime fecha) =>
+    '${categoriaId}_${_fechaId(fecha)}';
+
+/// Un intercambio TEMPORAL de servidores para UNA ocasión concreta
+/// (2026-09-03, pedido de Rafael: *"estos cambios son comunes, pero no
+/// modifican el grupo original"*).
+///
+/// **Por qué existe esta colección en vez de editar el grupo:** para
+/// las categorías `semanal` no hay ningún documento del servicio — la
+/// rotación se calcula al vuelo con [grupoQueSirve], que es una
+/// función pura. O sea que "el domingo 7 sirve el Grupo 3" no está
+/// escrito en ninguna parte, se deduce. Un cambio puntual necesitaba
+/// entonces su propio documento donde engancharse, sin tocar
+/// [GrupoServidores.fkIdsServidores] (que es permanente y arrastraría
+/// el cambio a todas las semanas siguientes).
+///
+/// Un documento por ocasión (categoría + fecha), con
+/// [idCambioServicio] como ID. Como queda un documento por cada vez que
+/// hubo un cambio, también sirve de historial de quién sirvió de verdad.
+class CambioServicio {
+  final String id;
+  final String categoriaId;
+  /// Nombre de la categoría — se guarda repetido (no solo el id) para
+  /// que la Cloud Function que manda el aviso pueda armar el mensaje
+  /// sin una lectura extra.
+  final String categoria;
+  final DateTime fecha;
+  final String grupoId;
+  /// Integrantes del grupo original que NO sirven esa fecha.
+  final List<String> salenIds;
+  /// Servidores que SÍ sirven esa fecha aunque no son del grupo.
+  final List<String> entranIds;
+  final DateTime creadoEn;
+
+  const CambioServicio({
+    required this.id,
+    required this.categoriaId,
+    required this.categoria,
+    required this.fecha,
+    required this.grupoId,
+    required this.salenIds,
+    required this.entranIds,
+    required this.creadoEn,
+  });
+
+  bool get estaVacio => salenIds.isEmpty && entranIds.isEmpty;
+
+  Map<String, dynamic> toFirestore() => {
+    'categoriaId': categoriaId,
+    'categoria': categoria,
+    'fecha': Timestamp.fromDate(fecha),
+    'grupoId': grupoId,
+    'salenIds': salenIds,
+    'entranIds': entranIds,
+  };
+
+  factory CambioServicio.fromFirestore(String id, Map<String, dynamic> data) {
+    final fecha = data['fecha'];
+    final creado = data['creadoEn'];
+    return CambioServicio(
+      id: id,
+      categoriaId: data['categoriaId'] as String? ?? '',
+      categoria: data['categoria'] as String? ?? '',
+      fecha: fecha is Timestamp ? fecha.toDate() : DateTime.now(),
+      grupoId: data['grupoId'] as String? ?? '',
+      salenIds: (data['salenIds'] as List<dynamic>? ?? []).cast<String>(),
+      entranIds: (data['entranIds'] as List<dynamic>? ?? []).cast<String>(),
+      creadoEn: creado is Timestamp ? creado.toDate() : DateTime.now(),
+    );
+  }
+}
+
+/// Quiénes sirven DE VERDAD en una ocasión = integrantes del grupo
+/// − los que salen + los que entran. El grupo original nunca se toca.
+class EquipoDelServicio {
+  /// Integrantes del grupo que sí sirven (sin los que salieron).
+  final List<String> quedanIds;
+  final List<String> salenIds;
+  final List<String> entranIds;
+
+  const EquipoDelServicio({
+    required this.quedanIds,
+    required this.salenIds,
+    required this.entranIds,
+  });
+
+  /// Todos los que sirven esa fecha, del grupo o no.
+  List<String> get sirvenIds => [...quedanIds, ...entranIds];
+
+  bool get hayCambios => salenIds.isNotEmpty || entranIds.isNotEmpty;
+
+  /// Cuántos puestos quedaron descubiertos: salieron más de los que
+  /// entraron. Pedido explícito de Rafael — un faltante sin reemplazo
+  /// no se guarda en silencio, se muestra.
+  int get puestosSinReemplazo {
+    final faltan = salenIds.length - entranIds.length;
+    return faltan > 0 ? faltan : 0;
+  }
+}
+
+/// Aplica un [CambioServicio] (si lo hay) sobre el grupo asignado.
+EquipoDelServicio equipoDelServicio({
+  required GrupoServidores grupo,
+  CambioServicio? cambio,
+}) {
+  final salen = cambio?.salenIds ?? const <String>[];
+  final entran = cambio?.entranIds ?? const <String>[];
+  return EquipoDelServicio(
+    quedanIds: grupo.fkIdsServidores.where((id) => !salen.contains(id)).toList(),
+    // Solo los que de verdad estaban en el grupo cuentan como "salen":
+    // si a alguien lo sacaron del grupo original después de registrar
+    // el cambio, ya no tiene sentido mostrarlo como reemplazable.
+    salenIds: salen.where(grupo.fkIdsServidores.contains).toList(),
+    entranIds: entran,
+  );
+}

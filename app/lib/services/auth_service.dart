@@ -2193,6 +2193,61 @@ class AuthService {
     await _firestore.collection('servicios_programados').doc(id).delete();
   }
 
+  /// Intercambios temporales de servidores para una ocasión concreta
+  /// (2026-09-03, pedido de Rafael) — ver [CambioServicio]. Colección
+  /// chica (un documento por ocasión que tuvo cambios), se trae
+  /// completa y se filtra en memoria, igual que
+  /// [listarServiciosProgramados].
+  Stream<List<CambioServicio>> listarCambiosServicio() {
+    return _firestore
+        .collection('cambios_servicio')
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => CambioServicio.fromFirestore(d.id, d.data()))
+              .toList(),
+        );
+  }
+
+  /// Guarda (o actualiza) el intercambio de una ocasión. Usa
+  /// [idCambioServicio] como ID determinístico, así que reescribir el
+  /// mismo día pisa el documento anterior en vez de crear uno nuevo.
+  /// Si el cambio queda vacío (no sale ni entra nadie) borra el
+  /// documento — así "deshacer" no deja basura y la tarjeta vuelve a
+  /// mostrar el grupo original tal cual.
+  ///
+  /// **Solo administrador o líder de ministerio**.
+  Future<void> guardarCambioServicio({
+    required String categoriaId,
+    required String categoria,
+    required DateTime fecha,
+    required String grupoId,
+    required List<String> salenIds,
+    required List<String> entranIds,
+  }) async {
+    final dia = DateTime(fecha.year, fecha.month, fecha.day);
+    final ref = _firestore
+        .collection('cambios_servicio')
+        .doc(idCambioServicio(categoriaId, dia));
+    if (salenIds.isEmpty && entranIds.isEmpty) {
+      await ref.delete();
+      return;
+    }
+    await ref.set({
+      ...CambioServicio(
+        id: '',
+        categoriaId: categoriaId,
+        categoria: categoria,
+        fecha: dia,
+        grupoId: grupoId,
+        salenIds: salenIds,
+        entranIds: entranIds,
+        creadoEn: DateTime.now(),
+      ).toFirestore(),
+      'creadoEn': FieldValue.serverTimestamp(),
+    });
+  }
+
   /// Sin esto, Storage guarda el archivo como `application/octet-stream`
   /// — Safari/iOS es estricto con el `Content-Type` real al decodificar
   /// una imagen y la muestra en blanco (encontrado 2026-08-19: fotos

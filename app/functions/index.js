@@ -740,6 +740,71 @@ exports.notificarServicioProgramado = onDocumentCreated('servicios_programados/{
   await notificarGrupoAsignadoAFecha(servicio.grupoId, servicio.categoria, servicio.fecha.toDate());
 });
 
+
+// Intercambios temporales de servidores para una ocasión concreta
+// (2026-09-03, pedido de Rafael) — `cambios_servicio`, ver
+// `models/grupo_servidores.dart`. Avisa **al que entra y al que sale**
+// (confirmado explícitamente con Rafael antes de construir).
+//
+// El aviso es SIMÉTRICO y por diferencia contra el estado anterior, no
+// por el contenido completo del documento: así, editar un intercambio
+// solo le escribe a quien de verdad cambió de situación, y DESHACER un
+// intercambio (borrar el documento) le avisa a los afectados que las
+// cosas volvieron a como estaban. Sin esto, alguien a quien se le dijo
+// "ya no te toca" se quedaría con esa información aunque el cambio se
+// hubiera revertido.
+exports.notificarCambioServicio = onDocumentWritten('cambios_servicio/{cambioId}', async (event) => {
+  const antes = event.data?.before?.data();
+  const despues = event.data?.after?.data();
+  const base = despues || antes;
+  if (!base) return;
+
+  const salenAntes = new Set(antes ? antes.salenIds || [] : []);
+  const entranAntes = new Set(antes ? antes.entranIds || [] : []);
+  // Si el documento se borró (se deshizo el intercambio), el estado
+  // "después" es simplemente vacío — con eso el mismo cálculo de
+  // diferencias cubre también el caso de deshacer.
+  const salenDespues = new Set(despues ? despues.salenIds || [] : []);
+  const entranDespues = new Set(despues ? despues.entranIds || [] : []);
+
+  const dif = (a, b) => [...a].filter((id) => !b.has(id));
+
+  // Quienes pasan a NO servir: se les acaba de marcar como que salen, o
+  // se les quitó de la lista de refuerzos que habían entrado.
+  const yaNoSirven = [
+    ...dif(salenDespues, salenAntes),
+    ...dif(entranAntes, entranDespues),
+  ];
+  // Quienes pasan a SÍ servir: acaban de entrar como reemplazo, o se
+  // les quitó de la lista de los que salían (vuelven a su grupo).
+  const ahoraSirven = [
+    ...dif(entranDespues, entranAntes),
+    ...dif(salenAntes, salenDespues),
+  ];
+
+  if (yaNoSirven.length === 0 && ahoraSirven.length === 0) return;
+
+  const grupoSnap = await db.collection('grupos_servidores').doc(base.grupoId || '').get();
+  const nombreGrupo = grupoSnap.exists ? grupoSnap.data().nombre : 'tu grupo';
+  const categoria = base.categoria || 'servicio';
+  const fecha = fechaTextoBogota(base.fecha.toDate());
+
+  if (ahoraSirven.length > 0) {
+    await enviarNotificacionAUsuarios(ahoraSirven, {
+      titulo: 'Programación de Servidores',
+      cuerpo: `Te toca servir en ${categoria} del ${fecha}, con el grupo "${nombreGrupo}".`,
+      datos: {tipo: 'cambio_servicio', grupoId: base.grupoId || '', categoria},
+    });
+  }
+  if (yaNoSirven.length > 0) {
+    await enviarNotificacionAUsuarios(yaNoSirven, {
+      titulo: 'Programación de Servidores',
+      cuerpo: `Ya no te toca servir en ${categoria} del ${fecha} — se registró un cambio en el grupo "${nombreGrupo}".`,
+      datos: {tipo: 'cambio_servicio', grupoId: base.grupoId || '', categoria},
+    });
+  }
+});
+
 // ---------------------------------------------------------------------
 // Resumen mensual de asistencia — mantiene el Dashboard rápido (2026-08-19).
 // ---------------------------------------------------------------------

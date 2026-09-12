@@ -93,6 +93,52 @@ Ahí hay que ofrecerle los dos caminos — pagar $0.10/mes, o consolidar
 estas 3 en una y meter la nueva gratis — porque en ese momento ya se va
 a tocar el código de todos modos.
 
+### Estado verificado el 2026-09-12 — con margen real medido
+
+Segunda auditoría, a pedido de Rafael. **Sin cambios respecto al 2026-09-03**:
+los buckets pesan exactamente lo mismo, las 9 funciones siguen con
+`minInstances = 0`, y **cero errores en 7 días**. Costo real: sigue en $0.
+
+| Rubro | Medido (7 días al 2026-09-12) | Límite gratis | Uso |
+|---|---|---|---|
+| **Firestore — lecturas, día pico** | **19.517** (domingo 7 sep) | 50.000/día | **39%** |
+| Firestore — escrituras, día pico | 592 (mismo domingo) | 20.000/día | 3% |
+| Cloud Functions — ejecuciones | 275 en 7 días (~1.180/mes) | 2.000.000/mes | 0,06% |
+| Artifact Registry | 0 MB (limpieza automática funcionando) | 500 MB | 0% |
+| Storage — fotos, `us-east1` | 145,58 MB | 5 GB | 2,9% |
+| Cloud Scheduler | 3 trabajos | 3 | 100% (sin costo) |
+| Errores de funciones | 0 | — | — |
+
+⚠️ **El único número que vale la pena vigilar es el primero.** Las lecturas
+de Firestore son el único rubro que no está en niveles simbólicos: un domingo
+de servicio consume el **39% de la cuota diaria gratuita**. Los días entre
+semana no pasan de 2.500.
+
+- Proporción medida: **~93 lecturas por cada registro de ingreso** (19.517
+  lecturas / 209 ingresos), contando también Dashboard y Menores Registrados
+  abiertos en paralelo por varios servidores.
+- Para cruzar las 50.000 harían falta **~535 ingresos en un domingo**, 2,5
+  veces la asistencia actual.
+- **Y aun cruzándolas casi no duele:** pasarse en 50.000 lecturas un domingo
+  cuesta del orden de **US$0,03**. O sea que ni el crecimiento agresivo rompe
+  el tope de 5 USD/mes por esta vía.
+- Si algún día hace falta bajarlo, el camino ya conocido es el mismo de la
+  sección 5.5: resúmenes pre-calculados en vez de consultas que recorren
+  colecciones completas.
+
+**Cuenta regresiva:** el crédito de prueba termina el **11 de noviembre de
+2026** — al 12 de septiembre quedan **60 días y 9 domingos de servicio**. Ver
+la recomendación completa en la auditoría del 2026-09-06 (convertir la cuenta
+a pago, o mover el proyecto a la otra cuenta de facturación, ambas ~US$0/mes
+con este consumo). **Esto lo ejecuta Rafael, no Claude.**
+
+**Pendiente que sigue abierto y no es de costo:** el único export de Firestore
+(`gs://rocakidsarmenia-7935b-backups/pre-migracion-2026-08-18/`) pesa 20,95 KB
+y es **anterior** a la migración de datos reales — restaurarlo hoy borraría
+los 460 niños. **No hay respaldo usable de producción.** Cuesta ~$0 arreglarlo.
+
+---
+
 ### Estado verificado el 2026-09-03
 
 Revisión completa a raíz de un cobro que le llegó a Rafael. **El cobro NO era de RocaKids** — era del proyecto `sigil3` (otro desarrollo suyo, en la otra cuenta de facturación). RocaKids lleva gastados COP 0,02 de COP 964.462 de crédito, con pronóstico de COP 0,00 para el mes completo.
@@ -617,6 +663,67 @@ Idea de Rafael: cuando se asigne un grupo en "Programación de Servidores", que 
 - **`notificarPuntoDePartidaRotacion`** (nueva, `onDocumentWritten('categorias_programacion/{categoriaId}')`): se dispara cuando se fija o se cambia `grupoReferenciaId`/`fechaReferenciaRotacion` (categorías `semanal` — botón "Elegir grupo de partida"/"Cambiar punto de partida"). Avisa a **TODOS** los integrantes del grupo que queda asignado a esa fecha de referencia, sin importar si ya estaban en el equipo desde antes — es la confirmación real de "te toca servir tal día", no un cambio de roster. No repite el aviso si se vuelve a guardar sin cambiar ni el grupo ni la fecha de referencia (compara `Timestamp.isEqual()` contra el valor anterior).
 - **`notificarServicioProgramado`** (nueva, `onDocumentCreated('servicios_programados/{servicioId}')`): se dispara al programar/reprogramar una ocasión de una categoría `manual` (Casa2/Ayunos). Avisa a TODOS los integrantes del grupo asignado. Basta con `onDocumentCreated` (no hace falta `onDocumentWritten`) porque `_ProgramarServicioSheet` siempre borra el `servicios_programados` viejo y crea uno nuevo al reprogramar, nunca hace `update`.
 - Las tres funciones comparten el helper `notificarGrupoAsignadoAFecha(grupoId, categoria, fecha)`, que arma el mismo tipo de mensaje ("Tu grupo '[nombre]' fue asignado para el servicio de [categoría] del DD/MM/AAAA") reutilizando `fechaTextoBogota()`.
+
+---
+
+## 5.20. Intercambio temporal de servidores (2026-09-03) — ⚠️ SIN DESPLEGAR
+
+Pedido de Rafael: *"cuando se seleccione un grupo… un botón de intercambio en
+el que se seleccionen personas del grupo asignado y se intercambien
+temporalmente por otras. Estos cambios son comunes, pero **no modifican el
+grupo original**."*
+
+**El problema estructural que definió el diseño:** para las categorías
+`semanal` **no existe ningún documento del servicio** — la rotación se calcula
+al vuelo con `grupoQueSirve()`, que es una función pura. "El domingo 7 sirve el
+Grupo 3" no está escrito en ninguna parte, se deduce. Un cambio puntual
+necesitaba entonces su propio documento donde engancharse.
+
+**Colección nueva `cambios_servicio`**, un documento por ocasión, con ID
+determinístico `{categoriaId}_{AAAA-MM-DD}` (`idCambioServicio()`, mismo
+criterio que `nino_acudiente`): hace imposible duplicar la misma ocasión y
+permite leerla con un `get` directo. Campos: `categoriaId`, `categoria`
+(nombre repetido, para que la Cloud Function arme el mensaje sin una lectura
+extra), `fecha`, `grupoId`, `salenIds`, `entranIds`, `creadoEn`.
+
+"Quiénes sirven de verdad" = **grupo original − los que salen + los que
+entran** (`equipoDelServicio()` → `EquipoDelServicio`). Como queda un
+documento por cada vez que hubo cambio, también sirve de historial.
+
+**3 decisiones confirmadas con Rafael antes de construir** (`AskUserQuestion`,
+no asumidas):
+1. **Se avisa al que entra Y al que sale** — el que sale ya había recibido el
+   aviso original de que su grupo servía ese día.
+2. **Puede entrar cualquier servidor activo que NO esté ya en el grupo
+   asignado** — no tiene sentido "reemplazar" a alguien con un compañero que
+   ya iba a servir.
+3. **No exige uno por uno.** Si salen 3 y entran 2, se guarda igual pero el
+   faltante queda visible como **"1 puesto sin reemplazo"**, en la hoja y en la
+   tarjeta del servicio (pedido textual de Rafael: que no pase en silencio).
+
+**`notificarCambioServicio`** (Cloud Function nueva, `onDocumentWritten`):
+avisa **por diferencia contra el estado anterior**, no por el contenido
+completo — así editar un intercambio solo le escribe a quien de verdad cambió
+de situación, y **deshacerlo** (borrar el documento) le avisa a los afectados
+que las cosas volvieron a como estaban. Sin eso, a quien se le dijo "ya no te
+toca" se quedaría con esa información aunque se revirtiera.
+
+**⚠️ Íconos:** los 4 íconos naturales para esto (`swap_horiz`,
+`person_remove`, `person_add`, `warning_amber`) **nunca se habían usado en la
+app**, que es el patrón exacto del bug de tree-shaking de la sección 8. Se
+cambiaron por `edit_calendar`, `person_off`, `person_add_alt` y
+`priority_high`, todos ya confirmados funcionando en otras pantallas.
+
+**Costo evaluado ANTES de construir (sección 1.5):** ~$0. No agrega tareas
+programadas; la función nueva es un trigger sobre una colección con un puñado
+de escrituras al mes (no fan-out); suma ~5 lecturas al abrir "Próximos
+Servicios" (una por categoría, por ID directo).
+
+**⚠️ ESTADO: compilado pero NO desplegado.** `flutter analyze` sin avisos y
+`flutter build web` exitoso, pero falta desplegar (hosting + functions +
+reglas) y que Rafael lo pruebe. **El deploy debe ir junto con el traslado de
+las 5 funciones de `us-central1` a `southamerica-east1`** — un solo despliegue,
+no dos (regla 7 de la sección 1.5).
 
 ---
 

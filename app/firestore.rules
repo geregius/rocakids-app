@@ -505,6 +505,24 @@ service cloud.firestore {
       allow update, delete: if puedeGestionarProgramacion();
     }
 
+    // Intercambios TEMPORALES de servidores para una ocasión concreta
+    // — "el domingo 7 no sirve Juan, entra Pedro" (2026-09-03, pedido
+    // de Rafael). NO modifican `grupos_servidores`, que es permanente.
+    // ID determinístico `{categoriaId}_{AAAA-MM-DD}`, así que el
+    // cliente escribe con `set` — por eso hace falta `create` y
+    // `update`, no solo uno de los dos. Mismo permiso/alcance que las
+    // tres colecciones de arriba.
+    match /cambios_servicio/{cambioId} {
+      allow get, list: if puedeGestionarProgramacion();
+      allow create, update: if puedeGestionarProgramacion()
+        && esTextoNoVacioAcotado(request.resource.data.get('categoriaId', ''), 200)
+        && esTextoNoVacioAcotado(request.resource.data.get('grupoId', ''), 200)
+        && request.resource.data.get('fecha', null) is timestamp
+        && request.resource.data.get('salenIds', []) is list
+        && request.resource.data.get('entranIds', []) is list;
+      allow delete: if puedeGestionarProgramacion();
+    }
+
     // Todo lo demás queda cerrado por defecto hasta que se definan
     // las reglas de cada módulo (campañas, etc).
     match /{document=**} {
