@@ -49,6 +49,33 @@ Documentos relacionados en `docs/`:
 9. **Región de los buckets de Storage: `us-east1` / `us-west1` / `us-central1`** — nunca `southamerica-east1`. Cloud Storage en São Paulo **no tiene nivel gratuito, cobra desde el primer byte**. Ojo que esto aplica solo a Cloud Storage: Firestore sí tiene nivel gratuito en cualquier región, por eso la base está en `southamerica-east1` y el bucket en `us-east1` (ver sección 1). La región de un bucket ya creado **no se puede cambiar in situ**.
 10. **Nunca tocar configuración de facturación** — convertir una cuenta de prueba a pago, vincular/desvincular facturación, activar frenos automáticos. Eso lo maneja Rafael directamente en la conversación de control de costos, no acá.
 
+### ❌ Decidido NO mover las 5 funciones de `us-central1` (2026-09-12)
+
+En la auditoría del 2026-09-12 se detectó que 5 de las 9 funciones viven en
+`us-central1` y no en `southamerica-east1` como dice la regla 1 de esta
+sección: `cierreAutomaticoDomingoMediodia`, `cierreAutomaticoFinDeDia`,
+`correoCumpleanosDiario`, `enviarCorreoRecuperacion` y `enviarNotificacionPrueba`.
+(Las 4 restantes están en São Paulo porque son triggers de Firestore y heredan
+la región de la base.)
+
+**Claude propuso moverlas; Rafael decidió que no, y la decisión es correcta.
+No reabrir esto.** Las razones, en orden:
+
+- **Ahorro: US$0.** Las invocaciones están al 0,06% del nivel gratuito en
+  cualquier región. La regla de región para *funciones* es por latencia, no por
+  costo — la que SÍ es de costo es la regla 9, la de los buckets de Storage.
+- **Beneficio real:** ~100-150 ms en dos acciones puntuales (recuperar
+  contraseña, activar notificaciones). Imperceptible.
+- **Riesgo concreto:** el trabajo de Cloud Scheduler se llama
+  `firebase-schedule-<función>-<región>`. Desplegar en la región nueva sin
+  borrar primero las viejas deja la función **en las dos regiones**, **6
+  trabajos de Scheduler en vez de 3** (se pasa del nivel gratuito) y el
+  **cierre automático de asistencia ejecutándose dos veces**.
+
+Cambiar algo que funciona, arriesgando duplicar el cierre de asistencia, para
+ganar milisegundos y cero pesos, no se justifica. **La regla 1 aplica a
+funciones NUEVAS**; las que ya existen y funcionan se quedan donde están.
+
 ### Opción guardada: consolidar las 3 tareas programadas en una sola
 
 **Decidido el 2026-09-03: NO hacerlo por ahora.** Queda escrito para
@@ -749,9 +776,7 @@ Servicios" (una por categoría, por ID directo).
 
 **⚠️ ESTADO: compilado pero NO desplegado.** `flutter analyze` sin avisos y
 `flutter build web` exitoso, pero falta desplegar (hosting + functions +
-reglas) y que Rafael lo pruebe. **El deploy debe ir junto con el traslado de
-las 5 funciones de `us-central1` a `southamerica-east1`** — un solo despliegue,
-no dos (regla 7 de la sección 1.5).
+reglas) y que Rafael lo pruebe.
 
 ---
 
