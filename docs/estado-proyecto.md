@@ -132,10 +132,38 @@ la recomendación completa en la auditoría del 2026-09-06 (convertir la cuenta
 a pago, o mover el proyecto a la otra cuenta de facturación, ambas ~US$0/mes
 con este consumo). **Esto lo ejecuta Rafael, no Claude.**
 
-**Pendiente que sigue abierto y no es de costo:** el único export de Firestore
-(`gs://rocakidsarmenia-7935b-backups/pre-migracion-2026-08-18/`) pesa 20,95 KB
-y es **anterior** a la migración de datos reales — restaurarlo hoy borraría
-los 460 niños. **No hay respaldo usable de producción.** Cuesta ~$0 arreglarlo.
+### ✅ Respaldo de producción — resuelto el 2026-09-12
+
+Hasta esta fecha el proyecto **no tenía respaldo usable**: el único export
+(`pre-migracion-2026-08-18/`, 20,95 KB) es **anterior** a la migración de datos
+reales, así que restaurarlo habría borrado los 460 niños en vez de salvarlos.
+
+Corrido con autorización explícita de Rafael:
+
+```bash
+gcloud firestore export gs://rocakidsarmenia-7935b-backups/produccion-2026-09-12 \
+  --project rocakidsarmenia-7935b --async
+```
+
+**Resultado: `SUCCESSFUL`, 7.933 documentos, 5,34 MB, 11 segundos.** El archivo
+`produccion-2026-09-12.overall_export_metadata` confirma que el export cerró
+completo (sin él, un export a medias no es restaurable).
+
+**Costo:** ~US$0,007 por una sola vez. Un export se cobra como **una lectura
+por documento** (7.933 lecturas) y no entra en la cuota diaria gratuita; a las
+tarifas de São Paulo eso es menos de un centavo de dólar. El almacenamiento
+permanente son 5,34 MB ≈ US$0,00014/mes.
+
+⚠️ **Por qué este bucket SÍ vive en `southamerica-east1`,** contra la regla
+general de la sección 1.5 de poner Storage en EE.UU.: **Firestore exige que el
+bucket de destino esté en la misma región que la base de datos.** No es un
+descuido ni se puede "corregir" — mover ese bucket a `us-east1` rompe la
+posibilidad de exportar. La excepción es correcta y deliberada; el bucket de
+fotos (`firebasestorage.app`) sí está en `us-east1` como manda la regla.
+
+**Nota de operación:** este respaldo es una foto del 12 de septiembre de 2026.
+No hay exports automáticos programados — se corren a mano cuando hace falta, y
+conviene repetirlo antes de cualquier cambio grande de datos.
 
 ---
 
