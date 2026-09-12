@@ -232,6 +232,12 @@ class AuthService {
       }
       throw AuthException(_mensajeDeErrorRegistro(e.code));
     } catch (e) {
+      // ⚠️ Se consulta ANTES de borrar la cuenta: al eliminar el usuario
+      // se pierde la sesión, y sin sesión la regla `allow get` de
+      // `acudientes_documentos` ya no nos deja consultar nada.
+      final esDuplicado = e.toString().contains('permission-denied') &&
+          await _documentoDeAcudienteYaTomado(acudiente.numeroDocumento);
+
       // Si el batch falla (ej. documento ya registrado), no dejamos una
       // cuenta de acceso huérfana sin perfil: la eliminamos para que la
       // persona pueda corregir el dato e intentar de nuevo.
@@ -242,7 +248,7 @@ class AuthService {
           await _auth.signOut();
         }
       }
-      if (e.toString().contains('permission-denied')) {
+      if (esDuplicado) {
         throw const AuthException(
           'Este número de documento ya se encuentra registrado en el sistema.',
         );
@@ -330,6 +336,13 @@ class AuthService {
       }
       throw AuthException(_mensajeDeErrorRegistro(e.code));
     } catch (e) {
+      // Igual que en `crearAcudienteNuevo`: se consulta antes de tocar la
+      // cuenta recién creada. Acá la consulta va por `_firestore` — la
+      // sesión del SERVIDOR que está registrando, no la app secundaria —
+      // así que sigue siendo válida pase lo que pase con esa.
+      final esDuplicado = e.toString().contains('permission-denied') &&
+          await _documentoDeAcudienteYaTomado(acudiente.numeroDocumento);
+
       if (credential?.user != null) {
         try {
           await credential!.user!.delete();
@@ -337,7 +350,7 @@ class AuthService {
           // Nada más que hacer: la app secundaria se elimina igual abajo.
         }
       }
-      if (e.toString().contains('permission-denied')) {
+      if (esDuplicado) {
         throw const AuthException(
           'Este número de documento ya se encuentra registrado en el sistema.',
         );
@@ -350,6 +363,40 @@ class AuthService {
       try {
         await app.delete();
       } catch (_) {}
+    }
+  }
+
+  /// ¿El número de documento ya está tomado por otro acudiente?
+  ///
+  /// **Se consulta de verdad en vez de deducirlo de un
+  /// `permission-denied`** (2026-09-12). La regla de
+  /// `acudientes_documentos` permite `create` pero NO `update`, así que
+  /// un documento repetido se rechaza con `permission-denied` — pero
+  /// CUALQUIER otro rechazo de reglas devuelve ese mismo código.
+  /// Traducirlo a ciegas a "documento ya registrado" manda a la persona
+  /// a corregir un dato que estaba bien, y esconde la causa real: es el
+  /// mismo antipatrón de "adivinar la causa en vez de mostrar el error"
+  /// que costó 3 rondas completas en las notificaciones push (sección
+  /// 5.19 de `docs/estado-proyecto.md`).
+  ///
+  /// `acudientes_documentos` tiene `allow get: if request.auth != null`,
+  /// así que esto funciona con cualquier sesión iniciada. Devuelve
+  /// `false` si ni siquiera se pudo consultar — ante la duda, NO se
+  /// inventa la causa y se deja ver el error real.
+  Future<bool> _documentoDeAcudienteYaTomado(String numeroDocumento) =>
+      _yaExisteDocumento('acudientes_documentos', numeroDocumento);
+
+  /// ¿Ya existe este documento? Sirve para **confirmar** la causa de un
+  /// `permission-denied` antes de anunciársela a la persona, en vez de
+  /// adivinarla — ver [_documentoDeAcudienteYaTomado] para el porqué
+  /// completo. Devuelve `false` si ni siquiera se pudo consultar: ante la
+  /// duda no se inventa la causa y se deja ver el error real.
+  Future<bool> _yaExisteDocumento(String coleccion, String id) async {
+    try {
+      final doc = await _firestore.collection(coleccion).doc(id).get();
+      return doc.exists;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -399,7 +446,10 @@ class AuthService {
     try {
       await batch.commit();
     } catch (e) {
-      if (e.toString().contains('permission-denied')) {
+      // Acá no se borra ninguna cuenta, así que la sesión sigue viva y se
+      // puede consultar directo.
+      if (e.toString().contains('permission-denied') &&
+          await _documentoDeAcudienteYaTomado(acudiente.numeroDocumento)) {
         throw const AuthException(
           'Este número de documento ya se encuentra registrado en el sistema.',
         );
@@ -445,7 +495,8 @@ class AuthService {
     try {
       await batch.commit();
     } catch (e) {
-      if (e.toString().contains('permission-denied')) {
+      if (e.toString().contains('permission-denied') &&
+          await _documentoDeAcudienteYaTomado(acudiente.numeroDocumento)) {
         throw const AuthException(
           'Este número de documento ya se encuentra registrado en el sistema.',
         );
@@ -1456,7 +1507,11 @@ class AuthService {
             ).toFirestore(),
           );
     } catch (e) {
-      if (e.toString().contains('permission-denied')) {
+      // Se confirma que el vínculo EXISTE antes de afirmarlo: cualquier
+      // otro rechazo de reglas da el mismo `permission-denied`, y si no es
+      // eso, el `rethrow` deja ver el error real.
+      if (e.toString().contains('permission-denied') &&
+          await _yaExisteDocumento('nino_acudiente', '${docId}_${user.uid}')) {
         throw const AuthException('Ya estás vinculado a este niño.');
       }
       rethrow;
@@ -1529,7 +1584,8 @@ class AuthService {
     try {
       await batch.commit();
     } catch (e) {
-      if (e.toString().contains('permission-denied')) {
+      if (e.toString().contains('permission-denied') &&
+          await _yaExisteDocumento('ninos', nino.documentoIdentificacion)) {
         throw const AuthException(
           'Este número de documento ya se encuentra registrado en el sistema.',
         );
@@ -1597,7 +1653,11 @@ class AuthService {
             ).toFirestore(),
           );
     } catch (e) {
-      if (e.toString().contains('permission-denied')) {
+      if (e.toString().contains('permission-denied') &&
+          await _yaExisteDocumento(
+            'nino_acudiente',
+            '${documentoNino}_$acudienteUid',
+          )) {
         throw const AuthException(
           'Este acudiente ya está vinculado a este niño.',
         );

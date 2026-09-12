@@ -815,11 +815,66 @@ documento reservado, sin ningún niño) cada vez que alguien abandone el
 formulario a mitad, y al reintentar chocaría con "ya existe una cuenta con
 este correo".
 
-⚠️ **Deuda pendiente relacionada:** en 3 puntos de `auth_service.dart`
-cualquier `permission-denied` se traduce a *"Este número de documento ya se
-encuentra registrado en el sistema"*. Si la causa real es otra, el mensaje
-miente — mismo antipatrón que costó 3 rondas en las notificaciones
-(sección 5.19). Conviene mostrar el error real, no adivinar la causa.
+✅ **Deuda relacionada, resuelta el mismo día** — ver sección 5.22.
+
+---
+
+## 5.22. Errores que adivinaban su causa (2026-09-12)
+
+Encontrado al diagnosticar el bug de la sección 5.21. En `auth_service.dart`
+había **15** lugares que reaccionaban a `permission-denied`, y buena parte
+**afirmaba una causa de datos concreta** a partir de un código de error
+genérico:
+
+```dart
+if (e.toString().contains('permission-denied')) {
+  throw const AuthException(
+    'Este número de documento ya se encuentra registrado en el sistema.',
+  );
+}
+```
+
+El problema: las reglas devuelven `permission-denied` por **cualquier**
+motivo. Un rol sin permiso, una validación de formato, un campo faltante —
+todo llega como lo mismo. Traducirlo a ciegas manda a la persona a corregir
+un dato que estaba bien, y **esconde la causa real**. Es el mismo antipatrón
+que costó 3 rondas completas de ida y vuelta en las notificaciones push
+(sección 5.19), donde quedó la lección de *mostrar el texto real de la
+excepción en vez de adivinar*.
+
+**Los 15 sitios se clasificaron en dos grupos:**
+
+- **8 que afirmaban una causa de datos** — ahora la **confirman
+  consultándola** antes de anunciarla. Si el dato NO está tomado, se deja
+  ver el error real en vez del mensaje inventado. Son:
+  `crearAcudienteNuevo`, `crearAcudienteNuevoDesdeServidor`,
+  `crearPerfilAcudiente`, `crearPerfilAcudienteDesdeServidor`,
+  `registrarMovimiento` (ya tenía su propia guarda),
+  `vincularNinoExistente`, `registrarNinoAdicional` y
+  `vincularNinoAcudienteExistentes`.
+- **7 que dicen "No tienes permiso para…"** — se dejaron **directos**, sin
+  consulta: ahí `permission-denied` significa exactamente eso y el mensaje ya
+  es correcto (`agregarNoAutorizado`, `eliminarNoAutorizado`,
+  `eliminarRelacionNinoAcudiente`, `completarDocumentoNino`, `editarNino`,
+  `registrarGestion`, `editarAcudiente`).
+
+**Piezas nuevas:** `_yaExisteDocumento(coleccion, id)` (helper genérico) y
+`_documentoDeAcudienteYaTomado(numeroDocumento)` encima de él. Ambos
+devuelven `false` si ni siquiera se pudo consultar — **ante la duda no se
+inventa la causa**.
+
+⚠️ **Detalle de orden que importó:** en `crearAcudienteNuevo` y
+`crearAcudienteNuevoDesdeServidor`, el `catch` **borra la cuenta recién
+creada** antes de evaluar el error. Al borrarla se pierde la sesión, y sin
+sesión la regla `allow get: if request.auth != null` de
+`acudientes_documentos` ya no deja consultar nada. Por eso la consulta se
+hace **antes** del borrado. En la variante "desde servidor" además se
+consulta con `_firestore` (la sesión del servidor que registra), no con la
+app secundaria, que se elimina en el `finally`.
+
+**Costo:** una lectura extra de Firestore **solo cuando un registro falla**
+con `permission-denied`. Despliegue de **solo hosting** (no toca funciones ni
+reglas), así que sin compilación ni imagen nueva.
 
 ---
 
