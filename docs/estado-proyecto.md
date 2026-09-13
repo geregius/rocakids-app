@@ -1088,6 +1088,57 @@ diferida de "Acudientes y Niños" ("ya no carga todo de una, está perfecto").
 
 ---
 
+## 5.27. ⚠️ 119 niños del sistema viejo nunca migraron (hallazgo 2026-09-13)
+
+Rafael reportó: *"a veces no encontramos niños o no aparece y toca volver a
+registrarlos"*. **No es un problema de búsqueda — esos niños nunca entraron.**
+
+**Primero se descartó la hipótesis barata:** `ninos` y `ninos_busqueda` están
+**perfectamente sincronizadas** (474 = 474, cero discrepancias en ambos
+sentidos). El índice de búsqueda no es el problema.
+
+**La comparación real contra `DB RocaKids V2 (15).xlsx`** (la misma fuente de
+la migración): **578 niños en el Excel, 474 en producción — faltan 119.**
+
+| Causa | Niños |
+|---|---|
+| Acudiente referenciado que **no existe** en la hoja ACUDIENTES | **91** |
+| **Sin ninguna fila** en NINO_ACUDIENTE | **26** |
+| Debían migrar y no lo hicieron | **2** |
+
+**Causa raíz:** la migración de agosto **exigía un acudiente válido para crear
+al niño**, y los 117 que no lo tenían se omitieron **en silencio**. Encaja con
+los "118 registros omitidos por referirse a niños nunca migrados" que ya
+constaban en la sección de la migración — el dato estaba, pero se había leído
+como un detalle de los REGISTROS, no como 119 niños ausentes.
+
+**Los 2 "debían migrar" son los hijos de Rafael** (Geremia y Giuseppe Balaguera
+Paba), vinculados a su cuenta y a la de Karen Alicia Paba — las dos que la
+migración trató de forma especial (ver el incidente del rol de administrador).
+
+**Impacto medido:**
+- **9 ya fueron re-registrados a mano** (incluidos los hijos de Rafael) — el
+  síntoma exacto que reportó.
+- **110 siguen pendientes**, de los cuales **107 están en edad activa** y 3 ya
+  superan los 11 años.
+- **24 de ellos tenían historial: 141 movimientos** que tampoco se importaron.
+
+**Calidad de datos a revisar antes de importar:** `Cristhofer Acosta` tiene
+fecha de nacimiento inválida (`18991230`), y `Emmanuel Vargas` aparece **dos
+veces** con fechas distintas (2020-05-19 y 2021-05-19) — probable duplicado del
+sistema viejo.
+
+**Estado: NADA importado todavía.** Rafael pidió revisar primero la lista.
+Listado completo con causa, historial y si ya fue re-registrado:
+[`ninos-faltantes-2026-09-13.csv`](ninos-faltantes-2026-09-13.csv).
+
+⚠️ **Lección para cualquier migración futura:** si el script exige que exista
+un registro relacionado, **contar y reportar los omitidos como una cifra
+propia**, no enterrarlos en el total. Acá pasó un mes hasta que el síntoma
+llegó por el lado del usuario.
+
+---
+
 ## 6. Pantallas construidas (`lib/screens/`)
 
 ### `widgets/app_shell.dart` — estructura de navegación (2026-08-14)
