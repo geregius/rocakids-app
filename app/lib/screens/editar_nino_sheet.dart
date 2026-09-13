@@ -1,16 +1,21 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../models/nino.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/foto_picker.dart';
 import '../utils/selector_fecha_nacimiento.dart';
+import '../widgets/foto_avatar.dart';
 
 /// Formulario para editar los datos básicos de un niño ya registrado.
 /// Quién puede abrir esto lo decide [NinoDetalleSheet] (padre/madre
 /// vinculado, o admin) — este formulario en sí no vuelve a chequear el
 /// rol, confía en que las reglas de seguridad son la barrera real.
-/// A propósito no incluye el documento del menor ni su foto (ver
-/// [AuthService.editarNino]).
+/// Incluye la foto desde el 2026-09-13. A propósito sigue sin incluir
+/// el documento del menor (se corrige desde el check-in) ni el estado
+/// Activo/Inactivo (ver [AuthService.editarNino]).
 class EditarNinoSheet extends StatefulWidget {
   final Nino nino;
 
@@ -31,6 +36,11 @@ class _EditarNinoSheetState extends State<EditarNinoSheet> {
   late bool _tieneCondicionMedica;
   bool _guardando = false;
   String? _error;
+  // Foto nueva elegida en esta edición. Null = no se tocó la foto, que
+  // NO es lo mismo que "quitar la foto": si queda null, el update ni
+  // siquiera menciona `fotoUrl` y la actual se conserva.
+  Uint8List? _fotoBytes;
+  String? _fotoExtension;
 
   @override
   void initState() {
@@ -84,6 +94,8 @@ class _EditarNinoSheetState extends State<EditarNinoSheet> {
         autorizoFotoFlag: _autorizaFoto,
         alertaMedicaFlag: _tieneCondicionMedica,
         condicionMedica: _condicionMedicaController.text.trim(),
+        fotoBytes: _fotoBytes,
+        fotoExtension: _fotoExtension,
       );
       if (mounted) Navigator.of(context).pop(true);
     } on AuthException catch (e) {
@@ -93,6 +105,15 @@ class _EditarNinoSheetState extends State<EditarNinoSheet> {
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
+  }
+
+  Future<void> _elegirFoto() async {
+    final foto = await elegirFotoConCamaraOGaleria(context);
+    if (foto == null || !mounted) return;
+    setState(() {
+      _fotoBytes = foto.bytes;
+      _fotoExtension = foto.extension;
+    });
   }
 
   String? _requerido(String? v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null;
@@ -114,6 +135,42 @@ class _EditarNinoSheetState extends State<EditarNinoSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text('Editar información', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              Center(
+                child: Column(
+                  children: [
+                    InkWell(
+                      onTap: _guardando ? null : _elegirFoto,
+                      customBorder: const CircleBorder(),
+                      child: _fotoBytes != null
+                          ? CircleAvatar(
+                              radius: 44,
+                              backgroundImage: MemoryImage(_fotoBytes!),
+                            )
+                          : FotoAvatar(
+                              url: widget.nino.fotoUrl,
+                              radius: 44,
+                              iconoSinFoto: Icons.child_care,
+                            ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _guardando ? null : _elegirFoto,
+                      icon: const Icon(Icons.add_a_photo, size: 18),
+                      label: Text(
+                        widget.nino.fotoUrl.isEmpty && _fotoBytes == null
+                            ? 'Agregar foto'
+                            : 'Cambiar foto',
+                      ),
+                    ),
+                    if (_fotoBytes != null)
+                      Text(
+                        'Foto nueva sin guardar',
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: AppColors.azulClaro),
+                      ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nombresController,

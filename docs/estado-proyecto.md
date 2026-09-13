@@ -952,6 +952,91 @@ están en memoria.
 
 ---
 
+## 5.24. Maestros principales en "Acudientes y Niños" + editar foto del niño (2026-09-13)
+
+### ⚠️ La trampa que casi causa una escalada de privilegios
+
+Rafael pidió que los maestros principales vieran "Acudientes y Niños".
+`RolUsuario.puedeVerAcudientesYNinos` parecía el lugar obvio — pero **otros
+tres permisos delegaban en él**:
+
+```dart
+bool get puedeVerDashboard => puedeVerAcudientesYNinos;
+bool get puedeActivarModoEmergencia => puedeVerAcudientesYNinos;
+bool get puedeGestionarServidores => puedeVerAcudientesYNinos;
+```
+
+Agregarle un rol habría dado además el Dashboard, el modo emergencia y
+**Gestión de Servidores** (cambiar roles y ELIMINAR servidores). En
+`firestore.rules` era peor: `puedeVerInfoLiderazgo()` se usa en 14 lugares.
+
+**Se separó el concepto:** getter nuevo `RolUsuario.esLiderazgo` (los 3 roles
+de siempre), del que ahora dependen Dashboard/emergencia/servidores;
+`puedeVerAcudientesYNinos` pasó a ser `esLiderazgo || maestroPrincipal`. En
+las reglas se agregó una función **aparte**, `puedeVerAcudientesYNinos()`,
+usada **solo** en el `list` de `acudientes` — `puedeVerInfoLiderazgo()` quedó
+intacta. **Regla que dejó esto: no hacer que un permiso delegue en otro solo
+porque hoy coincidan.**
+
+**Acudientes en solo lectura** para maestros (`AcudienteDetalleSheet.soloLectura`,
+pasado desde esta pantalla). ⚠️ Es una decisión de INTERFAZ, no un candado:
+las reglas ya permitían a cualquier rol de check-in corregir un acudiente, y
+esa misma persona sí puede hacerlo desde "Registro de asistencia". Lo
+realmente admin-only sigue siendo `estadoAutorizacion`/`observacionesRestriccion`.
+
+### Editar la foto del niño
+
+Antes **no existía forma de cambiar la foto de un niño desde la app**, ni
+siquiera para un administrador. Ahora `editarNino()` acepta foto y el
+formulario tiene el avatar tocable.
+
+⚠️ **`storage.rules` exige `resource == null` en `ninos_fotos/`**, o sea
+prohíbe sobrescribir. Por eso hay un método nuevo, `reemplazarFotoNino()`, que
+sube con nombre único (`foto_<marca>.<ext>`) en vez de pisar el archivo: la
+regla que impide tocar la foto de otro niño queda intacta y el archivo viejo
+queda huérfano (unos KB, dentro de los 5 GB gratuitos).
+
+En `firestore.rules` se quitó `fotoUrl == resource.data.fotoUrl` de la rama de
+edición normal. **`estadoRegistro` sigue bloqueado a propósito** — pedido
+textual de Rafael: *"no debe poder eliminar ni inactivar el menor"*. Inactivar
+sigue pasando solo por "Registrar gestión" (liderazgo, deja constancia del
+motivo) y eliminar sigue siendo admin-only.
+
+**También se alinearon dos caminos que tenían permisos distintos para lo
+mismo:** en la ficha del niño `puedeEditar` era `esAdmin || esPadreOMadre` —
+o sea que ni el liderazgo podía corregir un dato desde ahí, aunque las reglas
+SÍ lo permitían y desde el check-in ya se hacía. Ahora incluye
+`esRolDeServidor`.
+
+### Carga diferida — el costo que disparó el cambio
+
+**Medido ANTES de desplegar** (regla 6 de la sección 1.5): la pantalla abría
+un `StreamBuilder` sobre las DOS colecciones completas apenas se entraba —
+~460 niños + ~456 acudientes = **~916 lecturas por apertura**, se usaran o no.
+Hasta ahora la abrían 3 personas; con los maestros principales pasan a ser
+**19** (16 maestros activos, contados en producción).
+
+| Escenario un domingo | Lecturas | % de la cuota diaria |
+|---|---|---|
+| Antes (sin maestros) | 19.517 | 39% |
+| +16 maestros, 1 apertura c/u | ~34.200 | 68% |
+| +16 maestros, 3 aperturas c/u | ~63.500 | **127%** |
+
+Rafael eligió optimizar antes de publicar. **Ahora no se lee NADA hasta que la
+persona busca algo o pulsa "Ver todos"** (`_AvisoBuscarPrimero`), que es como
+se usa la pantalla casi siempre: para mirar UN niño puntual. Abrir la pantalla
+pasó de ~916 lecturas a **0**.
+
+⚠️ **Aclaración que corrige una intuición razonable pero equivocada:** usar
+la colección liviana `ninos_busqueda` NO habría ahorrado lecturas — **Firestore
+cobra por documento leído, no por tamaño**. Y leer *literalmente* solo el niño
+buscado exigiría búsqueda por PREFIJO (Firestore no sabe hacer "contiene"), lo
+que dejaría de encontrar "Juan" dentro de "Pedro Juan Gómez". Por eso se
+conservó el filtro en memoria y se atacó el verdadero desperdicio: cargar sin
+que nadie mire.
+
+---
+
 ## 6. Pantallas construidas (`lib/screens/`)
 
 ### `widgets/app_shell.dart` — estructura de navegación (2026-08-14)

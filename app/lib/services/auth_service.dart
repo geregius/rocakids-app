@@ -721,11 +721,19 @@ class AuthService {
     }
   }
 
-  /// Edita los datos básicos de un niño. Las reglas de seguridad
-  /// permiten esto al padre/madre vinculado o a un admin — a propósito
-  /// NO incluye `tipoIdentificacion`/`identificacionMenor` (cambiar el
-  /// documento del menor cambiaría su llave primaria, una migración más
-  /// delicada) ni `estadoRegistro`/`fotoUrl` (esos quedan admin-only).
+  /// Edita los datos básicos de un niño, **incluida la foto**
+  /// (2026-09-13, pedido de Rafael). Las reglas permiten esto al
+  /// padre/madre vinculado y a cualquier rol que haga check-in.
+  ///
+  /// Sigue SIN incluir a propósito:
+  /// - `tipoIdentificacion`/`identificacionMenor`: se corrigen con
+  ///   [completarDocumentoNino] desde el check-in (el ID del documento
+  ///   en Firestore ES el documento del menor, así que cambiarlo de
+  ///   verdad sería una migración, no un update).
+  /// - `estadoRegistro`: inactivar o graduar a un niño pasa solo por
+  ///   "Registrar gestión" (liderazgo, y deja constancia del motivo) —
+  ///   Rafael lo pidió explícitamente: "no debe poder eliminar ni
+  ///   inactivar el menor, solo modificar los datos del niño y la foto".
   Future<void> editarNino({
     required String documentoIdentificacion,
     required String nombres,
@@ -735,9 +743,22 @@ class AuthService {
     required bool autorizoFotoFlag,
     required bool alertaMedicaFlag,
     required String condicionMedica,
+    Uint8List? fotoBytes,
+    String? fotoExtension,
   }) async {
     try {
+      // La foto se sube ANTES del update: si falla la subida, no queda
+      // el documento apuntando a una URL que no existe.
+      String? fotoUrl;
+      if (fotoBytes != null && fotoExtension != null) {
+        fotoUrl = await reemplazarFotoNino(
+          documentoIdentificacion,
+          fotoBytes,
+          fotoExtension,
+        );
+      }
       await _firestore.collection('ninos').doc(documentoIdentificacion).update({
+        'fotoUrl': ?fotoUrl,
         'nombres': nombres,
         'apellidos': apellidos,
         'fechaNacimiento': Timestamp.fromDate(fechaNacimiento),
@@ -2010,6 +2031,29 @@ class AuthService {
 
   /// Sube la foto de un niño (solo la primera vez — ver storage.rules) y
   /// devuelve la URL.
+  /// Sube una foto NUEVA para un niño que ya tenía una (2026-09-13).
+  ///
+  /// ⚠️ No reutiliza la ruta de [subirFotoNino] a propósito:
+  /// `storage.rules` exige `resource == null` en `ninos_fotos/`, o sea
+  /// que **prohíbe sobrescribir** un archivo existente — reemplazar en
+  /// la misma ruta fallaría. Se sube con un nombre único y se apunta
+  /// `fotoUrl` al archivo nuevo; el viejo queda huérfano en Storage
+  /// (unos KB, dentro del nivel gratuito de 5 GB) pero la regla que
+  /// impide pisar la foto de otro niño se mantiene intacta.
+  Future<String> reemplazarFotoNino(
+    String ninoDocId,
+    Uint8List bytes,
+    String extension,
+  ) async {
+    if (_auth.currentUser == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+    final marca = DateTime.now().millisecondsSinceEpoch;
+    final ref = _storage.ref('ninos_fotos/$ninoDocId/foto_$marca.$extension');
+    await ref.putData(bytes, _metadataDeFoto(extension));
+    return ref.getDownloadURL();
+  }
+
   Future<String> subirFotoNino(
     String ninoDocId,
     Uint8List bytes,

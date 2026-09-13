@@ -101,14 +101,42 @@ enum RolUsuario {
       this != RolUsuario.pendiente &&
       this != RolUsuario.desconocido;
 
-  /// Quién puede ver el panel "Acudientes y Niños" (2026-08-17, pedido
-  /// explícito de Rafael) — NO todos los roles principales, solo
-  /// administrador, columna y líder de ministerio. Debe quedar
-  /// sincronizado con `puedeVerInfoLiderazgo()` en firestore.rules.
-  bool get puedeVerAcudientesYNinos =>
+  /// El subgrupo de **liderazgo** dentro de los roles principales:
+  /// administrador, columna y líder de ministerio. Es el conjunto que
+  /// ve información sensible o administrativa. Debe quedar sincronizado
+  /// con `puedeVerInfoLiderazgo()` en firestore.rules.
+  ///
+  /// ⚠️ **Antes esto no tenía nombre propio**: cuatro permisos distintos
+  /// delegaban en `puedeVerAcudientesYNinos`, así que ampliar ESE
+  /// permiso ampliaba también el Dashboard, el modo emergencia y
+  /// Gestión de Servidores (donde se cambian roles y se ELIMINAN
+  /// servidores). Se separó el 2026-09-13, al abrir "Acudientes y
+  /// Niños" a los maestros principales. **No volver a hacer que un
+  /// permiso delegue en otro solo porque hoy coincidan.**
+  bool get esLiderazgo =>
       this == RolUsuario.administrador ||
       this == RolUsuario.columna ||
       this == RolUsuario.liderMinisterio;
+
+  /// Quién puede ver el panel "Acudientes y Niños" — el liderazgo
+  /// **más los maestros principales** (2026-09-13, pedido de Rafael).
+  /// Debe quedar sincronizado con `puedeVerAcudientesYNinos()` en
+  /// firestore.rules, que es una función DISTINTA de
+  /// `puedeVerInfoLiderazgo()` justamente por esto.
+  bool get puedeVerAcudientesYNinos =>
+      esLiderazgo || this == RolUsuario.maestroPrincipal;
+
+  /// Quién puede EDITAR la ficha de un acudiente desde el panel
+  /// "Acudientes y Niños": solo liderazgo (2026-09-13, pedido de
+  /// Rafael: los maestros principales entran a "ver y editar niños,
+  /// solo ver acudientes").
+  ///
+  /// ⚠️ Esto es una decisión de INTERFAZ, no un candado de seguridad:
+  /// `firestore.rules` permite desde hace tiempo que cualquier rol de
+  /// check-in corrija los datos de un acudiente (lo necesita el propio
+  /// check-in), salvo `estadoAutorizacion`/`observacionesRestriccion`,
+  /// que sí son admin-only de verdad.
+  bool get puedeEditarAcudientes => esLiderazgo;
 
   /// Quién puede ver el "Dashboard" con gráficas de asistencia
   /// (2026-08-18, pedido explícito de Rafael) — mismo criterio que
@@ -116,7 +144,7 @@ enum RolUsuario {
   /// ministerio. No requiere cambios en firestore.rules porque solo
   /// restringe la entrada de menú: la lectura de `registros` que usa el
   /// dashboard ya está abierta a cualquier rol de servidor.
-  bool get puedeVerDashboard => puedeVerAcudientesYNinos;
+  bool get puedeVerDashboard => esLiderazgo;
 
   /// Quién puede activar/desactivar "Modo emergencia" y ver el botón
   /// correspondiente en el menú fuera de una emergencia (2026-08-19,
@@ -125,7 +153,7 @@ enum RolUsuario {
   /// `puedeVerInfoLiderazgo()` en firestore.rules. Distinto de "quién
   /// puede OPERAR salidas durante una emergencia" — eso es cualquier
   /// rol de servidor, ver [esRolDeServidor] y `AppShell`.
-  bool get puedeActivarModoEmergencia => puedeVerAcudientesYNinos;
+  bool get puedeActivarModoEmergencia => esLiderazgo;
 
   /// Quién puede ver y administrar "Gestión de Servidores" — cambiar
   /// rol (incluido asignar "Administrador"), activar/desactivar cuenta,
@@ -137,7 +165,7 @@ enum RolUsuario {
   /// LECTURA, este también controla ESCRITURA — debe quedar
   /// sincronizado con `allow update, delete` de `usuarios/{uid}` en
   /// firestore.rules.
-  bool get puedeGestionarServidores => puedeVerAcudientesYNinos;
+  bool get puedeGestionarServidores => esLiderazgo;
 
   /// Quién puede crear/editar grupos de "Programación de Servidores" y
   /// asignarles integrantes (2026-08-31, pedido explícito de Rafael:

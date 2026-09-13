@@ -18,10 +18,24 @@ class AcudienteDetalleSheet extends StatefulWidget {
   final Acudiente acudiente;
   final UsuarioApp usuario;
 
+  /// Oculta los botones de edición aunque el rol técnicamente pueda
+  /// editar (2026-09-13). Lo usa "Acudientes y Niños", donde Rafael
+  /// pidió que los maestros principales entren a "ver y editar niños,
+  /// solo ver acudientes".
+  ///
+  /// ⚠️ Es una restricción de INTERFAZ, no de seguridad: las reglas
+  /// permiten desde hace tiempo que cualquier rol de check-in corrija
+  /// los datos de un acudiente, y de hecho esa misma persona sí puede
+  /// editarlo desde "Registro de asistencia". Lo realmente cerrado
+  /// (admin-only) sigue siendo `estadoAutorizacion` y
+  /// `observacionesRestriccion`.
+  final bool soloLectura;
+
   const AcudienteDetalleSheet({
     super.key,
     required this.acudiente,
     required this.usuario,
+    this.soloLectura = false,
   });
 
   @override
@@ -34,7 +48,8 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
   List<Nino> _hijos = [];
   bool _eliminando = false;
 
-  bool get _puedeEditar => widget.usuario.rol.esRolDeServidor;
+  bool get _puedeEditar =>
+      !widget.soloLectura && widget.usuario.rol.esRolDeServidor;
   bool get _esAdmin => widget.usuario.rol == RolUsuario.administrador;
 
   @override

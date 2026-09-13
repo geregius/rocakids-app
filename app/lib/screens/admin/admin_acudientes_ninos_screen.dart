@@ -90,6 +90,9 @@ class _ListaNinos extends StatefulWidget {
 class _ListaNinosState extends State<_ListaNinos> {
   final _busquedaController = TextEditingController();
   String _busqueda = '';
+  // Ver [_AvisoBuscarPrimero]: nada se lee de Firestore hasta que se
+  // busca algo o se pide la lista completa.
+  bool _verTodos = false;
 
   // Un controlador por grupo (2026-08-31, pedido de Rafael: los grupos
   // arrancan colapsados — para ver un niño hay que abrir el grupo a
@@ -151,6 +154,15 @@ class _ListaNinosState extends State<_ListaNinos> {
             onChanged: (v) => setState(() => _busqueda = v),
           ),
         ),
+        if (_busqueda.trim().isEmpty && !_verTodos)
+          Expanded(
+            child: _AvisoBuscarPrimero(
+              texto:
+                  'Busca un ni\u00f1o por nombre o documento para ver su ficha.',
+              onVerTodos: () => setState(() => _verTodos = true),
+            ),
+          )
+        else
         Expanded(
           child: StreamBuilder<List<Nino>>(
             stream: AuthService().listarNinosAdmin(),
@@ -347,6 +359,9 @@ class _ListaAcudientes extends StatefulWidget {
 class _ListaAcudientesState extends State<_ListaAcudientes> {
   final _busquedaController = TextEditingController();
   String _busqueda = '';
+  // Ver [_AvisoBuscarPrimero]: nada se lee de Firestore hasta que se
+  // busca algo o se pide la lista completa.
+  bool _verTodos = false;
 
   @override
   void dispose() {
@@ -394,6 +409,15 @@ class _ListaAcudientesState extends State<_ListaAcudientes> {
             onChanged: (v) => setState(() => _busqueda = v),
           ),
         ),
+        if (_busqueda.trim().isEmpty && !_verTodos)
+          Expanded(
+            child: _AvisoBuscarPrimero(
+              texto:
+                  'Busca un acudiente por nombre o documento para ver su ficha.',
+              onVerTodos: () => setState(() => _verTodos = true),
+            ),
+          )
+        else
         Expanded(
           child: StreamBuilder<List<Acudiente>>(
             stream: AuthService().listarAcudientes(),
@@ -441,6 +465,10 @@ class _ListaAcudientesState extends State<_ListaAcudientes> {
                       builder: (_) => AcudienteDetalleSheet(
                         acudiente: acudiente,
                         usuario: widget.usuario,
+                        // Maestro principal entra a este panel desde el
+                        // 2026-09-13, pero solo a CONSULTAR acudientes.
+                        soloLectura:
+                            !widget.usuario.rol.puedeEditarAcudientes,
                       ),
                     ),
                   );
@@ -450,6 +478,50 @@ class _ListaAcudientesState extends State<_ListaAcudientes> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Placeholder que se muestra mientras NO se ha pedido ningún dato
+/// (2026-09-13). Antes las dos pestañas abrían un `StreamBuilder` sobre
+/// la colección COMPLETA apenas se entraba a la pantalla: ~460 niños +
+/// ~456 acudientes = **~916 lecturas por apertura**, se usaran o no.
+///
+/// Con 16 maestros principales entrando desde el 2026-09-13, eso habría
+/// llevado un domingo movido por encima de la cuota diaria gratuita de
+/// Firestore. Ahora no se lee NADA hasta que la persona busca algo o
+/// pide expresamente la lista completa — que es como se usa la pantalla
+/// casi siempre: para mirar UN niño puntual.
+///
+/// Se mantiene el botón "Ver todos" a propósito: la lista agrupada por
+/// grupo/aula es una función que Rafael pidió expresamente (2026-08-30)
+/// y no se quiso perder, solo dejar de cobrarla cuando nadie la mira.
+class _AvisoBuscarPrimero extends StatelessWidget {
+  final String texto;
+  final VoidCallback onVerTodos;
+
+  const _AvisoBuscarPrimero({required this.texto, required this.onVerTodos});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.search, size: 48, color: AppColors.azulClaro),
+            const SizedBox(height: 12),
+            Text(
+              texto,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(onPressed: onVerTodos, child: const Text('Ver todos')),
+          ],
+        ),
+      ),
     );
   }
 }

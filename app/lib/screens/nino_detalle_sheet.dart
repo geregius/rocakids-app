@@ -137,7 +137,14 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
     final relacion = await AuthService().obtenerMiRelacionConNino(_nino.documentoIdentificacion);
     final esPadreOMadre =
         relacion?.parentescoTipo == 'Padre' || relacion?.parentescoTipo == 'Madre';
-    final puedeEditar = esAdmin || esPadreOMadre;
+    // 2026-09-13: antes era `esAdmin || esPadreOMadre`, o sea que ni el
+    // liderazgo podía corregir un dato desde la ficha — aunque
+    // `firestore.rules` SÍ lo permite a cualquier rol de check-in y
+    // desde "Registro de asistencia" ya se podía. Se alinea la ficha con
+    // lo que las reglas y el check-in ya hacían, en vez de dejar dos
+    // caminos con permisos distintos para lo mismo.
+    final puedeEditar =
+        esAdmin || esPadreOMadre || widget.usuario.rol.esRolDeServidor;
     final esLiderazgo = esAdmin || widget.usuario.rol.puedeVerAcudientesYNinos;
     if (mounted) {
       setState(() {

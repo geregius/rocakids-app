@@ -62,6 +62,20 @@ service cloud.firestore {
         ];
     }
 
+    // Quién puede ver el panel "Acudientes y Niños": el liderazgo MÁS
+    // los maestros principales (2026-09-13, pedido de Rafael). Es una
+    // función APARTE de puedeVerInfoLiderazgo() a propósito — esa se usa
+    // en 14 lugares, incluido eliminar usuarios y escribir el modo
+    // emergencia, así que ampliarla habría dado muchísimo más que esta
+    // pantalla. Sincronizada con `RolUsuario.puedeVerAcudientesYNinos`.
+    function puedeVerAcudientesYNinos() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol.lower() in [
+          'administrador', 'columna', 'lider_ministerio', 'maestro_principal'
+        ];
+    }
+
     // "Programación de Servidores" (2026-08-31, pedido explícito de
     // Rafael: "solo los líderes del ministerio") — a propósito MÁS
     // ACOTADO que puedeVerInfoLiderazgo(): NO incluye columna. Debe
@@ -161,7 +175,7 @@ service cloud.firestore {
       // `list` (traer TODA la colección) es más sensible que `get`
       // puntual — solo para el panel "Acudientes y Niños", acotado a
       // administrador/columna/líder de ministerio (2026-08-17).
-      allow list: if puedeVerInfoLiderazgo();
+      allow list: if puedeVerAcudientesYNinos();
 
       // Auto-registro: solo su propio documento.
       allow create: if request.auth != null && request.auth.uid == uid
@@ -232,11 +246,17 @@ service cloud.firestore {
       // SOLO eso) ahí mismo si el niño no lo tenía — ver el bloqueo en
       // /registros y la rama siguiente.
       allow update: if esAdmin() || (
+        // `fotoUrl` SE PUEDE cambiar por esta vía desde el 2026-09-13
+        // (pedido de Rafael: poder actualizar la foto del niño, que es
+        // el dato que más se desactualiza). `estadoRegistro` sigue
+        // bloqueado a propósito: inactivar a un niño pasa solo por
+        // "Registrar gestión", que es de liderazgo y deja constancia
+        // del motivo — Rafael lo pidió explícitamente ("no debe poder
+        // eliminar ni inactivar el menor").
         (esPadreOMadreDe(ninoId) || puedeRegistrarAsistencia()) &&
         request.resource.data.tipoIdentificacion == resource.data.tipoIdentificacion &&
         request.resource.data.identificacionMenor == resource.data.identificacionMenor &&
-        request.resource.data.estadoRegistro == resource.data.estadoRegistro &&
-        request.resource.data.fotoUrl == resource.data.fotoUrl
+        request.resource.data.estadoRegistro == resource.data.estadoRegistro
       ) || (
         puedeRegistrarAsistencia() &&
         request.resource.data.nombres == resource.data.nombres &&
