@@ -19,7 +19,21 @@ import '../widgets/foto_avatar.dart';
 class EditarNinoSheet extends StatefulWidget {
   final Nino nino;
 
-  const EditarNinoSheet({super.key, required this.nino});
+  /// Si el documento del menor se puede corregir desde acá (2026-09-13,
+  /// pedido de Rafael: "no aparece el número de documento para
+  /// editarlo").
+  ///
+  /// ⚠️ Por defecto `false` porque **el padre/madre NO puede**:
+  /// `firestore.rules` deja cambiar el documento solo a los roles que
+  /// hacen check-in, no al acudiente. Mostrarle los campos a un padre
+  /// solo serviría para que el guardado le fallara.
+  final bool puedeEditarDocumento;
+
+  const EditarNinoSheet({
+    super.key,
+    required this.nino,
+    this.puedeEditarDocumento = false,
+  });
 
   @override
   State<EditarNinoSheet> createState() => _EditarNinoSheetState();
@@ -41,6 +55,8 @@ class _EditarNinoSheetState extends State<EditarNinoSheet> {
   // siquiera menciona `fotoUrl` y la actual se conserva.
   Uint8List? _fotoBytes;
   String? _fotoExtension;
+  late String? _tipoIdentificacion;
+  late final TextEditingController _documentoController;
 
   @override
   void initState() {
@@ -53,6 +69,10 @@ class _EditarNinoSheetState extends State<EditarNinoSheet> {
     _fechaNacimiento = nino.fechaNacimiento;
     _autorizaFoto = nino.autorizoFotoFlag;
     _tieneCondicionMedica = nino.alertaMedicaFlag;
+    _tipoIdentificacion = tiposIdentificacionMenor.contains(nino.tipoIdentificacion)
+        ? nino.tipoIdentificacion
+        : null;
+    _documentoController = TextEditingController(text: nino.identificacionMenor);
   }
 
   @override
@@ -60,6 +80,7 @@ class _EditarNinoSheetState extends State<EditarNinoSheet> {
     _nombresController.dispose();
     _apellidosController.dispose();
     _condicionMedicaController.dispose();
+    _documentoController.dispose();
     super.dispose();
   }
 
@@ -96,6 +117,12 @@ class _EditarNinoSheetState extends State<EditarNinoSheet> {
         condicionMedica: _condicionMedicaController.text.trim(),
         fotoBytes: _fotoBytes,
         fotoExtension: _fotoExtension,
+        // Solo se mandan si de verdad cambiaron: así no se dispara la
+        // segunda escritura (ni su posible permission-denied) cuando
+        // nadie tocó el documento.
+        tipoIdentificacion: _documentoCambio ? _tipoIdentificacion : null,
+        identificacionMenor:
+            _documentoCambio ? _documentoController.text.trim() : null,
       );
       if (mounted) Navigator.of(context).pop(true);
     } on AuthException catch (e) {
@@ -106,6 +133,14 @@ class _EditarNinoSheetState extends State<EditarNinoSheet> {
       if (mounted) setState(() => _guardando = false);
     }
   }
+
+  /// ¿Se tocó el documento? Se compara contra los valores originales
+  /// para no escribir de más.
+  bool get _documentoCambio =>
+      widget.puedeEditarDocumento &&
+      _tipoIdentificacion != null &&
+      (_tipoIdentificacion != widget.nino.tipoIdentificacion ||
+          _documentoController.text.trim() != widget.nino.identificacionMenor);
 
   Future<void> _elegirFoto() async {
     final foto = await elegirFotoConCamaraOGaleria(context);
@@ -189,6 +224,31 @@ class _EditarNinoSheetState extends State<EditarNinoSheet> {
                 onChanged: (v) => setState(() => _fechaNacimiento = v),
               ),
               const SizedBox(height: 16),
+              if (widget.puedeEditarDocumento) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: _tipoIdentificacion,
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo de documento',
+                  ),
+                  items: tiposIdentificacionMenor
+                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _tipoIdentificacion = v),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _documentoController,
+                  decoration: const InputDecoration(
+                    labelText: 'Número de documento',
+                    // El número NUNCA es obligatorio (2026-08-24, pedido
+                    // explícito de Rafael) — ni siquiera con un tipo de
+                    // documento real elegido.
+                    helperText: 'Opcional — se puede dejar en blanco',
+                  ),
+                  keyboardType: TextInputType.text,
+                ),
+                const SizedBox(height: 16),
+              ],
               DropdownButtonFormField<String>(
                 initialValue: _genero,
                 decoration: const InputDecoration(labelText: 'Género'),

@@ -745,6 +745,8 @@ class AuthService {
     required String condicionMedica,
     Uint8List? fotoBytes,
     String? fotoExtension,
+    String? tipoIdentificacion,
+    String? identificacionMenor,
   }) async {
     try {
       // La foto se sube ANTES del update: si falla la subida, no queda
@@ -776,6 +778,21 @@ class AuthService {
             'apellidos': apellidos,
             'fechaNacimiento': Timestamp.fromDate(fechaNacimiento),
           });
+
+      // ⚠️ El documento va en una escritura APARTE, a propósito. En
+      // `firestore.rules` las dos cosas viven en ramas DISTINTAS y
+      // mutuamente excluyentes de `allow update` de `ninos`: la rama que
+      // deja cambiar nombre/fecha exige que el documento NO cambie, y la
+      // que deja cambiar el documento exige que nada más cambie. Un solo
+      // update con ambas cosas fallaría con `permission-denied`. Dos
+      // updates seguidos sí pasan: cada uno cumple su propia rama.
+      if (tipoIdentificacion != null && identificacionMenor != null) {
+        await completarDocumentoNino(
+          documentoIdentificacion: documentoIdentificacion,
+          tipoIdentificacion: tipoIdentificacion,
+          identificacionMenor: identificacionMenor,
+        );
+      }
     } catch (e) {
       if (e.toString().contains('permission-denied')) {
         throw const AuthException(

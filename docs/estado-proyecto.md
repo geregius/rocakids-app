@@ -1037,6 +1037,57 @@ que nadie mire.
 
 ---
 
+## 5.25. Corrección: tres permisos se colaron al ampliar un getter (2026-09-13)
+
+**Error propio, detectado por Rafael al probar.** Al abrir "Acudientes y Niños"
+a los maestros principales (sección 5.24) se revisó quién delegaba en
+`puedeVerAcudientesYNinos` **solo dentro de `usuario_app.dart`** — y tres
+pantallas lo usaban **directamente**, como si fuera sinónimo de "liderazgo":
+
+| Dónde | Qué se abrió sin querer |
+|---|---|
+| `app_shell.dart` | **Cumpleaños Servidores** (lo reportó Rafael) |
+| `nino_detalle_sheet.dart` | **Alta de personas NO autorizadas** — custodias y órdenes de alejamiento |
+| `ninos_presentes_screen.dart` | **"Retirar a todos"** — salida masiva de todos los niños |
+
+Las tres apuntan ahora a `esLiderazgo`. Verificado con `grep` que el único uso
+restante de `puedeVerAcudientesYNinos` es el ítem de menú de esa pantalla.
+
+⚠️ **Lección, anotada también en el docstring del getter: antes de ampliar un
+getter de rol, hacer `grep` de TODOS sus usos en `lib/`, no solo del archivo
+donde está definido.** Un getter con nombre de pantalla termina usándose como
+si fuera un concepto.
+
+## 5.26. Editar el documento del menor desde la ficha (2026-09-13)
+
+Rafael: *"en la pestaña de editar niño no aparece el número de documento de
+identidad para editarlo"*. Estaba solo en el check-in
+(`completarDocumentoNino`), no en el formulario de edición.
+
+⚠️ **El documento se guarda en una escritura APARTE, a propósito.** En
+`firestore.rules`, las dos cosas viven en ramas **mutuamente excluyentes** de
+`allow update` de `ninos`: la rama que deja cambiar nombre/fecha exige que el
+documento NO cambie, y la que deja cambiar el documento exige que nada más
+cambie. **Un solo update con ambas cosas fallaría con `permission-denied`.**
+Dos updates seguidos sí pasan, cada uno cumpliendo su propia rama — por eso
+`editarNino()` llama a `completarDocumentoNino()` después, y solo si el
+documento de verdad cambió.
+
+**Los campos solo se muestran a roles de check-in** (`puedeEditarDocumento`,
+por defecto `false`): las reglas no dejan que el padre/madre cambie el
+documento, así que mostrárselo solo serviría para que el guardado le fallara.
+El número sigue siendo **opcional**, como desde el 2026-08-24.
+
+**Sigue sin poder cambiarse el ID del documento en Firestore** (`ninos/{id}`),
+que para un niño con documento ES su número: cambiarlo de verdad sería una
+migración de llave primaria, no un update. Editar `identificacionMenor` corrige
+el dato visible sin mover el documento.
+
+**Confirmado funcionando por Rafael el mismo día:** edición de foto y carga
+diferida de "Acudientes y Niños" ("ya no carga todo de una, está perfecto").
+
+---
+
 ## 6. Pantallas construidas (`lib/screens/`)
 
 ### `widgets/app_shell.dart` — estructura de navegación (2026-08-14)

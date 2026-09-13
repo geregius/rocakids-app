@@ -86,7 +86,10 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
   // lado de la app, la conveniencia de hacerlo para todos de una vez —
   // por eso se restringe a liderazgo, no por falta de permiso real sino
   // porque es una acción masiva de alto impacto si se toca sin querer.
-  bool get _esLiderazgo => widget.usuario.rol.puedeVerAcudientesYNinos;
+  // ⚠️ `esLiderazgo`, NO `puedeVerAcudientesYNinos`: ese se amplió a los
+  // maestros principales el 2026-09-13, y esta es una acción masiva de
+  // alto impacto (saca a TODOS los niños de una vez).
+  bool get _esLiderazgo => widget.usuario.rol.esLiderazgo;
   bool _retirandoATodos = false;
 
   void _asegurarNinosCargados(Iterable<String> ids) {

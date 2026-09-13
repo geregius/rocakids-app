@@ -123,6 +123,13 @@ enum RolUsuario {
   /// Debe quedar sincronizado con `puedeVerAcudientesYNinos()` en
   /// firestore.rules, que es una función DISTINTA de
   /// `puedeVerInfoLiderazgo()` justamente por esto.
+  ///
+  /// ⚠️ **Este getter NO representa "liderazgo" — usar [esLiderazgo]
+  /// para eso.** Al ampliarlo el 2026-09-13 se colaron tres pantallas
+  /// que lo usaban como si fuera sinónimo de liderazgo: "Cumpleaños
+  /// Servidores", el alta de personas NO autorizadas (custodias) y el
+  /// botón "Retirar a todos". **Antes de ampliar un getter de rol, hacer
+  /// `grep` de TODOS sus usos en `lib/`, no solo de este archivo.**
   bool get puedeVerAcudientesYNinos =>
       esLiderazgo || this == RolUsuario.maestroPrincipal;
 

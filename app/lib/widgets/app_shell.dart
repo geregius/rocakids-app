@@ -165,12 +165,16 @@ class _AppShellState extends State<AppShell> {
           label: 'Cumpleaños niños',
           onTap: () => _irA(context, CumpleanosNinosScreen(usuario: usuario)),
         ),
-      // Solo administrador, columna y líder de ministerio (2026-08-19,
-      // mismo criterio que "Acudientes y Niños"/"Dashboard") — a
-      // diferencia de "Cumpleaños niños", `usuarios` guarda datos
+      // Solo administrador, columna y líder de ministerio (2026-08-19)
+      // — a diferencia de "Cumpleaños niños", `usuarios` guarda datos
       // sensibles del servidor ya acotados a liderazgo en el resto de
       // la app.
-      if (usuario.rol.puedeVerAcudientesYNinos)
+      //
+      // ⚠️ Usaba `puedeVerAcudientesYNinos`, que el 2026-09-13 se amplió
+      // a los maestros principales — y se los coló acá sin querer
+      // (Rafael lo detectó probando). Ahora apunta a `esLiderazgo`, que
+      // es el concepto que de verdad quería.
+      if (usuario.rol.esLiderazgo)
         _ItemMenu(
           icon: Icons.celebration,
           label: 'Cumpleaños Servidores',

@@ -563,7 +563,10 @@ class _RegistroAsistenciaScreenState extends State<RegistroAsistenciaScreen> {
     final guardado = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => EditarNinoSheet(nino: nino),
+      builder: (_) => EditarNinoSheet(
+        nino: nino,
+        puedeEditarDocumento: widget.usuario.rol.esRolDeServidor,
+      ),
     );
     if (guardado == true) {
       final actualizado = await _authService.obtenerNinoPorDocumento(

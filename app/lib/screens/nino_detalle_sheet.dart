@@ -145,7 +145,12 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
     // caminos con permisos distintos para lo mismo.
     final puedeEditar =
         esAdmin || esPadreOMadre || widget.usuario.rol.esRolDeServidor;
-    final esLiderazgo = esAdmin || widget.usuario.rol.puedeVerAcudientesYNinos;
+    // ⚠️ `esLiderazgo` de verdad, NO `puedeVerAcudientesYNinos`: ese
+    // último se amplió a los maestros principales el 2026-09-13 y esto
+    // controla quién agrega/quita PERSONAS NO AUTORIZADAS (custodias,
+    // órdenes de alejamiento) — información legal sensible que debe
+    // seguir siendo de liderazgo y padres.
+    final esLiderazgo = esAdmin || widget.usuario.rol.esLiderazgo;
     if (mounted) {
       setState(() {
         _puedeEditar = puedeEditar;
@@ -314,7 +319,12 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
     final guardado = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => EditarNinoSheet(nino: _nino),
+      builder: (_) => EditarNinoSheet(
+        nino: _nino,
+        // El padre/madre no puede cambiar el documento (lo impiden las
+        // reglas), solo los roles que hacen check-in.
+        puedeEditarDocumento: widget.usuario.rol.esRolDeServidor,
+      ),
     );
     if (guardado == true && mounted) Navigator.of(context).pop(true);
   }
