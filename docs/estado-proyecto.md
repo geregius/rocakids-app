@@ -1128,7 +1128,37 @@ fecha de nacimiento inválida (`18991230`), y `Emmanuel Vargas` aparece **dos
 veces** con fechas distintas (2020-05-19 y 2021-05-19) — probable duplicado del
 sistema viejo.
 
-**Estado: NADA importado todavía.** Rafael pidió revisar primero la lista.
+### ❌ DECISIÓN: no se importa nada (2026-09-13) — no reabrir
+
+Rafael decidió **dejarlo así**, tras entender el panorama completo. **No
+proponer la importación de nuevo** salvo que él la pida.
+
+**Lo que pesó en la decisión** (y que conviene tener a la mano si alguna vez se
+retoma):
+
+- **Se puede técnicamente**, pero sería algo nuevo: la regla de crear niño NO
+  exige acudiente, y el check-in tiene la opción "Otro (no está en la lista)"
+  con teléfono obligatorio. **Pero de los 474 niños en producción, CERO están
+  sin acudiente** — importar 110 así creaba un estado inédito, con la ficha
+  mostrando la sección de acudientes vacía y, en una emergencia, nadie a quien
+  llamar.
+- **Los acudientes NO se pueden recuperar del archivo:** las hojas de
+  respuestas de formularios ("Respuesta Registro Nuevo", "Respuestas Escuela
+  Siervos") están **vacías**, y los 133 IDs rotos son claves internas de
+  AppSheet (`IdUJT1grd3IHJgwkr…`) que apuntan a filas borradas.
+- **86 de los 110 (78%) comparten apellido con un acudiente que SÍ está en
+  producción** — probablemente su papá o mamá, ya registrado como acudiente de
+  un hermano. Coincidir por apellido no prueba parentesco.
+- **Consecuencia aceptada:** esos 110 van a seguir apareciendo como "no existe"
+  y habrá que re-registrarlos a mano cuando lleguen. A cambio, cada
+  re-registro produce una ficha COMPLETA (niño + acudiente real, porque
+  "Registrar familia" exige ambos), en vez de un niño huérfano. Se pierde el
+  historial viejo de los 24 que lo tenían (141 movimientos).
+
+⚠️ **Hipótesis descartada por el camino, para no repetirla:** se sospechó que
+el rasgo distintivo era `tipoIdentificacion` vacío, pero está vacío en 459 de
+los 460 que SÍ migraron. No era eso; la causa real es el acudiente.
+
 Listado completo con causa, historial y si ya fue re-registrado:
 [`ninos-faltantes-2026-09-13.csv`](ninos-faltantes-2026-09-13.csv).
 
