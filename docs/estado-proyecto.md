@@ -1169,6 +1169,17 @@ llegó por el lado del usuario.
 
 ---
 
+## 5.28. Menores Registrados: grupos colapsados por defecto (2026-09-29)
+
+Pedido de Rafael: que se vean todos los grupos y se despliegue solo el que se
+quiera, en vez de arrancar todos abiertos. `_GrupoSection` pasó a
+`initiallyExpanded: false`. El título de cada grupo ya muestra el conteo, así
+que colapsado sigue diciendo cuántos niños hay en cada uno. Cada sección tiene
+`ValueKey(grupo)`, así que un grupo abierto se queda abierto mientras la lista
+se refresca en vivo con cada ingreso. Solo hosting, costo $0.
+
+---
+
 ## 6. Pantallas construidas (`lib/screens/`)
 
 ### `widgets/app_shell.dart` — estructura de navegación (2026-08-14)

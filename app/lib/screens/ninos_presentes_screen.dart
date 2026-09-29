@@ -433,7 +433,12 @@ class _GrupoSection extends StatelessWidget {
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
-            initiallyExpanded: true,
+            // Colapsados por defecto (2026-09-29, pedido de Rafael): se ven
+            // todos los grupos con su conteo en el título y se despliega
+            // solo el que interesa. El `ValueKey(grupo)` de quien crea esta
+            // sección mantiene abierto/cerrado cada grupo mientras la lista
+            // se refresca en vivo con cada ingreso.
+            initiallyExpanded: false,
             title: Text(
               rangoEdad != null
                   ? 'Grupo $nombre · $rangoEdad (${registros.length})'
