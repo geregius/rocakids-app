@@ -15,11 +15,26 @@ service firebase.storage {
     }
 
     // Foto de seguridad del acudiente (para validar retiro del niño).
-    // Solo el propio dueño puede subirla/reemplazarla.
+    //
+    // - El propio dueño puede subirla y REEMPLAZARLA (su flujo usa una
+    //   ruta fija, `foto.<ext>`, y la pisa).
+    // - Desde 2026-09-29 cualquier otro autenticado puede subir un
+    //   archivo NUEVO en esa carpeta, pero nunca pisar uno existente
+    //   (`resource == null`, mismo patrón que `ninos_fotos`). Hace falta
+    //   para que quien edita a un acudiente (liderazgo, roles de
+    //   check-in) pueda cambiarle la foto: pedido de Rafael.
+    //
+    // ⚠️ El candado REAL no está acá sino en firestore.rules: subir un
+    // archivo no cambia nada por sí solo, la foto de un acudiente solo
+    // cambia si alguien escribe `fotoSeguridadUrl` en `acudientes/{uid}`,
+    // y eso sigue limitado al propio acudiente, al admin y a los roles
+    // de check-in. No se pudo acotar por rol aquí mismo porque
+    // `firestore.get()` desde Storage ya falló en producción (ver el
+    // bloque de `emergencia_fotos` más abajo).
     match /acudientes_fotos/{uid}/{fileName} {
       allow read: if request.auth != null;
       allow write: if request.auth != null
-        && request.auth.uid == uid
+        && (request.auth.uid == uid || resource == null)
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }

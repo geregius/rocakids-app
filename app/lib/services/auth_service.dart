@@ -1779,6 +1779,31 @@ class AuthService {
   /// — en los tres casos, a propósito NUNCA incluye `estadoAutorizacion`
   /// ni `observacionesRestriccion` (esos quedan admin-only, ver
   /// firestore.rules).
+  /// Sube una foto NUEVA de seguridad para OTRO acudiente (2026-09-29),
+  /// desde "Editar acudiente".
+  ///
+  /// No reutiliza [subirFotoAcudiente]: esa escribe en la carpeta del
+  /// usuario LOGUEADO, no en la del acudiente que se está editando. Y
+  /// usa nombre único porque `storage.rules` solo deja a un tercero
+  /// CREAR archivos en `acudientes_fotos/{uid}/`, nunca pisar uno
+  /// existente — el archivo viejo queda huérfano (unos KB, dentro de los
+  /// 5 GB gratuitos). Mismo criterio que [reemplazarFotoNino].
+  Future<String> reemplazarFotoAcudiente(
+    String acudienteUid,
+    Uint8List bytes,
+    String extension,
+  ) async {
+    if (_auth.currentUser == null) {
+      throw const AuthException('No hay sesión activa.');
+    }
+    final marca = DateTime.now().millisecondsSinceEpoch;
+    final ref = _storage.ref(
+      'acudientes_fotos/$acudienteUid/foto_$marca.$extension',
+    );
+    await ref.putData(bytes, _metadataDeFoto(extension));
+    return ref.getDownloadURL();
+  }
+
   Future<void> editarAcudiente({
     required String uid,
     required String tipoDocumento,
@@ -1787,9 +1812,18 @@ class AuthService {
     required String apellidos,
     required String telefonoCelular,
     required String correoElectronico,
+    Uint8List? fotoBytes,
+    String? fotoExtension,
   }) async {
     try {
+      // La foto se sube ANTES del update: si falla la subida, el
+      // acudiente no queda apuntando a una URL que no existe.
+      String? fotoUrl;
+      if (fotoBytes != null && fotoExtension != null) {
+        fotoUrl = await reemplazarFotoAcudiente(uid, fotoBytes, fotoExtension);
+      }
       await _firestore.collection('acudientes').doc(uid).update({
+        'fotoSeguridadUrl': ?fotoUrl,
         'tipoDocumento': tipoDocumento,
         'numeroDocumento': numeroDocumento,
         'nombres': nombres,

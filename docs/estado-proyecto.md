@@ -1180,6 +1180,43 @@ se refresca en vivo con cada ingreso. Solo hosting, costo $0.
 
 ---
 
+## 5.29. Editar la foto de seguridad del acudiente (2026-09-29)
+
+Pedido de Rafael: poder editar la información de los acudientes **incluida la
+foto**, "solo para los perfiles que puedan hacerlo". Antes "Editar acudiente"
+cubría documento, nombre, teléfono y correo, pero no la foto.
+
+**Quién puede:** los mismos que ya podían editar al acudiente — no se amplió
+nada. Desde la ficha (`AcudienteDetalleSheet`): roles de servidor, excepto
+quien la ve en solo lectura (maestros principales en "Acudientes y Niños",
+sección 5.24). Desde el check-in: los roles que hacen check-in. En
+`firestore.rules` no hubo que tocar nada: `fotoSeguridadUrl` ya se podía
+cambiar por el propio acudiente, el admin y los roles de check-in; solo
+`estadoAutorizacion`/`observacionesRestriccion` siguen siendo admin-only.
+
+⚠️ **El obstáculo real estaba en Storage.** `acudientes_fotos/{uid}` solo
+dejaba escribir al propio dueño (`request.auth.uid == uid`), así que un
+servidor no podía subir la foto de otro. Se agregó `|| resource == null`:
+cualquier autenticado puede CREAR un archivo nuevo ahí, nunca pisar uno
+existente (mismo patrón de `ninos_fotos`). El dueño conserva su flujo de
+siempre (ruta fija `foto.<ext>` que se reemplaza).
+
+No se pudo acotar por rol dentro de Storage porque `firestore.get()` desde
+Storage ya falló en producción (sección 5.6). **El candado sigue siendo
+Firestore**: subir un archivo no cambia nada por sí solo; la foto de un
+acudiente solo cambia si alguien escribe `fotoSeguridadUrl`, y eso está
+restringido. Un archivo subido sin permiso para apuntarlo queda huérfano.
+
+Método nuevo `reemplazarFotoAcudiente(uid, ...)`: escribe en la carpeta del
+acudiente EDITADO (no del usuario logueado, que es lo que hace
+`subirFotoAcudiente`) y con nombre único. El archivo viejo queda huérfano,
+unos KB dentro de los 5 GB gratuitos.
+
+**Costo:** $0 (Storage en `us-east1`, uso mínimo). Despliegue de reglas de
+Storage + hosting; sin funciones.
+
+---
+
 ## 6. Pantallas construidas (`lib/screens/`)
 
 ### `widgets/app_shell.dart` — estructura de navegación (2026-08-14)
