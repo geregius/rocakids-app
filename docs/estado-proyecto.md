@@ -1258,6 +1258,30 @@ abajo (unas pocas lecturas por salto, solo cuando alguien navega).
 
 ---
 
+## 5.31. Dashboard "Hoy": tarjetas tocables con la lista de niños (2026-09-29)
+
+Pedido de Rafael, con la condición explícita de **no hacerlo si afectaba
+mucho el consumo**. Evaluado antes de construir: **cero lecturas extra**.
+Cada lista es un subconjunto de lo que el bloque ya tiene cargado para
+calcular los números (`registrosDeDia()` + `_ninosPorId`).
+
+Las 6 tarjetas abren su lista (`_ListaDelDiaSheet`): Recibidos, Presentes /
+Sin salida registrada, Ya salieron, Visitantes, Sin documento y Mayores de 11
+años. Orden alfabético, con grupo, hora de entrada y servicio. Al tocar un
+niño se abre su ficha (con "Lo trajo hoy" solo si la fecha es hoy); un
+visitante abre `VisitanteDetalleSheet`, que se volvió pública en
+`ninos_presentes_screen.dart` para reusarla. Funciona con el filtro por día
+(sección 5.23). Una tarjeta en 0 no abre nada.
+
+**A propósito sin fotos en la lista:** "Recibidos" puede tener ~80 niños, y
+descargar sus fotos gastaría varios MB de datos móviles solo por abrirla. La
+foto se ve en la ficha. Un niño que entró dos veces el mismo día aparece dos
+veces con su hora, coherente con el número de la tarjeta (cuenta ingresos).
+
+**Costo:** $0. Solo hosting.
+
+---
+
 ## 6. Pantallas construidas (`lib/screens/`)
 
 ### `widgets/app_shell.dart` — estructura de navegación (2026-08-14)

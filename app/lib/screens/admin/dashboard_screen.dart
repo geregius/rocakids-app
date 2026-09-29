@@ -12,6 +12,7 @@ import '../../widgets/foto_avatar.dart';
 import '../../widgets/gestion_dialog.dart';
 import '../acudiente_detalle_sheet.dart';
 import '../nino_detalle_sheet.dart';
+import '../ninos_presentes_screen.dart' show VisitanteDetalleSheet;
 import 'user_edit_sheet.dart';
 
 /// Nombres cortos de cada servicio para que quepan como etiqueta de eje
@@ -109,7 +110,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             usuario: widget.usuario,
           ),
           const SizedBox(height: 12),
-          _BloqueInasistencia(authService: _authService, usuario: widget.usuario),
+          _BloqueInasistencia(
+            authService: _authService,
+            usuario: widget.usuario,
+          ),
           const SizedBox(height: 32),
           _TituloBloque('Pendientes'),
           const SizedBox(height: 8),
@@ -117,7 +121,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 32),
           _TituloBloque('Hoy'),
           const SizedBox(height: 8),
-          _BloqueHoy(authService: _authService),
+          _BloqueHoy(authService: _authService, usuario: widget.usuario),
           const SizedBox(height: 32),
           _TituloBloque('Histórico'),
           const SizedBox(height: 8),
@@ -198,7 +202,9 @@ class _BloqueTotales extends StatelessWidget {
             ),
             _StatTile(
               etiqueta: 'Servidores con perfil completo',
-              valor: servidoresConPerfil != null ? '${servidoresConPerfil.length}' : '…',
+              valor: servidoresConPerfil != null
+                  ? '${servidoresConPerfil.length}'
+                  : '…',
               // `Icons.verified_user` (2026-08-21) tenía el glifo bien
               // mapeado en la fuente subseteada (`cmap` verificado a
               // mano), pero seguía sin verse ni en incógnito con recarga
@@ -208,7 +214,8 @@ class _BloqueTotales extends StatelessWidget {
               // reutilizado y ya confirmado visualmente por Rafael antes
               // — evita introducir un ícono nunca antes usado en la app.
               icono: Icons.badge_outlined,
-              onTap: (servidoresConPerfil == null || servidoresConPerfil.isEmpty)
+              onTap:
+                  (servidoresConPerfil == null || servidoresConPerfil.isEmpty)
                   ? null
                   : () => showModalBottomSheet<void>(
                       context: context,
@@ -293,7 +300,8 @@ class _BloqueInasistencia extends StatelessWidget {
         final total = ninos?.length;
         if (total == 0) return const SizedBox.shrink();
         return _TarjetaPendiente(
-          etiqueta: 'Niños que dejaron de asistir (10+ entradas, 45+ días ausentes)',
+          etiqueta:
+              'Niños que dejaron de asistir (10+ entradas, 45+ días ausentes)',
           valor: total,
           icono: Icons.person_off,
           onTap: () => showModalBottomSheet<void>(
@@ -333,7 +341,8 @@ class _ListaInasistenciaSheet extends StatefulWidget {
   });
 
   @override
-  State<_ListaInasistenciaSheet> createState() => _ListaInasistenciaSheetState();
+  State<_ListaInasistenciaSheet> createState() =>
+      _ListaInasistenciaSheetState();
 }
 
 class _ListaInasistenciaSheetState extends State<_ListaInasistenciaSheet> {
@@ -361,16 +370,20 @@ class _ListaInasistenciaSheetState extends State<_ListaInasistenciaSheet> {
       );
       if (!mounted) return;
       if (resultado.nuevoEstado == 'Inactivo') {
-        setState(() => _ninos.removeWhere(
-          (n) => n.documentoIdentificacion == nino.documentoIdentificacion,
-        ));
+        setState(
+          () => _ninos.removeWhere(
+            (n) => n.documentoIdentificacion == nino.documentoIdentificacion,
+          ),
+        );
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gestión registrada.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Gestión registrada.')));
     } on AuthException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.mensaje)));
       }
     } catch (e) {
       if (mounted) {
@@ -392,7 +405,9 @@ class _ListaInasistenciaSheetState extends State<_ListaInasistenciaSheet> {
         return FutureBuilder<List<List<Acudiente>>>(
           future: Future.wait(
             widget.ninos.map(
-              (n) => widget.authService.obtenerAcudientesDeNino(n.documentoIdentificacion),
+              (n) => widget.authService.obtenerAcudientesDeNino(
+                n.documentoIdentificacion,
+              ),
             ),
           ),
           builder: (context, snapshot) {
@@ -413,7 +428,9 @@ class _ListaInasistenciaSheetState extends State<_ListaInasistenciaSheet> {
                       ? const Center(
                           child: Padding(
                             padding: EdgeInsets.all(24),
-                            child: Text('Ya no queda ninguno pendiente de gestionar.'),
+                            child: Text(
+                              'Ya no queda ninguno pendiente de gestionar.',
+                            ),
                           ),
                         )
                       : ListView.separated(
@@ -427,10 +444,13 @@ class _ListaInasistenciaSheetState extends State<_ListaInasistenciaSheet> {
                             // cambia aunque `_ninos` ya haya quitado a
                             // alguien tras una gestión.
                             final indiceOriginal = widget.ninos.indexWhere(
-                              (n) => n.documentoIdentificacion == nino.documentoIdentificacion,
+                              (n) =>
+                                  n.documentoIdentificacion ==
+                                  nino.documentoIdentificacion,
                             );
                             final acudientes =
-                                (acudientesPorNino != null && indiceOriginal >= 0)
+                                (acudientesPorNino != null &&
+                                    indiceOriginal >= 0)
                                 ? acudientesPorNino[indiceOriginal]
                                 : const <Acudiente>[];
                             return _FilaNinoInasistente(
@@ -493,7 +513,10 @@ class _FilaNinoInasistente extends StatelessWidget {
                       ? NetworkImage(nino.fotoUrl)
                       : null,
                   child: nino.fotoUrl.isEmpty
-                      ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
+                      ? const Icon(
+                          Icons.child_care,
+                          color: AppColors.textoPrincipal,
+                        )
                       : null,
                 ),
                 const SizedBox(width: 12),
@@ -501,7 +524,10 @@ class _FilaNinoInasistente extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(nino.nombreCompleto, style: Theme.of(context).textTheme.titleSmall),
+                      Text(
+                        nino.nombreCompleto,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
                       Text(
                         ultima != null
                             ? 'Última asistencia: ${_formatearFecha(ultima)} '
@@ -512,7 +538,10 @@ class _FilaNinoInasistente extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: AppColors.textoPrincipal),
+                const Icon(
+                  Icons.chevron_right,
+                  color: AppColors.textoPrincipal,
+                ),
               ],
             ),
           ),
@@ -818,8 +847,9 @@ class _ListaPendientesSheet extends StatelessWidget {
 /// mucho más chico.
 class _BloqueHoy extends StatefulWidget {
   final AuthService authService;
+  final UsuarioApp usuario;
 
-  const _BloqueHoy({required this.authService});
+  const _BloqueHoy({required this.authService, required this.usuario});
 
   @override
   State<_BloqueHoy> createState() => _BloqueHoyState();
@@ -833,12 +863,37 @@ class _BloqueHoyState extends State<_BloqueHoy> {
 
   bool get _esHoy {
     final hoy = DateTime.now();
-    return _dia.year == hoy.year && _dia.month == hoy.month && _dia.day == hoy.day;
+    return _dia.year == hoy.year &&
+        _dia.month == hoy.month &&
+        _dia.day == hoy.day;
   }
 
   String get _diaTexto =>
       '${_dia.day.toString().padLeft(2, '0')}/'
       '${_dia.month.toString().padLeft(2, '0')}/${_dia.year}';
+
+  /// Tarjetas tocables del bloque (2026-09-29, pedido de Rafael: "poder
+  /// dar click y ver el listado de niños y la información").
+  ///
+  /// **Cero lecturas extra:** cada lista es un subconjunto de
+  /// `registrosDeDia()` y de `_ninosPorId`, que ya están cargados para
+  /// calcular los números de las tarjetas. Solo al tocar un niño se abre
+  /// su ficha, que hace sus propias lecturas como en cualquier otra
+  /// pantalla. Sin tarjetas con 0, no hay nada que abrir.
+  void _abrirLista(String titulo, List<Registro> registros) {
+    if (registros.isEmpty) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _ListaDelDiaSheet(
+        titulo: titulo,
+        registros: registros,
+        ninosPorId: _ninosPorId,
+        usuario: widget.usuario,
+        esHoy: _esHoy,
+      ),
+    );
+  }
 
   Future<void> _elegirDia() async {
     final elegido = await showDatePicker(
@@ -914,6 +969,18 @@ class _BloqueHoyState extends State<_BloqueHoy> {
             .where((r) => !r.esVisitante && r.grupoEdad.isEmpty)
             .length;
 
+        // Las listas de cada tarjeta (ver [_abrirLista]).
+        final listaYaSalieron = entradasHoy
+            .where((e) => !presentes.contains(e))
+            .toList();
+        final listaVisitantes = entradasHoy
+            .where((r) => r.esVisitante)
+            .toList();
+        final listaSinDocumento = entradasHoy.where(_sinDocumento).toList();
+        final listaMayores = entradasHoy
+            .where((r) => !r.esVisitante && r.grupoEdad.isEmpty)
+            .toList();
+
         final porGrupo = <String, int>{for (final g in gruposEdad) g: 0};
         final porServicio = <String, int>{
           for (final s in serviciosDisponibles) s: 0,
@@ -956,34 +1023,48 @@ class _BloqueHoyState extends State<_BloqueHoy> {
               children: [
                 _StatTile(
                   etiqueta: _esHoy ? 'Recibidos hoy' : 'Recibidos ese día',
+                  onTap: () => _abrirLista(
+                    _esHoy ? 'Recibidos hoy' : 'Recibidos ese día',
+                    entradasHoy,
+                  ),
                   valor: '${entradasHoy.length}',
                   icono: Icons.groups,
                 ),
                 _StatTile(
                   // En un día pasado "presentes ahora" no significa nada:
                   // son los que nunca recibieron Salida ese día.
-                  etiqueta: _esHoy ? 'Presentes ahora' : 'Sin salida registrada',
+                  etiqueta: _esHoy
+                      ? 'Presentes ahora'
+                      : 'Sin salida registrada',
+                  onTap: () => _abrirLista(
+                    _esHoy ? 'Presentes ahora' : 'Sin salida registrada',
+                    presentes,
+                  ),
                   valor: '${presentes.length}',
                   icono: Icons.child_care,
                 ),
                 _StatTile(
                   etiqueta: 'Ya salieron',
+                  onTap: () => _abrirLista('Ya salieron', listaYaSalieron),
                   valor: '${yaSalieron < 0 ? 0 : yaSalieron}',
                   icono: Icons.logout,
                 ),
                 _StatTile(
                   etiqueta: 'Visitantes',
+                  onTap: () => _abrirLista('Visitantes', listaVisitantes),
                   valor: '$visitantes',
                   icono: Icons.person_add_alt,
                 ),
                 _StatTile(
                   etiqueta: 'Sin documento',
+                  onTap: () => _abrirLista('Sin documento', listaSinDocumento),
                   valor: '$sinDocumento',
                   icono: Icons.badge_outlined,
                   destacar: sinDocumento > 0,
                 ),
                 _StatTile(
                   etiqueta: 'Mayores de 11 años',
+                  onTap: () => _abrirLista('Mayores de 11 años', listaMayores),
                   valor: '$mayoresDeOnce',
                   icono: Icons.groups,
                 ),
@@ -1079,7 +1160,8 @@ class _BloqueHistoricoState extends State<_BloqueHistorico> {
               );
             }
             final resumenPorMes = {
-              for (final r in resumenes) DateTime(r.mes.year, r.mes.month, 1): r,
+              for (final r in resumenes)
+                DateTime(r.mes.year, r.mes.month, 1): r,
             };
 
             final hoy = DateTime.now();
@@ -1107,7 +1189,8 @@ class _BloqueHistoricoState extends State<_BloqueHistorico> {
               if (resumen == null) continue;
               for (final entry in resumen.porServicio.entries) {
                 if (porServicio.containsKey(entry.key)) {
-                  porServicio[entry.key] = (porServicio[entry.key] ?? 0) + entry.value;
+                  porServicio[entry.key] =
+                      (porServicio[entry.key] ?? 0) + entry.value;
                 }
               }
             }
@@ -1128,7 +1211,8 @@ class _BloqueHistoricoState extends State<_BloqueHistorico> {
               if (resumen == null) continue;
               for (final entry in resumen.ocasionesPorServicio.entries) {
                 if (ocasiones.containsKey(entry.key)) {
-                  ocasiones[entry.key] = (ocasiones[entry.key] ?? 0) + entry.value;
+                  ocasiones[entry.key] =
+                      (ocasiones[entry.key] ?? 0) + entry.value;
                 }
               }
             }
@@ -1139,7 +1223,8 @@ class _BloqueHistoricoState extends State<_BloqueHistorico> {
               // 0: "0 niños en promedio" se leería como "no fue nadie",
               // cuando lo cierto es que no hubo servicio.
               if (veces > 0) {
-                promedioPorServicio[s] = ((porServicio[s] ?? 0) / veces).round();
+                promedioPorServicio[s] = ((porServicio[s] ?? 0) / veces)
+                    .round();
               }
             }
 
@@ -1150,7 +1235,11 @@ class _BloqueHistoricoState extends State<_BloqueHistorico> {
             // mes dentro de la ventana.
             var acumulado = 0.0;
             for (final r in resumenes) {
-              if (DateTime(r.mes.year, r.mes.month, 1).isBefore(inicioVentana)) {
+              if (DateTime(
+                r.mes.year,
+                r.mes.month,
+                1,
+              ).isBefore(inicioVentana)) {
                 acumulado += r.ninosNuevos;
               }
             }
@@ -1230,9 +1319,16 @@ class _StatTile extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(icono, color: destacar ? AppColors.rojo : AppColors.azulMarino),
+              Icon(
+                icono,
+                color: destacar ? AppColors.rojo : AppColors.azulMarino,
+              ),
               if (onTap != null)
-                const Icon(Icons.chevron_right, color: AppColors.textoPrincipal, size: 18),
+                const Icon(
+                  Icons.chevron_right,
+                  color: AppColors.textoPrincipal,
+                  size: 18,
+                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -1265,7 +1361,10 @@ class _ListaServidoresPerfilSheet extends StatelessWidget {
   final List<UsuarioApp> servidores;
   final UsuarioApp usuario;
 
-  const _ListaServidoresPerfilSheet({required this.servidores, required this.usuario});
+  const _ListaServidoresPerfilSheet({
+    required this.servidores,
+    required this.usuario,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1643,6 +1742,110 @@ class _GraficaLinea extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Lista de niños detrás de una tarjeta del bloque "Hoy" (2026-09-29).
+///
+/// A propósito **sin fotos**: una tarjeta como "Recibidos" puede tener 80
+/// niños, y descargar esas fotos gastaría varios MB de datos móviles solo
+/// por abrir la lista. La foto se ve en la ficha, al tocar al niño.
+///
+/// Un niño que entró dos veces el mismo día (dos servicios) aparece dos
+/// veces, con su hora: es el mismo criterio del número de la tarjeta, que
+/// cuenta ingresos, no niños distintos.
+class _ListaDelDiaSheet extends StatelessWidget {
+  final String titulo;
+  final List<Registro> registros;
+  final Map<String, Nino> ninosPorId;
+  final UsuarioApp usuario;
+  final bool esHoy;
+
+  const _ListaDelDiaSheet({
+    required this.titulo,
+    required this.registros,
+    required this.ninosPorId,
+    required this.usuario,
+    required this.esHoy,
+  });
+
+  String _nombre(Registro r) => r.esVisitante
+      ? r.nombreNinoVisitante
+      : (ninosPorId[r.fkIdNino]?.nombreCompleto ?? '(sin datos del niño)');
+
+  String _hora(DateTime f) =>
+      '${f.hour.toString().padLeft(2, '0')}:${f.minute.toString().padLeft(2, '0')}';
+
+  void _abrir(BuildContext context, Registro r) {
+    final nino = ninosPorId[r.fkIdNino];
+    if (!r.esVisitante && nino == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => r.esVisitante
+          ? VisitanteDetalleSheet(registro: r)
+          : NinoDetalleSheet(
+              nino: nino!,
+              usuario: usuario,
+              // "Lo trajo hoy" solo tiene sentido si la lista es de HOY.
+              registroDeHoy: esHoy ? r : null,
+            ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ordenados = [...registros]
+      ..sort(
+        (a, b) => _nombre(a).toLowerCase().compareTo(_nombre(b).toLowerCase()),
+      );
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Text(
+                '$titulo (${ordenados.length})',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                itemCount: ordenados.length,
+                itemBuilder: (context, i) {
+                  final r = ordenados[i];
+                  final detalle = [
+                    if (r.esVisitante) 'Visitante',
+                    if (r.grupoEdad.isNotEmpty) 'Grupo ${r.grupoEdad}',
+                    'Entró ${_hora(r.fechaMovimiento)}',
+                    if (r.servicio.isNotEmpty)
+                      _servicioCorto[r.servicio] ?? r.servicio,
+                  ].join(' · ');
+                  return ListTile(
+                    leading: Icon(
+                      r.esVisitante ? Icons.person_add_alt : Icons.child_care,
+                      color: AppColors.azulMarino,
+                    ),
+                    title: Text(_nombre(r)),
+                    subtitle: Text(detalle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _abrir(context, r),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

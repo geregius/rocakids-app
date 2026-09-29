@@ -125,7 +125,8 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
   /// o escanear la manilla, 2026-08-18).
   Future<void> _darSalida(
     Registro entrada, {
-    String observacion = 'Salida registrada deslizando la tarjeta en Menores Registrados.',
+    String observacion =
+        'Salida registrada deslizando la tarjeta en Menores Registrados.',
   }) async {
     setState(() => _ocultosOptimista.add(entrada.id));
     final salida = Registro(
@@ -197,14 +198,17 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
       presentes.map(
         (entrada) => _darSalida(
           entrada,
-          observacion: 'Salida masiva registrada por liderazgo desde Menores Registrados.',
+          observacion:
+              'Salida masiva registrada por liderazgo desde Menores Registrados.',
         ),
       ),
     );
     if (mounted) {
       setState(() => _retirandoATodos = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Se registró la salida de todos los niños presentes.')),
+        const SnackBar(
+          content: Text('Se registró la salida de todos los niños presentes.'),
+        ),
       );
     }
   }
@@ -278,7 +282,8 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
     if (confirmar == true) {
       await _darSalida(
         registro,
-        observacion: 'Salida registrada escaneando la manilla en Menores Registrados.',
+        observacion:
+            'Salida registrada escaneando la manilla en Menores Registrados.',
       );
     }
   }
@@ -291,14 +296,16 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
     }
     for (final lista in grupos.values) {
       lista.sort(
-        (a, b) => _nombreDe(a).toLowerCase().compareTo(_nombreDe(b).toLowerCase()),
+        (a, b) =>
+            _nombreDe(a).toLowerCase().compareTo(_nombreDe(b).toLowerCase()),
       );
     }
     return grupos;
   }
 
-  String _nombreDe(Registro r) =>
-      r.esVisitante ? r.nombreNinoVisitante : (_ninosPorId[r.fkIdNino]?.nombreCompleto ?? '(sin datos)');
+  String _nombreDe(Registro r) => r.esVisitante
+      ? r.nombreNinoVisitante
+      : (_ninosPorId[r.fkIdNino]?.nombreCompleto ?? '(sin datos)');
 
   @override
   Widget build(BuildContext context) {
@@ -328,7 +335,8 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
             tooltip: 'Registrar una nueva asistencia',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => RegistroAsistenciaScreen(usuario: widget.usuario),
+                builder: (_) =>
+                    RegistroAsistenciaScreen(usuario: widget.usuario),
               ),
             ),
             child: const Icon(Icons.add),
@@ -336,73 +344,75 @@ class _NinosPresentesScreenState extends State<NinosPresentesScreen> {
         ],
       ),
       body: (context) => StreamBuilder<List<Registro>>(
-              stream: _authService.registrosDeHoy(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-                final presentes = _calcularPresentes(snapshot.data ?? []);
-                _asegurarNinosCargados(
-                  presentes.where((r) => !r.esVisitante).map((r) => r.fkIdNino),
-                );
-                final grupos = _agruparPorEdad(presentes);
-                final ordenados = [
-                  ...gruposEdad,
-                  if (grupos.containsKey(_sinGrupo)) _sinGrupo,
-                ];
+        stream: _authService.registrosDeHoy(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          final presentes = _calcularPresentes(snapshot.data ?? []);
+          _asegurarNinosCargados(
+            presentes.where((r) => !r.esVisitante).map((r) => r.fkIdNino),
+          );
+          final grupos = _agruparPorEdad(presentes);
+          final ordenados = [
+            ...gruposEdad,
+            if (grupos.containsKey(_sinGrupo)) _sinGrupo,
+          ];
 
-                if (presentes.isEmpty) {
-                  return const Center(
-                    child: Text('No hay niños presentes en este momento.'),
-                  );
-                }
+          if (presentes.isEmpty) {
+            return const Center(
+              child: Text('No hay niños presentes en este momento.'),
+            );
+          }
 
-                return ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Total presentes: ${presentes.length}',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ),
-                        if (_esLiderazgo)
-                          OutlinedButton.icon(
-                            onPressed: _retirandoATodos
-                                ? null
-                                : () => _retirarATodos(presentes),
-                            style: OutlinedButton.styleFrom(foregroundColor: AppColors.rojo),
-                            icon: _retirandoATodos
-                                ? const SizedBox(
-                                    height: 16,
-                                    width: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.logout),
-                            label: const Text('Retirar a todos'),
-                          ),
-                      ],
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Total presentes: ${presentes.length}',
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    const SizedBox(height: 16),
-                    for (final grupo in ordenados)
-                      if (grupos[grupo] != null)
-                        _GrupoSection(
-                          key: ValueKey(grupo),
-                          nombre: grupo,
-                          registros: grupos[grupo]!,
-                          ninosPorId: _ninosPorId,
-                          usuario: widget.usuario,
-                          onDarSalida: _darSalida,
-                        ),
-                  ],
-                );
-              },
-            ),
+                  ),
+                  if (_esLiderazgo)
+                    OutlinedButton.icon(
+                      onPressed: _retirandoATodos
+                          ? null
+                          : () => _retirarATodos(presentes),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.rojo,
+                      ),
+                      icon: _retirandoATodos
+                          ? const SizedBox(
+                              height: 16,
+                              width: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.logout),
+                      label: const Text('Retirar a todos'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              for (final grupo in ordenados)
+                if (grupos[grupo] != null)
+                  _GrupoSection(
+                    key: ValueKey(grupo),
+                    nombre: grupo,
+                    registros: grupos[grupo]!,
+                    ninosPorId: _ninosPorId,
+                    usuario: widget.usuario,
+                    onDarSalida: _darSalida,
+                  ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -499,7 +509,7 @@ class _NinoPresenteTile extends StatelessWidget {
       showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
-        builder: (_) => _VisitanteDetalleSheet(registro: registro),
+        builder: (_) => VisitanteDetalleSheet(registro: registro),
       );
     }
   }
@@ -510,8 +520,9 @@ class _NinoPresenteTile extends StatelessWidget {
     final nombre = registro.esVisitante
         ? registro.nombreNinoVisitante
         : (nino?.nombreCompleto ?? '(sin datos)');
-    final tieneAlertaMedica =
-        registro.esVisitante ? registro.alertaMedicaVisitante : (nino?.alertaMedicaFlag ?? false);
+    final tieneAlertaMedica = registro.esVisitante
+        ? registro.alertaMedicaVisitante
+        : (nino?.alertaMedicaFlag ?? false);
     final tieneNoAutorizados = nino?.tieneNoAutorizados ?? false;
     // Los visitantes no tienen ficha (`Nino`), así que no hay ningún
     // registro de autorización de imagen que consultar para ellos — la
@@ -526,7 +537,9 @@ class _NinoPresenteTile extends StatelessWidget {
     // Los visitantes no tienen fecha de nacimiento registrada (ver
     // docstring de `Registro`), así que solo aplica a niños con ficha —
     // misma lógica exacta de "Cumpleaños niños" (`diasDesdeCumpleanos`).
-    final diasDeCumpleanos = nino != null ? diasDesdeCumpleanos(nino.fechaNacimiento) : null;
+    final diasDeCumpleanos = nino != null
+        ? diasDesdeCumpleanos(nino.fechaNacimiento)
+        : null;
 
     return Dismissible(
       key: ValueKey(registro.id),
@@ -555,15 +568,21 @@ class _NinoPresenteTile extends StatelessWidget {
                 children: [
                   if (diasDeCumpleanos != null) ...[
                     _BadgeCumpleanos(dias: diasDeCumpleanos),
-                    if (tieneAlertaMedica || tieneNoAutorizados || noAutorizaImagen)
+                    if (tieneAlertaMedica ||
+                        tieneNoAutorizados ||
+                        noAutorizaImagen)
                       const SizedBox(width: 6),
                   ],
                   if (tieneAlertaMedica) ...[
                     const Tooltip(
                       message: 'Tiene condición médica/alergia registrada',
-                      child: Icon(Icons.medical_information, color: AppColors.rojo),
+                      child: Icon(
+                        Icons.medical_information,
+                        color: AppColors.rojo,
+                      ),
                     ),
-                    if (tieneNoAutorizados || noAutorizaImagen) const SizedBox(width: 6),
+                    if (tieneNoAutorizados || noAutorizaImagen)
+                      const SizedBox(width: 6),
                   ],
                   if (tieneNoAutorizados) ...[
                     const Tooltip(
@@ -576,7 +595,8 @@ class _NinoPresenteTile extends StatelessWidget {
                   ],
                   if (noAutorizaImagen)
                     const Tooltip(
-                      message: 'NO autoriza uso de imagen — no tomarle fotos ni videos',
+                      message:
+                          'NO autoriza uso de imagen — no tomarle fotos ni videos',
                       child: Icon(Icons.no_photography, color: AppColors.rojo),
                     ),
                 ],
@@ -595,7 +615,10 @@ class _NinoPresenteTile extends StatelessWidget {
         children: [
           Icon(Icons.logout, color: Colors.white),
           SizedBox(width: 8),
-          Text('Salida', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          Text(
+            'Salida',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
         ],
       ),
     );
@@ -647,9 +670,12 @@ class _BadgeCumpleanos extends StatelessWidget {
 
 /// Ficha mínima de un niño VISITANTE (no tiene documento `Nino` en la
 /// base — sus datos viven solo en el `Registro` de su entrada de hoy).
-class _VisitanteDetalleSheet extends StatelessWidget {
+/// Ficha de un niño VISITANTE (sin cuenta en `ninos`), armada solo con lo
+/// que quedó en su `Registro`. Pública desde el 2026-09-29 para reusarla
+/// desde las listas del bloque "Hoy" del Dashboard.
+class VisitanteDetalleSheet extends StatelessWidget {
   final Registro registro;
-  const _VisitanteDetalleSheet({required this.registro});
+  const VisitanteDetalleSheet({super.key, required this.registro});
 
   @override
   Widget build(BuildContext context) {
@@ -714,7 +740,10 @@ class _VisitanteDetalleSheet extends StatelessWidget {
                   ),
                   Expanded(child: Text(registro.telefonoAcudienteVisitante)),
                   IconButton(
-                    onPressed: () => llamarTelefono(context, registro.telefonoAcudienteVisitante),
+                    onPressed: () => llamarTelefono(
+                      context,
+                      registro.telefonoAcudienteVisitante,
+                    ),
                     icon: const Icon(Icons.call, color: AppColors.azulMarino),
                     tooltip: 'Llamar a ${registro.telefonoAcudienteVisitante}',
                     visualDensity: VisualDensity.compact,
