@@ -36,14 +36,22 @@ Future<void> mostrarFotoAmpliada(BuildContext context, String url) {
               ),
             ),
           ),
+          // "Volver" arriba a la izquierda (2026-09-29, pedido de Rafael),
+          // igual que en las fichas: antes solo había una X pequeña en la
+          // esquina, poco evidente sobre la foto. Fondo semitransparente
+          // para que se lea sobre cualquier imagen.
           Positioned(
             top: 8,
-            right: 8,
+            left: 8,
             child: SafeArea(
-              child: IconButton(
+              child: TextButton.icon(
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close, color: Colors.white),
-                tooltip: 'Cerrar',
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.black54,
+                ),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Volver'),
               ),
             ),
           ),

@@ -1248,7 +1248,10 @@ que muestra ya eran legibles para esos roles.
 las dos fichas la abre en pantalla completa, con zoom de dos dedos o rueda del
 mouse (`InteractiveViewer`). **No guarda ni descarga otra versión**: usa la
 misma URL de la miniatura, que ya carga la imagen completa, así que sale de
-la caché del navegador. Sin foto, el avatar no reacciona.
+la caché del navegador. Sin foto, el avatar no reacciona. Se cierra con un
+botón **"Volver"** arriba a la izquierda (mismo estilo que las fichas, sobre
+fondo semitransparente para que se lea en cualquier foto) — reemplazó a la X
+pequeña de la esquina, a pedido de Rafael el mismo día.
 
 **Costo:** $0. Solo hosting. Al volver de una ficha se relee la lista de la de
 abajo (unas pocas lecturas por salto, solo cuando alguien navega).
