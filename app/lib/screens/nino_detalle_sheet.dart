@@ -11,6 +11,8 @@ import '../theme/app_colors.dart';
 import '../utils/llamar_telefono.dart';
 import '../widgets/confirmar_eliminar.dart';
 import '../widgets/gestion_dialog.dart';
+import '../widgets/foto_ampliable.dart';
+import 'acudiente_detalle_sheet.dart';
 import 'editar_nino_sheet.dart';
 
 /// Hoja inferior con la ficha completa de un niño: foto, documento, edad
@@ -33,11 +35,16 @@ class NinoDetalleSheet extends StatefulWidget {
   // Niños, Dashboard) — ahí simplemente no hay nadie priorizado.
   final Registro? registroDeHoy;
 
+  /// Se abrió desde la ficha de un acudiente (2026-09-29): muestra el
+  /// botón "Volver" arriba, que cierra esta ficha y deja ver la anterior.
+  final bool desdeOtraFicha;
+
   const NinoDetalleSheet({
     super.key,
     required this.nino,
     required this.usuario,
     this.registroDeHoy,
+    this.desdeOtraFicha = false,
   });
 
   @override
@@ -114,12 +121,15 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
       );
       // El que lo trajo hoy va primero, para priorizarlo en la lista —
       // pedido explícito de Rafael.
-      final acudienteQueLoTrajoHoyId = widget.registroDeHoy?.fkIdAcudienteContacto;
+      final acudienteQueLoTrajoHoyId =
+          widget.registroDeHoy?.fkIdAcudienteContacto;
       lista.sort((a, b) {
         final aEsHoy = a.uid == acudienteQueLoTrajoHoyId;
         final bEsHoy = b.uid == acudienteQueLoTrajoHoyId;
         if (aEsHoy != bEsHoy) return aEsHoy ? -1 : 1;
-        return a.nombreCompleto.toLowerCase().compareTo(b.nombreCompleto.toLowerCase());
+        return a.nombreCompleto.toLowerCase().compareTo(
+          b.nombreCompleto.toLowerCase(),
+        );
       });
       if (mounted) {
         setState(() {
@@ -134,9 +144,12 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
 
   Future<void> _verificarPermiso() async {
     final esAdmin = widget.usuario.rol == RolUsuario.administrador;
-    final relacion = await AuthService().obtenerMiRelacionConNino(_nino.documentoIdentificacion);
+    final relacion = await AuthService().obtenerMiRelacionConNino(
+      _nino.documentoIdentificacion,
+    );
     final esPadreOMadre =
-        relacion?.parentescoTipo == 'Padre' || relacion?.parentescoTipo == 'Madre';
+        relacion?.parentescoTipo == 'Padre' ||
+        relacion?.parentescoTipo == 'Madre';
     // 2026-09-13: antes era `esAdmin || esPadreOMadre`, o sea que ni el
     // liderazgo podía corregir un dato desde la ficha — aunque
     // `firestore.rules` SÍ lo permite a cualquier rol de check-in y
@@ -170,7 +183,9 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
   /// que mostrar", no como un error visible.
   Future<void> _cargarGestiones() async {
     try {
-      final lista = await AuthService().obtenerGestiones(_nino.documentoIdentificacion);
+      final lista = await AuthService().obtenerGestiones(
+        _nino.documentoIdentificacion,
+      );
       if (mounted) {
         setState(() {
           _gestiones = lista;
@@ -205,13 +220,15 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
         setState(() {
           if (actualizado != null) _nino = actualizado;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gestión registrada.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Gestión registrada.')));
       }
     } on AuthException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.mensaje)));
       }
     } catch (e) {
       if (mounted) {
@@ -230,7 +247,9 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
   /// simplemente no ve esta sección).
   Future<void> _cargarNoAutorizados() async {
     try {
-      final lista = await AuthService().obtenerNoAutorizados(_nino.documentoIdentificacion);
+      final lista = await AuthService().obtenerNoAutorizados(
+        _nino.documentoIdentificacion,
+      );
       if (mounted) {
         setState(() {
           _noAutorizados = lista;
@@ -260,7 +279,9 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
       await _cargarNoAutorizados();
     } on AuthException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.mensaje)));
       }
     } catch (e) {
       if (mounted) {
@@ -304,7 +325,9 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
       await _cargarNoAutorizados();
     } on AuthException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.mensaje)));
       }
     } catch (e) {
       if (mounted) {
@@ -313,6 +336,29 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
         ).showSnackBar(SnackBar(content: Text('No se pudo quitar: $e')));
       }
     }
+  }
+
+  /// Salto a la ficha de un acudiente (2026-09-29, pedido de Rafael).
+  /// Solo para quien puede ver "Acudientes y Niños" (liderazgo y maestros
+  /// principales): esta misma ficha se abre desde Menores Registrados, donde
+  /// también la ven roles que NO tienen acceso a la información completa de
+  /// los acudientes. Se abre en solo lectura para quien no puede editarlos
+  /// (mismo criterio que en "Acudientes y Niños"). Al volver se recarga la
+  /// lista, por si se editó algo del acudiente.
+  bool get _puedeAbrirAcudientes => widget.usuario.rol.puedeVerAcudientesYNinos;
+
+  Future<void> _abrirAcudiente(Acudiente acudiente) async {
+    await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => AcudienteDetalleSheet(
+        acudiente: acudiente,
+        usuario: widget.usuario,
+        soloLectura: !widget.usuario.rol.puedeEditarAcudientes,
+        desdeOtraFicha: true,
+      ),
+    );
+    if (mounted) _cargarAcudientes();
   }
 
   Future<void> _abrirEdicion() async {
@@ -330,7 +376,10 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
   }
 
   Future<void> _eliminar() async {
-    final confirmado = await confirmarEliminar(context, nombre: _nino.nombreCompleto);
+    final confirmado = await confirmarEliminar(
+      context,
+      nombre: _nino.nombreCompleto,
+    );
     if (!confirmado) return;
     setState(() => _eliminando = true);
     try {
@@ -339,9 +388,9 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _eliminando = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo eliminar: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
       }
     }
   }
@@ -386,9 +435,9 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
     } on AuthException catch (e) {
       if (mounted) {
         setState(() => _desvinculando = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.mensaje)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.mensaje)));
       }
     } catch (e) {
       if (mounted) {
@@ -418,25 +467,46 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (widget.desdeOtraFicha)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Volver'),
+                ),
+              ),
             Row(
               children: [
-                CircleAvatar(
-                  radius: 32,
-                  backgroundColor: AppColors.amarillo,
-                  backgroundImage:
-                      nino.fotoUrl.isNotEmpty ? NetworkImage(nino.fotoUrl) : null,
-                  child: nino.fotoUrl.isEmpty
-                      ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
-                      : null,
+                FotoAmpliable(
+                  url: nino.fotoUrl,
+                  child: CircleAvatar(
+                    radius: 32,
+                    backgroundColor: AppColors.amarillo,
+                    backgroundImage: nino.fotoUrl.isNotEmpty
+                        ? NetworkImage(nino.fotoUrl)
+                        : null,
+                    child: nino.fotoUrl.isEmpty
+                        ? const Icon(
+                            Icons.child_care,
+                            color: AppColors.textoPrincipal,
+                          )
+                        : null,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(nino.nombreCompleto, style: Theme.of(context).textTheme.titleLarge),
                       Text(
-                        grupo != null ? '$edad años · Grupo $grupo' : '$edad años',
+                        nino.nombreCompleto,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      Text(
+                        grupo != null
+                            ? '$edad años · Grupo $grupo'
+                            : '$edad años',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -445,17 +515,32 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
               ],
             ),
             const SizedBox(height: 16),
-            _FilaDato('Documento', '${nino.tipoIdentificacion}: '
-                '${nino.identificacionMenor.isNotEmpty ? nino.identificacionMenor : 'Sin documento'}'),
-            _FilaDato('Fecha de nacimiento', _formatearFecha(nino.fechaNacimiento)),
+            _FilaDato(
+              'Documento',
+              '${nino.tipoIdentificacion}: '
+                  '${nino.identificacionMenor.isNotEmpty ? nino.identificacionMenor : 'Sin documento'}',
+            ),
+            _FilaDato(
+              'Fecha de nacimiento',
+              _formatearFecha(nino.fechaNacimiento),
+            ),
             _FilaDato('Género', nino.genero),
             _FilaDato('Estado', nino.estadoRegistro),
-            _FilaDato('Autoriza uso de imagen', nino.autorizoFotoFlag ? 'Sí' : 'No'),
+            _FilaDato(
+              'Autoriza uso de imagen',
+              nino.autorizoFotoFlag ? 'Sí' : 'No',
+            ),
             if (_muestraAcudientes &&
                 !_cargandoAcudientes &&
                 (_acudientes.isNotEmpty || _hayContactoOtroHoy)) ...[
               const SizedBox(height: 12),
-              _SeccionAcudientes(acudientes: _acudientes, registroDeHoy: widget.registroDeHoy),
+              _SeccionAcudientes(
+                acudientes: _acudientes,
+                registroDeHoy: widget.registroDeHoy,
+                onAbrirAcudiente: _puedeAbrirAcudientes
+                    ? _abrirAcudiente
+                    : null,
+              ),
             ],
             if (!nino.autorizoFotoFlag) ...[
               const SizedBox(height: 12),
@@ -473,7 +558,10 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
                     Expanded(
                       child: Text(
                         'NO autoriza uso de imagen — no tomarle fotos ni videos.',
-                        style: TextStyle(color: AppColors.rojo, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: AppColors.rojo,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
@@ -491,7 +579,10 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.medical_information, color: AppColors.rojo),
+                    const Icon(
+                      Icons.medical_information,
+                      color: AppColors.rojo,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -517,7 +608,9 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: _agregandoNoAutorizado ? null : _agregarNoAutorizado,
-                style: OutlinedButton.styleFrom(foregroundColor: AppColors.rojo),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.rojo,
+                ),
                 icon: _agregandoNoAutorizado
                     ? const SizedBox(
                         height: 16,
@@ -528,7 +621,9 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
                 label: const Text('Agregar persona NO autorizada'),
               ),
             ],
-            if (_esLiderazgo && !_cargandoGestiones && _gestiones.isNotEmpty) ...[
+            if (_esLiderazgo &&
+                !_cargandoGestiones &&
+                _gestiones.isNotEmpty) ...[
               const SizedBox(height: 12),
               _SeccionGestiones(gestiones: _gestiones),
             ],
@@ -558,7 +653,9 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: _desvinculando ? null : _desvincularme,
-                style: OutlinedButton.styleFrom(foregroundColor: AppColors.rojo),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.rojo,
+                ),
                 icon: _desvinculando
                     ? const SizedBox(
                         height: 16,
@@ -573,7 +670,9 @@ class _NinoDetalleSheetState extends State<NinoDetalleSheet> {
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: _eliminando ? null : _eliminar,
-                style: OutlinedButton.styleFrom(foregroundColor: AppColors.rojo),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.rojo,
+                ),
                 icon: _eliminando
                     ? const SizedBox(
                         height: 16,
@@ -615,7 +714,10 @@ class _SeccionGestiones extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.fact_check_outlined, color: AppColors.azulMarino),
+              const Icon(
+                Icons.fact_check_outlined,
+                color: AppColors.azulMarino,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Historial de gestión',
@@ -649,13 +751,21 @@ class _SeccionGestiones extends StatelessWidget {
 class _SeccionAcudientes extends StatelessWidget {
   final List<Acudiente> acudientes;
   final Registro? registroDeHoy;
+  // Null = las filas no se pueden tocar (quien mira no tiene acceso a la
+  // ficha completa del acudiente).
+  final ValueChanged<Acudiente>? onAbrirAcudiente;
 
-  const _SeccionAcudientes({required this.acudientes, required this.registroDeHoy});
+  const _SeccionAcudientes({
+    required this.acudientes,
+    required this.registroDeHoy,
+    this.onAbrirAcudiente,
+  });
 
   @override
   Widget build(BuildContext context) {
     final registro = registroDeHoy;
-    final esOtro = registro != null &&
+    final esOtro =
+        registro != null &&
         registro.fkIdAcudienteContacto.isEmpty &&
         registro.nombreAcudienteContacto.isNotEmpty;
 
@@ -687,7 +797,8 @@ class _SeccionAcudientes extends StatelessWidget {
               nombre: registro.nombreAcudienteContacto,
               telefono: registro.telefonoAcudienteContacto,
               loTrajoHoy: true,
-              nota: 'No está vinculado en el sistema — registrado hoy como "Otro"',
+              nota:
+                  'No está vinculado en el sistema — registrado hoy como "Otro"',
             ),
           ],
           for (final a in acudientes) ...[
@@ -696,6 +807,9 @@ class _SeccionAcudientes extends StatelessWidget {
               nombre: a.nombreCompleto,
               telefono: a.telefonoCelular,
               loTrajoHoy: a.uid == registro?.fkIdAcudienteContacto,
+              onTap: onAbrirAcudiente == null
+                  ? null
+                  : () => onAbrirAcudiente!(a),
             ),
           ],
         ],
@@ -709,12 +823,16 @@ class _FilaAcudiente extends StatelessWidget {
   final String telefono;
   final bool loTrajoHoy;
   final String? nota;
+  // Abre la ficha del acudiente. Null para el contacto "Otro", que no es
+  // un acudiente registrado, y para quien no tiene acceso a esas fichas.
+  final VoidCallback? onTap;
 
   const _FilaAcudiente({
     required this.nombre,
     required this.telefono,
     required this.loTrajoHoy,
     this.nota,
+    this.onTap,
   });
 
   @override
@@ -723,47 +841,59 @@ class _FilaAcudiente extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      nombre,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+          child: InkWell(
+            onTap: onTap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        nombre,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    if (loTrajoHoy) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.azulMarino,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          'Lo trajo hoy',
+                          style: TextStyle(color: Colors.white, fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                Text(
+                  telefono.isNotEmpty ? telefono : 'Sin teléfono registrado',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                if (nota != null)
+                  Text(
+                    nota!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontStyle: FontStyle.italic,
                     ),
                   ),
-                  if (loTrajoHoy) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.azulMarino,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'Lo trajo hoy',
-                        style: TextStyle(color: Colors.white, fontSize: 11),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              Text(
-                telefono.isNotEmpty ? telefono : 'Sin teléfono registrado',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              if (nota != null)
-                Text(
-                  nota!,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
+        if (onTap != null)
+          IconButton(
+            onPressed: onTap,
+            icon: const Icon(Icons.chevron_right, color: AppColors.azulMarino),
+            tooltip: 'Ver ficha del acudiente',
+          ),
         if (telefono.isNotEmpty)
           IconButton(
             onPressed: () => llamarTelefono(context, telefono),
@@ -832,7 +962,10 @@ class _SeccionNoAutorizados extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Personas NO autorizadas para retirar/tener contacto con este niño',
-                  style: TextStyle(color: AppColors.rojo, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: AppColors.rojo,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -864,7 +997,10 @@ class _SeccionNoAutorizados extends StatelessWidget {
                 if (puedeGestionar)
                   IconButton(
                     onPressed: () => onQuitar(entrada),
-                    icon: const Icon(Icons.delete_outline, color: AppColors.rojo),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: AppColors.rojo,
+                    ),
                     tooltip: 'Quitar de la lista',
                   ),
               ],
@@ -895,7 +1031,8 @@ class _AgregarNoAutorizadoDialog extends StatefulWidget {
       _AgregarNoAutorizadoDialogState();
 }
 
-class _AgregarNoAutorizadoDialogState extends State<_AgregarNoAutorizadoDialog> {
+class _AgregarNoAutorizadoDialogState
+    extends State<_AgregarNoAutorizadoDialog> {
   final _nombreController = TextEditingController();
   final _documentoController = TextEditingController();
   final _motivoController = TextEditingController();

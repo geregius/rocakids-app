@@ -6,7 +6,9 @@ import '../models/usuario_app.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/confirmar_eliminar.dart';
+import '../widgets/foto_ampliable.dart';
 import 'editar_acudiente_sheet.dart';
+import 'nino_detalle_sheet.dart';
 
 /// Hoja inferior con la ficha completa de un acudiente: documento,
 /// contacto, foto de seguridad y los niños que tiene vinculados. Quien
@@ -31,11 +33,16 @@ class AcudienteDetalleSheet extends StatefulWidget {
   /// `observacionesRestriccion`.
   final bool soloLectura;
 
+  /// Se abrió desde la ficha de un niño (2026-09-29): muestra el botón
+  /// "Volver" arriba, que cierra esta ficha y deja ver la anterior.
+  final bool desdeOtraFicha;
+
   const AcudienteDetalleSheet({
     super.key,
     required this.acudiente,
     required this.usuario,
     this.soloLectura = false,
+    this.desdeOtraFicha = false,
   });
 
   @override
@@ -73,6 +80,23 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
     }
   }
 
+  /// Salto a la ficha de uno de sus niños (2026-09-29, pedido de Rafael).
+  /// Esta ficha solo la abre quien puede ver "Acudientes y Niños", así que
+  /// no hace falta volver a acotar. Al volver se recarga la lista, por si
+  /// se editó algo del niño.
+  Future<void> _abrirNino(Nino nino) async {
+    await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => NinoDetalleSheet(
+        nino: nino,
+        usuario: widget.usuario,
+        desdeOtraFicha: true,
+      ),
+    );
+    if (mounted) _cargarHijos();
+  }
+
   Future<void> _abrirEdicion() async {
     final guardado = await showModalBottomSheet<bool>(
       context: context,
@@ -83,7 +107,10 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
   }
 
   Future<void> _eliminar() async {
-    final confirmado = await confirmarEliminar(context, nombre: _acudiente.nombreCompleto);
+    final confirmado = await confirmarEliminar(
+      context,
+      nombre: _acudiente.nombreCompleto,
+    );
     if (!confirmado) return;
     setState(() => _eliminando = true);
     try {
@@ -92,9 +119,9 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _eliminando = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo eliminar: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
       }
     }
   }
@@ -135,7 +162,9 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
       if (mounted) _cargarHijos();
     } on AuthException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.mensaje)));
       }
     } catch (e) {
       if (mounted) {
@@ -190,24 +219,42 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (widget.desdeOtraFicha)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Volver'),
+                ),
+              ),
             Row(
               children: [
-                CircleAvatar(
-                  radius: 32,
-                  backgroundColor: AppColors.azulClaro.withValues(alpha: 0.2),
-                  backgroundImage: a.fotoSeguridadUrl.isNotEmpty
-                      ? NetworkImage(a.fotoSeguridadUrl)
-                      : null,
-                  child: a.fotoSeguridadUrl.isEmpty
-                      ? const Icon(Icons.person, color: AppColors.textoPrincipal)
-                      : null,
+                FotoAmpliable(
+                  url: a.fotoSeguridadUrl,
+                  child: CircleAvatar(
+                    radius: 32,
+                    backgroundColor: AppColors.azulClaro.withValues(alpha: 0.2),
+                    backgroundImage: a.fotoSeguridadUrl.isNotEmpty
+                        ? NetworkImage(a.fotoSeguridadUrl)
+                        : null,
+                    child: a.fotoSeguridadUrl.isEmpty
+                        ? const Icon(
+                            Icons.person,
+                            color: AppColors.textoPrincipal,
+                          )
+                        : null,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(a.nombreCompleto, style: Theme.of(context).textTheme.titleLarge),
+                      Text(
+                        a.nombreCompleto,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
                       if (a.estadoAutorizacion == 'Restringido')
                         Text(
                           a.observacionesRestriccion.isNotEmpty
@@ -226,13 +273,21 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
             const SizedBox(height: 16),
             _FilaDato('Documento', '${a.tipoDocumento}: ${a.numeroDocumento}'),
             _FilaDato('Teléfono', a.telefonoCelular),
-            _FilaDato('Correo', a.correoElectronico.isNotEmpty ? a.correoElectronico : 'Sin correo'),
+            _FilaDato(
+              'Correo',
+              a.correoElectronico.isNotEmpty
+                  ? a.correoElectronico
+                  : 'Sin correo',
+            ),
             if (a.correoPendienteDeCorregir) ...[
               const SizedBox(height: 8),
               _avisoCorreoPendiente(),
             ],
             const SizedBox(height: 16),
-            Text('Niños vinculados', style: Theme.of(context).textTheme.titleSmall),
+            Text(
+              'Niños vinculados',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
             const SizedBox(height: 4),
             if (_cargandoHijos)
               const Padding(
@@ -247,21 +302,32 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(
                     backgroundColor: AppColors.amarillo,
-                    backgroundImage:
-                        n.fotoUrl.isNotEmpty ? NetworkImage(n.fotoUrl) : null,
+                    backgroundImage: n.fotoUrl.isNotEmpty
+                        ? NetworkImage(n.fotoUrl)
+                        : null,
                     child: n.fotoUrl.isEmpty
-                        ? const Icon(Icons.child_care, color: AppColors.textoPrincipal)
+                        ? const Icon(
+                            Icons.child_care,
+                            color: AppColors.textoPrincipal,
+                          )
                         : null,
                   ),
                   title: Text(n.nombreCompleto),
                   subtitle: Text('${calcularEdad(n.fechaNacimiento)} años'),
+                  onTap: () => _abrirNino(n),
                   trailing: _esAdmin
                       ? IconButton(
                           onPressed: () => _quitarVinculo(n),
-                          icon: const Icon(Icons.delete_outline, color: AppColors.rojo),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: AppColors.rojo,
+                          ),
                           tooltip: 'Quitar vínculo',
                         )
-                      : null,
+                      : const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.azulMarino,
+                        ),
                 ),
               ),
             if (_puedeEditar) ...[
@@ -276,7 +342,9 @@ class _AcudienteDetalleSheetState extends State<AcudienteDetalleSheet> {
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: _eliminando ? null : _eliminar,
-                style: OutlinedButton.styleFrom(foregroundColor: AppColors.rojo),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.rojo,
+                ),
                 icon: _eliminando
                     ? const SizedBox(
                         height: 16,

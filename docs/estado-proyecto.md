@@ -1217,6 +1217,44 @@ Storage + hosting; sin funciones.
 
 ---
 
+## 5.30. Navegar entre fichas niño ↔ acudiente + ampliar fotos (2026-09-29)
+
+Dos pedidos de Rafael.
+
+### Saltar de una ficha a la otra, con "Volver"
+
+- **Ficha del niño → acudiente:** cada acudiente vinculado en la sección
+  "Acudientes" se puede tocar (también tiene una flecha) y abre su ficha. El
+  contacto "Otro" registrado en el ingreso no es tocable: no es un acudiente
+  del sistema. El botón de llamar sigue funcionando aparte.
+- **Ficha del acudiente → niño:** cada niño de su lista abre su ficha.
+- **"Volver":** la ficha abierta desde otra muestra el botón arriba
+  (`desdeOtraFicha`), que la cierra y deja ver la anterior. Se pueden encadenar
+  (niño → acudiente → otro hermano → …) y cada "Volver" retrocede un paso.
+  Al volver, la ficha de abajo recarga su lista por si algo se editó arriba.
+
+⚠️ **Decisión de alcance tomada por Claude:** la ficha del niño también se
+abre desde Menores Registrados, donde la ven roles SIN acceso a la ficha
+completa de los acudientes (maestro auxiliar, líder escuela de siervos). Por
+eso el salto al acudiente solo se habilita con `puedeVerAcudientesYNinos`
+(liderazgo + maestro principal); para los demás, las filas siguen como antes.
+El acudiente abierto así respeta el solo lectura de los maestros principales
+(`soloLectura: !puedeEditarAcudientes`). No hubo cambios de reglas: los datos
+que muestra ya eran legibles para esos roles.
+
+### Ampliar la foto (solo visual)
+
+`widgets/foto_ampliable.dart`: tocar la foto de la cabecera de cualquiera de
+las dos fichas la abre en pantalla completa, con zoom de dos dedos o rueda del
+mouse (`InteractiveViewer`). **No guarda ni descarga otra versión**: usa la
+misma URL de la miniatura, que ya carga la imagen completa, así que sale de
+la caché del navegador. Sin foto, el avatar no reacciona.
+
+**Costo:** $0. Solo hosting. Al volver de una ficha se relee la lista de la de
+abajo (unas pocas lecturas por salto, solo cuando alguien navega).
+
+---
+
 ## 6. Pantallas construidas (`lib/screens/`)
 
 ### `widgets/app_shell.dart` — estructura de navegación (2026-08-14)
